@@ -13,8 +13,7 @@ namespace SmithingOptimizer
     {
         public static WeaponDesignVM? ActiveWeaponDesignVM { get; private set; }
 
-        [HarmonyPatch(typeof(WeaponDesignVM), MethodType.Constructor)]
-        [HarmonyPostfix]
+        // Manually patched in SubModule.OnSubModuleLoad
         public static void WeaponDesignVMConstructorPostfix(WeaponDesignVM __instance)
         {
             ActiveWeaponDesignVM = __instance;

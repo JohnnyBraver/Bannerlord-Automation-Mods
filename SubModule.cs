@@ -1,7 +1,10 @@
 using System;
+using System.Linq;
+using System.Reflection;
 using HarmonyLib;
 using TaleWorlds.InputSystem;
 using TaleWorlds.MountAndBlade;
+using TaleWorlds.CampaignSystem.ViewModelCollection.WeaponCrafting.WeaponDesign;
 
 namespace SmithingOptimizer
 {
@@ -17,6 +20,18 @@ namespace SmithingOptimizer
             try
             {
                 HarmonyInstance = new Harmony("com.smithing.optimizer");
+
+                // Manually patch the single constructor of WeaponDesignVM
+                var targetConstructor = typeof(WeaponDesignVM).GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).FirstOrDefault();
+                if (targetConstructor != null)
+                {
+                    var postfixMethod = typeof(CraftingPatches).GetMethod(nameof(CraftingPatches.WeaponDesignVMConstructorPostfix), BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (postfixMethod != null)
+                    {
+                        HarmonyInstance.Patch(targetConstructor, postfix: new HarmonyMethod(postfixMethod));
+                    }
+                }
+
                 HarmonyInstance.PatchAll();
             }
             catch (Exception ex)
