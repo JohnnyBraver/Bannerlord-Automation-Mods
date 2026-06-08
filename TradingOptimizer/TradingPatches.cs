@@ -26,7 +26,6 @@ namespace TradingOptimizer
         public static void SPInventoryVMConstructorPostfix(SPInventoryVM __instance)
         {
             ActiveInventoryVM = __instance;
-            TaleWorlds.Library.InformationManager.DisplayMessage(new TaleWorlds.Library.InformationMessage("Trading Optimizer: Inventory screen detected."));
 
             try
             {
@@ -61,7 +60,6 @@ namespace TradingOptimizer
         public static void OnFinalizePostfix()
         {
             ActiveInventoryVM = null;
-            TaleWorlds.Library.InformationManager.DisplayMessage(new TaleWorlds.Library.InformationMessage("Trading Optimizer: Inventory screen closed."));
 
             if (LoopState == AutoLoopState.Selling)
             {
