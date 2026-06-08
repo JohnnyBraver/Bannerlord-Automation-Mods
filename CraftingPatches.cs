@@ -17,7 +17,6 @@ namespace SmithingOptimizer
         public static void WeaponDesignVMConstructorPostfix(WeaponDesignVM __instance)
         {
             ActiveWeaponDesignVM = __instance;
-            TaleWorlds.Library.InformationManager.DisplayMessage(new TaleWorlds.Library.InformationMessage("Smithing Optimizer: Forge screen detected (Constructor)."));
         }
 
         [HarmonyPatch(typeof(WeaponDesignVM), "OnCraftingLogicRefreshed")]
@@ -25,7 +24,6 @@ namespace SmithingOptimizer
         public static void OnCraftingLogicRefreshedPostfix(WeaponDesignVM __instance)
         {
             ActiveWeaponDesignVM = __instance;
-            TaleWorlds.Library.InformationManager.DisplayMessage(new TaleWorlds.Library.InformationMessage("Smithing Optimizer: Crafting logic refreshed."));
         }
 
         [HarmonyPatch(typeof(WeaponDesignVM), "OnFinalize")]
@@ -33,7 +31,6 @@ namespace SmithingOptimizer
         public static void OnFinalizePostfix()
         {
             ActiveWeaponDesignVM = null;
-            TaleWorlds.Library.InformationManager.DisplayMessage(new TaleWorlds.Library.InformationMessage("Smithing Optimizer: Forge screen closed."));
         }
 
         [HarmonyPatch(typeof(WeaponDesignVM), "OnNewPieceUnlocked")]
