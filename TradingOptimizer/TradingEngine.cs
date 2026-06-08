@@ -1,7 +1,6 @@
 using System;
 using System.Linq;
 using TaleWorlds.CampaignSystem;
-using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Roster;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
@@ -28,8 +27,8 @@ namespace TradingOptimizer
 
                     var itemObj = item.ItemRosterElement.EquipmentElement.Item;
 
-                    // Skip equipment if SellEquipment is disabled
-                    if (!itemObj.IsTradeGood && !Settings.Instance.SellEquipment) continue;
+                    // Only sell trade goods (commodities)
+                    if (!itemObj.IsTradeGood) continue;
 
                     // ProfitType: Default = 0, Profit = 1, HighProfit = 2
                     if (item.ProfitType == 1 || item.ProfitType == 2)
@@ -56,7 +55,7 @@ namespace TradingOptimizer
                 }
             }
 
-            // 2. Buy Phase: Buy underpriced items or cheap donation items from merchant inventory (LeftItemListVM)
+            // 2. Buy Phase: Buy underpriced items from merchant inventory (LeftItemListVM)
             if (isBuyPhase && vm.LeftItemListVM != null)
             {
                 var merchantItems = vm.LeftItemListVM.ToList();
@@ -66,106 +65,54 @@ namespace TradingOptimizer
 
                     var itemObj = item.ItemRosterElement.EquipmentElement.Item;
 
-                    if (itemObj.IsTradeGood)
+                    // Only buy trade goods
+                    if (!itemObj.IsTradeGood) continue;
+
+                    // ProfitType: Default = 0, Profit = 1, HighProfit = 2
+                    if (item.ProfitType == 1 || item.ProfitType == 2)
                     {
-                        // Standard Trade Goods buy logic
-                        if (item.ProfitType == 1 || item.ProfitType == 2)
+                        // Check Settings filters (Livestock vs Mounts)
+                        if (itemObj.IsAnimal && !itemObj.IsMountable)
                         {
-                            // Check Settings filters (Livestock vs Mounts)
-                            if (itemObj.IsAnimal && !itemObj.IsMountable)
-                            {
-                                if (!Settings.Instance.TradeLivestock) continue;
-                            }
-                            if (itemObj.IsMountable)
-                            {
-                                if (!Settings.Instance.TradeMounts) continue;
-                            }
-
-                            int bought = 0;
-                            float itemWeight = itemObj.Weight;
-
-                            while (bought < item.ItemCount && (item.ProfitType == 1 || item.ProfitType == 2))
-                            {
-                                // Check Carrying Capacity limit
-                                if (Settings.Instance.LimitToInventoryCapacity && MobileParty.MainParty != null)
-                                {
-                                    float currentWeight = GetRosterWeight(MobileParty.MainParty.ItemRoster);
-                                    float projectedWeight = currentWeight + netWeightAdded;
-                                    if (projectedWeight + itemWeight >= MobileParty.MainParty.InventoryCapacity)
-                                    {
-                                        break; // Overburdened
-                                    }
-                                }
-
-                                // Check Stack Limits
-                                var playerItem = vm.RightItemListVM?.FirstOrDefault(r => r.ItemRosterElement.EquipmentElement.Item == itemObj);
-                                int currentlyOwned = (playerItem != null ? playerItem.ItemCount : 0) + bought;
-
-                                if (currentlyOwned >= Settings.Instance.MaxStackSizeToBuy)
-                                {
-                                    break; // Hit size limit
-                                }
-                                if (currentlyOwned * item.ItemCost >= Settings.Instance.MaxStackValueToBuy)
-                                {
-                                    break; // Hit value limit
-                                }
-
-                                item.ExecuteBuySingle();
-                                bought++;
-                                netWeightAdded += itemWeight;
-                            }
+                            if (!Settings.Instance.TradeLivestock) continue;
                         }
-                    }
-                    else if (Settings.Instance.BuyEquipmentForDonation)
-                    {
-                        // Equipment Donation logic (Weapons & Armor)
-                        bool hasPaidInPromise = Hero.MainHero?.GetPerkValue(DefaultPerks.Steward.PaidInPromise) ?? false;
-                        bool hasGivingHands = Hero.MainHero?.GetPerkValue(DefaultPerks.Steward.GivingHands) ?? false;
-
-                        bool qualifiesForDonation = false;
-
-                        if (itemObj.HasWeaponComponent && hasPaidInPromise && Settings.Instance.DonateWeapons)
+                        if (itemObj.IsMountable)
                         {
-                            qualifiesForDonation = true;
-                        }
-                        else if (itemObj.HasArmorComponent && hasGivingHands && Settings.Instance.DonateArmor)
-                        {
-                            qualifiesForDonation = true;
+                            if (!Settings.Instance.TradeMounts) continue;
                         }
 
-                        if (qualifiesForDonation)
+                        int bought = 0;
+                        float itemWeight = itemObj.Weight;
+
+                        while (bought < item.ItemCount && (item.ProfitType == 1 || item.ProfitType == 2))
                         {
-                            float costPerXp = (float)item.ItemCost / Math.Max(1, itemObj.Value);
-                            if (costPerXp <= Settings.Instance.MaxCostPerXp)
+                            // Check Carrying Capacity limit
+                            if (Settings.Instance.LimitToInventoryCapacity && MobileParty.MainParty != null)
                             {
-                                int bought = 0;
-                                float itemWeight = itemObj.Weight;
-
-                                while (bought < item.ItemCount)
+                                float currentWeight = GetRosterWeight(MobileParty.MainParty.ItemRoster);
+                                float projectedWeight = currentWeight + netWeightAdded;
+                                if (projectedWeight + itemWeight >= MobileParty.MainParty.InventoryCapacity)
                                 {
-                                    // Check Carrying Capacity limit
-                                    if (Settings.Instance.LimitToInventoryCapacity && MobileParty.MainParty != null)
-                                    {
-                                        float currentWeight = GetRosterWeight(MobileParty.MainParty.ItemRoster);
-                                        float projectedWeight = currentWeight + netWeightAdded;
-                                        if (projectedWeight + itemWeight >= MobileParty.MainParty.InventoryCapacity)
-                                        {
-                                            break; // Overburdened
-                                        }
-                                    }
-
-                                    // Check if the cost per XP changes (as buy count increases, price may change)
-                                    float currentCostPerXp = (float)item.ItemCost / Math.Max(1, itemObj.Value);
-                                    if (currentCostPerXp > Settings.Instance.MaxCostPerXp)
-                                    {
-                                        break; // No longer cost efficient
-                                    }
-
-                                    item.ExecuteBuySingle();
-                                    bought++;
-                                    netWeightAdded += itemWeight;
+                                    break; // Overburdened
                                 }
                             }
+
+                            // Check Stack Limits
+                            var playerItem = vm.RightItemListVM?.FirstOrDefault(r => r.ItemRosterElement.EquipmentElement.Item == itemObj);
+                            int currentlyOwned = (playerItem != null ? playerItem.ItemCount : 0) + bought;
+
+                            if (currentlyOwned >= Settings.Instance.MaxStackSizeToBuy)
+                            {
+                                break; // Hit size limit
+                            }
+                            if (currentlyOwned * item.ItemCost >= Settings.Instance.MaxStackValueToBuy)
+                            {
+                                break; // Hit value limit
+                            }
+
+                            item.ExecuteBuySingle();
+                            bought++;
+                            netWeightAdded += itemWeight;
                         }
                     }
                 }
