@@ -19,9 +19,22 @@ namespace EquipmentManager
                 HarmonyInstance = new Harmony("com.equipment.manager");
                 HarmonyInstance.PatchAll();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Ignore patch errors
+                try
+                {
+                    string path = System.IO.Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                        "Mount and Blade II Bannerlord",
+                        "Configs",
+                        "EquipmentManager_Error.txt"
+                    );
+                    System.IO.File.WriteAllText(path, ex.ToString());
+                }
+                catch
+                {
+                    // Ignore nested errors
+                }
             }
         }
 

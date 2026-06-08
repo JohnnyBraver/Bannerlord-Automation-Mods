@@ -14,6 +14,7 @@ namespace EquipmentManager
         public static void SPInventoryVMConstructorPostfix(SPInventoryVM __instance)
         {
             ActiveInventoryVM = __instance;
+            TaleWorlds.Library.InformationManager.DisplayMessage(new TaleWorlds.Library.InformationMessage("Equipment Manager: Inventory screen detected."));
         }
 
         [HarmonyPatch(typeof(SPInventoryVM), "OnFinalize")]
@@ -21,6 +22,7 @@ namespace EquipmentManager
         public static void OnFinalizePostfix()
         {
             ActiveInventoryVM = null;
+            TaleWorlds.Library.InformationManager.DisplayMessage(new TaleWorlds.Library.InformationMessage("Equipment Manager: Inventory screen closed."));
         }
 
         public static void ManualTrigger()
