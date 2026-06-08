@@ -19,9 +19,22 @@ namespace SmithingOptimizer
                 HarmonyInstance = new Harmony("com.smithing.optimizer");
                 HarmonyInstance.PatchAll();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Log patch error or display message
+                try
+                {
+                    string path = System.IO.Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                        "Mount and Blade II Bannerlord",
+                        "Configs",
+                        "SmithingOptimizer_Error.txt"
+                    );
+                    System.IO.File.WriteAllText(path, ex.ToString());
+                }
+                catch
+                {
+                    // Ignore nested errors
+                }
             }
         }
 
