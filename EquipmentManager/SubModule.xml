@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Module>
+  <Name value="Equipment Manager" />
+  <Id value="EquipmentManager" />
+  <Version value="v1.0.0" />
+  <SingleplayerModule value="true" />
+  <DependedModules>
+    <DependedModule Id="Native" />
+    <DependedModule Id="SandBoxCore" />
+  </DependedModules>
+  <SubModules>
+    <SubModule>
+      <Name value="EquipmentManager" />
+      <DLLName value="EquipmentManager.dll" />
+      <SubModuleClassType value="EquipmentManager.SubModule" />
+      <Tags>
+        <Tag key="DedicatedServerType" value="none" />
+      </Tags>
+    </SubModule>
+  </SubModules>
+</Module>
