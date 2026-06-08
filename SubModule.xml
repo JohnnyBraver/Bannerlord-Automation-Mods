@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Module>
+  <Name value="Smithing Optimizer" />
+  <Id value="SmithingOptimizer" />
+  <Version value="v1.0.0" />
+  <SingleplayerModule value="true" />
+  <DependedModules>
+    <DependedModule Id="Native" />
+    <DependedModule Id="SandBoxCore" />
+  </DependedModules>
+  <SubModules>
+    <SubModule>
+      <Name value="SmithingOptimizer" />
+      <DLLName value="SmithingOptimizer.dll" />
+      <SubModuleClassType value="SmithingOptimizer.SubModule" />
+      <Tags>
+        <Tag key="DedicatedServerType" value="none" />
+      </Tags>
+    </SubModule>
+  </SubModules>
+</Module>
