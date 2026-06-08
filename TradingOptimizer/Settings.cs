@@ -26,6 +26,7 @@ namespace TradingOptimizer
         public bool UseAveragePriceFallback { get; set; } = true;
         public float BuyPriceThresholdFactor { get; set; } = 0.80f; // Very Cheap (Green, <= 80%)
         public float SellPriceThresholdFactor { get; set; } = 1.30f; // Very Expensive (Red, >= 130%)
+        public bool SimulationMode { get; set; } = false; // If true, logs/prints what it WOULD do without committing gold/items
 
         public static void Load()
         {

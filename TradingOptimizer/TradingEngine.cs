@@ -31,12 +31,35 @@ namespace TradingOptimizer
 
     public static class TradingEngine
     {
+        private static readonly string LogPath = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            "Mount and Blade II Bannerlord",
+            "Configs",
+            "TradingOptimizer_Log.txt"
+        );
+
+        private static void WriteLog(string message)
+        {
+            try
+            {
+                string? dir = System.IO.Path.GetDirectoryName(LogPath);
+                if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                {
+                    System.IO.Directory.CreateDirectory(dir);
+                }
+                System.IO.File.AppendAllText(LogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+            }
+            catch {}
+        }
+
         public static TradeTransactionReport RunOptimization(SPInventoryVM vm, bool isSellPhase, bool isBuyPhase)
         {
             var report = new TradeTransactionReport();
             if (vm == null) return report;
 
             var logic = vm.GetInventoryLogic();
+            string otherPartyName = logic?.OtherParty?.Name?.ToString() ?? "Unknown";
+            WriteLog($"=== Optimization Run started for: {otherPartyName} (Simulation Mode: {Settings.Instance.SimulationMode}) ===");
 
             int partySize = MobileParty.MainParty?.MemberRoster?.TotalManCount ?? 1;
             float netWeightAdded = 0f;
@@ -83,6 +106,12 @@ namespace TradingOptimizer
                                 loopSell = true;
                             }
                         }
+
+                        float dbgAvgPrice = itemObj.Value * (logic != null ? logic.GetAveragePriceFactorItemCategory(itemObj.ItemCategory) : 1f);
+                        int dbgCurrentPrice = logic != null ? logic.GetItemPrice(item.ItemRosterElement.EquipmentElement, false) : itemObj.Value;
+                        float dbgRatio = dbgAvgPrice > 0 ? (float)dbgCurrentPrice / dbgAvgPrice : 1f;
+                        string decision = loopSell ? "SELL" : "KEEP";
+                        WriteLog($"[Sell Check] {itemObj.Name}: Price={dbgCurrentPrice}, Avg={dbgAvgPrice:F1} (Ratio={dbgRatio:P1}, Thresh={Settings.Instance.SellPriceThresholdFactor:P1}), ProfitType={item.ProfitType} -> {decision}");
 
                         if (!loopSell) break;
 
@@ -168,6 +197,12 @@ namespace TradingOptimizer
                                 loopBuy = true;
                             }
                         }
+
+                        float dbgAvgPrice = itemObj.Value * (logic != null ? logic.GetAveragePriceFactorItemCategory(itemObj.ItemCategory) : 1f);
+                        int dbgCurrentPrice = logic != null ? logic.GetItemPrice(item.ItemRosterElement.EquipmentElement, true) : itemObj.Value;
+                        float dbgRatio = dbgAvgPrice > 0 ? (float)dbgCurrentPrice / dbgAvgPrice : 1f;
+                        string decision = loopBuy ? "BUY" : "SKIP";
+                        WriteLog($"[Buy Check] {itemObj.Name}: Price={dbgCurrentPrice}, Avg={dbgAvgPrice:F1} (Ratio={dbgRatio:P1}, Thresh={Settings.Instance.BuyPriceThresholdFactor:P1}), ProfitType={item.ProfitType} -> {decision}");
 
                         if (!loopBuy) break;
 

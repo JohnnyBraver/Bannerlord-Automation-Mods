@@ -166,11 +166,20 @@ namespace TradingOptimizer
                 // Commit changes if any exist
                 if (logic.IsThereAnyChanges())
                 {
-                    bool success = logic.DoneLogic();
-                    if (success)
+                    if (Settings.Instance.SimulationMode)
                     {
-                        int finalGold = Hero.MainHero.Gold;
-                        TradingPatches.PrintTradeReport(finalGold, initialGold, report, settlement.Name.ToString());
+                        int netGoldChange = report.SoldItems.Sum(s => s.Gold) - report.BoughtItems.Sum(b => b.Gold);
+                        int hypotheticalFinalGold = initialGold + netGoldChange;
+                        TradingPatches.PrintTradeReport(hypotheticalFinalGold, initialGold, report, settlement.Name.ToString());
+                    }
+                    else
+                    {
+                        bool success = logic.DoneLogic();
+                        if (success)
+                        {
+                            int finalGold = Hero.MainHero.Gold;
+                            TradingPatches.PrintTradeReport(finalGold, initialGold, report, settlement.Name.ToString());
+                        }
                     }
                 }
                 else
