@@ -24,8 +24,8 @@ namespace TradingOptimizer
         public int MaxStackValueToBuy { get; set; } = 2000;
         public bool LimitToInventoryCapacity { get; set; } = true;
         public bool UseAveragePriceFallback { get; set; } = true;
-        public float BuyPriceThresholdFactor { get; set; } = 0.80f; // Very Cheap (Deep Green, <= 80%)
-        public float SellPriceThresholdFactor { get; set; } = 1.20f; // Very Expensive (Deep Red, >= 120%)
+        public float BuyPriceThresholdFactor { get; set; } = 0.80f; // Very Cheap (Green, <= 80%)
+        public float SellPriceThresholdFactor { get; set; } = 1.30f; // Very Expensive (Red, >= 130%)
 
         public static void Load()
         {
