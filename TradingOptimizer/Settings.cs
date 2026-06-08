@@ -21,6 +21,11 @@ namespace TradingOptimizer
         public float FoodDaysToKeepPerSoldier { get; set; } = 0.1f;
         public bool TradeLivestock { get; set; } = true;
         public bool TradeMounts { get; set; } = false;
+        public bool SellEquipment { get; set; } = false;
+        public bool BuyEquipmentForDonation { get; set; } = false;
+        public float MaxCostPerXp { get; set; } = 1.0f;
+        public bool DonateWeapons { get; set; } = true;
+        public bool DonateArmor { get; set; } = true;
         public int MaxStackSizeToBuy { get; set; } = 100;
         public int MaxStackValueToBuy { get; set; } = 2000;
         public bool LimitToInventoryCapacity { get; set; } = true;
