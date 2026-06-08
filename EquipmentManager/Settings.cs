@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using System.Text.Json;
+using Newtonsoft.Json;
 
 namespace EquipmentManager
 {
@@ -37,7 +37,7 @@ namespace EquipmentManager
                 if (File.Exists(SettingsPath))
                 {
                     string json = File.ReadAllText(SettingsPath);
-                    Instance = JsonSerializer.Deserialize<Settings>(json) ?? new Settings();
+                    Instance = JsonConvert.DeserializeObject<Settings>(json) ?? new Settings();
                 }
                 else
                 {
@@ -60,7 +60,7 @@ namespace EquipmentManager
                 {
                     Directory.CreateDirectory(dir);
                 }
-                string json = JsonSerializer.Serialize(Instance, new JsonSerializerOptions { WriteIndented = true });
+                string json = JsonConvert.SerializeObject(Instance, Formatting.Indented);
                 File.WriteAllText(SettingsPath, json);
             }
             catch (Exception)
