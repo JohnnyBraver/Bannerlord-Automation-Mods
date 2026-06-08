@@ -22,8 +22,7 @@ namespace TradingOptimizer
 
         private static int _ticksToWait = -1;
 
-        [HarmonyPatch(typeof(SPInventoryVM), MethodType.Constructor)]
-        [HarmonyPostfix]
+        // Manually patched in SubModule.OnSubModuleLoad
         public static void SPInventoryVMConstructorPostfix(SPInventoryVM __instance)
         {
             ActiveInventoryVM = __instance;

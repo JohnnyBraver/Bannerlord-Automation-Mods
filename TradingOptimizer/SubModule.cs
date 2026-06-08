@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Reflection;
 using HarmonyLib;
 using Helpers;
 using TaleWorlds.CampaignSystem;
@@ -7,6 +9,7 @@ using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 using TaleWorlds.InputSystem;
 using TaleWorlds.MountAndBlade;
+using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 
 namespace TradingOptimizer
 {
@@ -25,6 +28,18 @@ namespace TradingOptimizer
             try
             {
                 HarmonyInstance = new Harmony("com.trading.optimizer");
+
+                // Manually patch the single constructor of SPInventoryVM
+                var targetConstructor = typeof(SPInventoryVM).GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).FirstOrDefault();
+                if (targetConstructor != null)
+                {
+                    var postfixMethod = typeof(TradingPatches).GetMethod(nameof(TradingPatches.SPInventoryVMConstructorPostfix), BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (postfixMethod != null)
+                    {
+                        HarmonyInstance.Patch(targetConstructor, postfix: new HarmonyMethod(postfixMethod));
+                    }
+                }
+
                 HarmonyInstance.PatchAll();
             }
             catch (Exception ex)

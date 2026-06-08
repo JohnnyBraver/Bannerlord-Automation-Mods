@@ -9,8 +9,7 @@ namespace EquipmentManager
     {
         public static SPInventoryVM? ActiveInventoryVM { get; private set; }
 
-        [HarmonyPatch(typeof(SPInventoryVM), MethodType.Constructor)]
-        [HarmonyPostfix]
+        // Manually patched in SubModule.OnSubModuleLoad
         public static void SPInventoryVMConstructorPostfix(SPInventoryVM __instance)
         {
             ActiveInventoryVM = __instance;

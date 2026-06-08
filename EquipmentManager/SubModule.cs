@@ -1,7 +1,10 @@
 using System;
+using System.Linq;
+using System.Reflection;
 using HarmonyLib;
 using TaleWorlds.InputSystem;
 using TaleWorlds.MountAndBlade;
+using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 
 namespace EquipmentManager
 {
@@ -17,6 +20,18 @@ namespace EquipmentManager
             try
             {
                 HarmonyInstance = new Harmony("com.equipment.manager");
+
+                // Manually patch the single constructor of SPInventoryVM
+                var targetConstructor = typeof(SPInventoryVM).GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).FirstOrDefault();
+                if (targetConstructor != null)
+                {
+                    var postfixMethod = typeof(EquipmentPatches).GetMethod(nameof(EquipmentPatches.SPInventoryVMConstructorPostfix), BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (postfixMethod != null)
+                    {
+                        HarmonyInstance.Patch(targetConstructor, postfix: new HarmonyMethod(postfixMethod));
+                    }
+                }
+
                 HarmonyInstance.PatchAll();
             }
             catch (Exception ex)
