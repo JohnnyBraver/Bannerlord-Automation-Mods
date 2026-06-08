@@ -15,8 +15,7 @@ namespace TradingOptimizer
 
         public static Settings Instance { get; private set; } = new Settings();
 
-        public bool AutoTradeOnEnterSettlement { get; set; } = false;
-        public bool FullyAutomaticMode { get; set; } = false;
+        public bool AutoTradeOnEnterSettlement { get; set; } = true;
         public string Keybind { get; set; } = "T"; // Activated with Ctrl + Keybind
         public float FoodDaysToKeepPerSoldier { get; set; } = 0.1f;
         public bool TradeLivestock { get; set; } = true;
@@ -24,6 +23,9 @@ namespace TradingOptimizer
         public int MaxStackSizeToBuy { get; set; } = 100;
         public int MaxStackValueToBuy { get; set; } = 2000;
         public bool LimitToInventoryCapacity { get; set; } = true;
+        public bool UseAveragePriceFallback { get; set; } = true;
+        public float BuyPriceThresholdFactor { get; set; } = 0.85f; // Cheap (Green, <= 85%)
+        public float SellPriceThresholdFactor { get; set; } = 1.15f; // Expensive (Red, >= 115%)
 
         public static void Load()
         {

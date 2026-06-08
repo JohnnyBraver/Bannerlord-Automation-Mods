@@ -10,6 +10,8 @@ using TaleWorlds.Core;
 using TaleWorlds.InputSystem;
 using TaleWorlds.MountAndBlade;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
+using TaleWorlds.Library;
+using TaleWorlds.CampaignSystem.Inventory;
 
 namespace TradingOptimizer
 {
@@ -17,8 +19,7 @@ namespace TradingOptimizer
     {
         public static Harmony? HarmonyInstance { get; private set; }
 
-        private static float _reopenTimer = -1f;
-        private static bool _autoOpenScheduled = false;
+        private static Settlement? _pendingBackgroundTradeSettlement = null;
 
         protected override void OnSubModuleLoad()
         {
@@ -74,55 +75,24 @@ namespace TradingOptimizer
             }
         }
 
-        public static void TriggerAutoOpen()
+        public static void QueueBackgroundTrade(Settlement settlement)
         {
-            _autoOpenScheduled = true;
+            _pendingBackgroundTradeSettlement = settlement;
         }
 
         protected override void OnApplicationTick(float dt)
         {
             base.OnApplicationTick(dt);
 
-            // 1. Tick the patches for frame waiting logic
-            TradingPatches.TickUpdate();
-
-            // 2. Handle Auto Reopen (between Sell and Buy stages)
-            if (TradingPatches.LoopState == AutoLoopState.WaitingForReopen && TradingPatches.ActiveInventoryVM == null)
+            // 1. Process pending background trade
+            if (_pendingBackgroundTradeSettlement != null)
             {
-                if (_reopenTimer < 0)
-                {
-                    _reopenTimer = 0.5f; // Wait 0.5 seconds before reopening
-                }
-                else
-                {
-                    _reopenTimer -= dt;
-                    if (_reopenTimer <= 0)
-                    {
-                        _reopenTimer = -1f;
-                        if (Settlement.CurrentSettlement != null)
-                        {
-                            InventoryScreenHelper.ActivateTradeWithCurrentSettlement();
-                        }
-                        else
-                        {
-                            // If player left the settlement, reset to Idle
-                            TradingPatches.LoopState = AutoLoopState.Idle;
-                        }
-                    }
-                }
+                var sett = _pendingBackgroundTradeSettlement;
+                _pendingBackgroundTradeSettlement = null;
+                ExecuteBackgroundTrade(sett);
             }
 
-            // 3. Handle Auto Open on Entering Settlement
-            if (_autoOpenScheduled)
-            {
-                _autoOpenScheduled = false;
-                if (Settlement.CurrentSettlement != null)
-                {
-                    InventoryScreenHelper.ActivateTradeWithCurrentSettlement();
-                }
-            }
-
-            // 4. Handle Manual keybind trigger (Ctrl + Keybind)
+            // 2. Handle Manual keybind trigger (Ctrl + T) when inventory is active
             if (TradingPatches.ActiveInventoryVM != null)
             {
                 if (Input.IsKeyDown(InputKey.LeftControl) || Input.IsKeyDown(InputKey.RightControl))
@@ -135,6 +105,83 @@ namespace TradingOptimizer
                         }
                     }
                 }
+            }
+        }
+
+        private static IMarketData? GetMarketData(Settlement settlement)
+        {
+            if (settlement.IsTown) return settlement.Town?.MarketData;
+            if (settlement.IsVillage) return settlement.Village?.Bound?.Town?.MarketData;
+            return null;
+        }
+
+        private static void ExecuteBackgroundTrade(Settlement settlement)
+        {
+            if (settlement == null || MobileParty.MainParty == null || Hero.MainHero == null) return;
+
+            try
+            {
+                // Create InventoryLogic
+                var logic = new InventoryLogic(MobileParty.MainParty, Hero.MainHero.CharacterObject, settlement.Party);
+
+                // Find the Initialize method with 13 arguments
+                var initMethod = typeof(InventoryLogic).GetMethods()
+                    .FirstOrDefault(m => m.Name == "Initialize" && m.GetParameters().Length == 13);
+
+                if (initMethod == null) return;
+
+                var categoryTypeEnum = typeof(InventoryLogic).Assembly.GetType("Helpers.InventoryScreenHelper+InventoryCategoryType");
+                var modeEnum = typeof(InventoryLogic).Assembly.GetType("Helpers.InventoryScreenHelper+InventoryMode");
+                if (categoryTypeEnum == null || modeEnum == null) return;
+
+                var categoryTypeAll = Enum.Parse(categoryTypeEnum, "All");
+                var modeTrade = Enum.Parse(modeEnum, "Trade");
+
+                // Call Initialize
+                initMethod.Invoke(logic, new object[] {
+                    settlement.ItemRoster,
+                    MobileParty.MainParty.ItemRoster,
+                    MobileParty.MainParty.MemberRoster,
+                    true, // isTrading
+                    false, // isSpecialActionsPermitted
+                    Hero.MainHero.CharacterObject,
+                    categoryTypeAll,
+                    GetMarketData(settlement)!,
+                    false, // useBasePrices
+                    modeTrade,
+                    settlement.Name,
+                    null!, // leftMemberRoster
+                    null! // otherSideCapacityData
+                });
+
+                // Create SPInventoryVM in memory
+                Func<TaleWorlds.Core.WeaponComponentData, TaleWorlds.Core.ItemObject.ItemUsageSetFlags> dummyFunc = w => (TaleWorlds.Core.ItemObject.ItemUsageSetFlags)0;
+                var vm = new SPInventoryVM(logic, false, dummyFunc);
+
+                int initialGold = Hero.MainHero.Gold;
+
+                // Run optimization
+                var report = TradingEngine.RunOptimization(vm, isSellPhase: true, isBuyPhase: true);
+
+                // Commit changes if any exist
+                if (logic.IsThereAnyChanges())
+                {
+                    bool success = logic.DoneLogic();
+                    if (success)
+                    {
+                        int finalGold = Hero.MainHero.Gold;
+                        TradingPatches.PrintTradeReport(finalGold, initialGold, report, settlement.Name.ToString());
+                    }
+                }
+                else
+                {
+                    // Report no trades found
+                    TradingPatches.PrintTradeReport(initialGold, initialGold, report, settlement.Name.ToString());
+                }
+            }
+            catch (Exception)
+            {
+                // Ignore background trade errors
             }
         }
     }
@@ -155,7 +202,7 @@ namespace TradingOptimizer
                 if (Settings.Instance.AutoTradeOnEnterSettlement && settlement.StringId != _lastVisitedSettlementId)
                 {
                     _lastVisitedSettlementId = settlement.StringId;
-                    SubModule.TriggerAutoOpen();
+                    SubModule.QueueBackgroundTrade(settlement);
                 }
             }
         }
