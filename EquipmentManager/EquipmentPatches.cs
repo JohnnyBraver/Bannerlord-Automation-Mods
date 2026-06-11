@@ -4,12 +4,10 @@ using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 
 namespace EquipmentManager
 {
-    [HarmonyPatch]
     public static class EquipmentPatches
     {
         public static SPInventoryVM? ActiveInventoryVM { get; private set; }
 
-        // Manually patched in SubModule.OnSubModuleLoad
         public static void SPInventoryVMConstructorPostfix(SPInventoryVM __instance)
         {
             ActiveInventoryVM = __instance;

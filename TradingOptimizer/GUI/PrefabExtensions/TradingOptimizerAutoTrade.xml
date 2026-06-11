@@ -1,0 +1,21 @@
+<Prefab>
+  <ButtonWidget Id="AutoTradeButton"
+                WidthSizePolicy="Fixed"
+                HeightSizePolicy="Fixed"
+                SuggestedWidth="50"
+                SuggestedHeight="50"
+                VerticalAlignment="Center"
+                MarginLeft="6"
+                Brush="InventoryBuyAllButton"
+                Command.Click="ExecuteAutoTrade">
+    <Children>
+      <TextWidget WidthSizePolicy="CoverChildren"
+                  HeightSizePolicy="CoverChildren"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Brush="Inventory.Filter.Text"
+                  DoNotAcceptEvents="true"
+                  Text="Auto" />
+    </Children>
+  </ButtonWidget>
+</Prefab>

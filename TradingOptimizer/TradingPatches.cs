@@ -11,12 +11,10 @@ using TaleWorlds.Library;
 
 namespace TradingOptimizer
 {
-    [HarmonyPatch]
     public static class TradingPatches
     {
         public static SPInventoryVM? ActiveInventoryVM { get; private set; }
 
-        // Manually patched in SubModule.OnSubModuleLoad
         public static void SPInventoryVMConstructorPostfix(SPInventoryVM __instance)
         {
             ActiveInventoryVM = __instance;
@@ -54,7 +52,7 @@ namespace TradingOptimizer
 
         public static void PrintTradeReport(int finalGold, int initialGold, TradeTransactionReport report, string traderName)
         {
-            bool isSim = Settings.Instance.SimulationMode;
+            bool isSim = Settings.Instance?.SimulationMode ?? false;
             string simPrefix = isSim ? "[Simulation] " : "";
             int netProfit = finalGold - initialGold;
 
@@ -112,7 +110,12 @@ namespace TradingOptimizer
                 var element = roster.GetElementCopyAtIndex(i);
                 if (element.EquipmentElement.Item != null)
                 {
-                    weight += element.EquipmentElement.Item.Weight * element.Amount;
+                    var item = element.EquipmentElement.Item;
+                    if (item.IsAnimal || item.IsMountable)
+                    {
+                        continue;
+                    }
+                    weight += item.Weight * element.Amount;
                 }
             }
             return weight;
