@@ -1,68 +1,55 @@
-using System;
-using System.IO;
-using Newtonsoft.Json;
+using System.Collections.Generic;
+using MCM.Abstractions.Attributes;
+using MCM.Abstractions.Attributes.v2;
+using MCM.Abstractions.Base.Global;
+using MCM.Common;
 
 namespace SmithingOptimizer
 {
     public enum OptimizationGoal
     {
-        Profit, // XP and Sell Value
-        Damage  // Max swing/thrust damage
+        Profit,
+        Damage
     }
 
-    public class Settings
+    public class GoalOption
     {
-        private static readonly string SettingsPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            "Mount and Blade II Bannerlord",
-            "Configs",
-            "SmithingOptimizer.json"
-        );
+        private readonly string _name;
+        public OptimizationGoal Value { get; }
+        public GoalOption(string name, OptimizationGoal value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
 
-        public static Settings Instance { get; private set; } = new Settings();
+    public class Settings : AttributeGlobalSettings<Settings>
+    {
+        public override string Id => "SmithingOptimizer_v1";
+        public override string DisplayName => "Smithing Optimizer";
+        public override string FolderName => "SmithingOptimizer";
+        public override string FormatType => "json";
 
+        private static readonly IReadOnlyList<GoalOption> GoalOptions = new List<GoalOption>
+        {
+            new GoalOption("Profit (XP + Sell Value)", OptimizationGoal.Profit),
+            new GoalOption("Damage (Max Swing/Thrust)", OptimizationGoal.Damage)
+        };
+
+        [SettingPropertyBool("Auto-switch on New Piece Unlock", RequireRestart = false,
+            HintText = "Automatically re-optimize the design when a new crafting piece is unlocked.")]
+        [SettingPropertyGroup("General", GroupOrder = 0)]
         public bool AutoSwitchEnabled { get; set; } = true;
-        public OptimizationGoal Goal { get; set; } = OptimizationGoal.Profit;
+
+        [SettingPropertyDropdown("Optimization Goal", RequireRestart = false,
+            HintText = "Whether to optimize for maximum sell value/XP, or maximum weapon damage.")]
+        [SettingPropertyGroup("General", GroupOrder = 0)]
+        public Dropdown<GoalOption> GoalDropdown { get; set; } =
+            new Dropdown<GoalOption>(GoalOptions, 0);
+
+        [SettingPropertyBool("Limit to Owned Materials", RequireRestart = false,
+            HintText = "Only suggest designs that can be crafted with your current material stock.")]
+        [SettingPropertyGroup("General", GroupOrder = 0)]
         public bool LimitToInventory { get; set; } = true;
-        public string Keybind { get; set; } = "O"; // Activated with Ctrl + Keybind
 
-        public static void Load()
-        {
-            try
-            {
-                if (File.Exists(SettingsPath))
-                {
-                    string json = File.ReadAllText(SettingsPath);
-                    Instance = JsonConvert.DeserializeObject<Settings>(json) ?? new Settings();
-                }
-                else
-                {
-                    Instance = new Settings();
-                    Save();
-                }
-            }
-            catch (Exception)
-            {
-                Instance = new Settings();
-            }
-        }
-
-        public static void Save()
-        {
-            try
-            {
-                string? dir = Path.GetDirectoryName(SettingsPath);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                {
-                    Directory.CreateDirectory(dir);
-                }
-                string json = JsonConvert.SerializeObject(Instance, Formatting.Indented);
-                File.WriteAllText(SettingsPath, json);
-            }
-            catch (Exception)
-            {
-                // Ignore save errors
-            }
-        }
+        // Compatibility wrapper — used throughout the codebase
+        public OptimizationGoal Goal => GoalDropdown.SelectedValue.Value;
     }
 }

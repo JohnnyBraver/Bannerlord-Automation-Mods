@@ -8,6 +8,11 @@
     <DependedModule Id="Native" DependentVersion="v1.4.5" />
     <DependedModule Id="SandBoxCore" DependentVersion="v1.4.5" />
   </DependedModules>
+  <DependedModuleMetadatas>
+    <DependedModuleMetadata id="Bannerlord.Harmony" order="LoadBeforeThis" />
+    <DependedModuleMetadata id="Bannerlord.UIExtenderEx" order="LoadBeforeThis" optional="true" />
+    <DependedModuleMetadata id="Bannerlord.MBOptionScreen" order="LoadBeforeThis" optional="true" />
+  </DependedModuleMetadatas>
   <SubModules>
     <SubModule>
       <Name value="SmithingOptimizer" />

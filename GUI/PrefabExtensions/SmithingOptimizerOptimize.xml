@@ -1,0 +1,21 @@
+<Prefab>
+  <ButtonWidget Id="SmithingOptimizeButton"
+                WidthSizePolicy="Fixed"
+                HeightSizePolicy="Fixed"
+                SuggestedWidth="58"
+                SuggestedHeight="69"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Brush="Crafting.Reset.Angle.Button"
+                UpdateChildrenStates="true"
+                Command.Click="ExecuteSmithingOptimize">
+    <Children>
+      <TextWidget WidthSizePolicy="CoverChildren"
+                  HeightSizePolicy="CoverChildren"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  DoNotAcceptEvents="true"
+                  Text="OPT" />
+    </Children>
+  </ButtonWidget>
+</Prefab>

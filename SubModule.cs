@@ -5,27 +5,29 @@ using HarmonyLib;
 using TaleWorlds.InputSystem;
 using TaleWorlds.MountAndBlade;
 using TaleWorlds.CampaignSystem.ViewModelCollection.WeaponCrafting.WeaponDesign;
+using Bannerlord.UIExtenderEx;
 
 namespace SmithingOptimizer
 {
     public class SubModule : MBSubModuleBase
     {
         public static Harmony? HarmonyInstance { get; private set; }
+        private static UIExtender? _uiExtender;
+        private static bool _uiExtenderInitialized = false;
 
         protected override void OnSubModuleLoad()
         {
             base.OnSubModuleLoad();
-            Settings.Load();
 
             try
             {
                 HarmonyInstance = new Harmony("com.smithing.optimizer");
-
-                // Manually patch the single constructor of WeaponDesignVM
-                var targetConstructor = typeof(WeaponDesignVM).GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).FirstOrDefault();
+                
+                // Do manual patching for WeaponDesignVM constructor to avoid Harmony annotation issues in v1.4.5
+                var targetConstructor = typeof(WeaponDesignVM).GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).FirstOrDefault();
                 if (targetConstructor != null)
                 {
-                    var postfixMethod = typeof(CraftingPatches).GetMethod(nameof(CraftingPatches.WeaponDesignVMConstructorPostfix), BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    var postfixMethod = typeof(CraftingPatches).GetMethod("WeaponDesignVMConstructorPostfix", BindingFlags.Public | BindingFlags.Static);
                     if (postfixMethod != null)
                     {
                         HarmonyInstance.Patch(targetConstructor, postfix: new HarmonyMethod(postfixMethod));
@@ -53,21 +55,23 @@ namespace SmithingOptimizer
             }
         }
 
+        protected override void OnBeforeInitialModuleScreenSetAsRoot()
+        {
+            base.OnBeforeInitialModuleScreenSetAsRoot();
+            if (!_uiExtenderInitialized)
+            {
+                _uiExtenderInitialized = true;
+                _uiExtender = new UIExtender("SmithingOptimizer");
+                _uiExtender.Register(typeof(SubModule).Assembly);
+                _uiExtender.Enable();
+            }
+        }
+
+
         protected override void OnApplicationTick(float dt)
         {
             base.OnApplicationTick(dt);
-
-            // Check if we are holding Ctrl (Left or Right)
-            if (Input.IsKeyDown(InputKey.LeftControl) || Input.IsKeyDown(InputKey.RightControl))
-            {
-                if (Enum.TryParse<InputKey>(Settings.Instance.Keybind, true, out var targetKey))
-                {
-                    if (Input.IsKeyReleased(targetKey))
-                    {
-                        TriggerManualOptimization();
-                    }
-                }
-            }
+            // Keybind removed; button injection via UIExtenderEx is now the trigger.
         }
 
         private void TriggerManualOptimization()

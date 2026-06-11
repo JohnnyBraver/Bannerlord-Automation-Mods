@@ -8,12 +8,10 @@ using TaleWorlds.Library;
 
 namespace SmithingOptimizer
 {
-    [HarmonyPatch]
     public static class CraftingPatches
     {
         public static WeaponDesignVM? ActiveWeaponDesignVM { get; private set; }
 
-        // Manually patched in SubModule.OnSubModuleLoad
         public static void WeaponDesignVMConstructorPostfix(WeaponDesignVM __instance)
         {
             ActiveWeaponDesignVM = __instance;
