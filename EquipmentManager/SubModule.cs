@@ -6,6 +6,7 @@ using TaleWorlds.MountAndBlade;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using Bannerlord.UIExtenderEx;
+using SettlementAutomationCore;
 
 namespace EquipmentManager
 {
@@ -75,7 +76,7 @@ namespace EquipmentManager
             if (game.GameType is Campaign)
             {
                 _provider = new EquipmentManagerProvider();
-                TradingCore.TradeCoordinator.RegisterProvider(_provider);
+                AutomationRegistry.RegisterTradeProvider(_provider);
             }
         }
 
@@ -84,7 +85,7 @@ namespace EquipmentManager
             base.OnGameEnd(game);
             if (_provider != null)
             {
-                TradingCore.TradeCoordinator.UnregisterProvider(_provider);
+                AutomationRegistry.UnregisterTradeProvider(_provider);
                 _provider = null;
             }
         }

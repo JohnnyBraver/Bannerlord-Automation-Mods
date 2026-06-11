@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Module>
-  <Name value="Trading Core" />
-  <Id value="TradingCore" />
+  <Name value="Settlement Automation Core" />
+  <Id value="SettlementAutomationCore" />
   <Version value="v1.0.0" />
   <SingleplayerModule value="true" />
   <DependedModules>
@@ -13,9 +13,9 @@
   </DependedModuleMetadatas>
   <SubModules>
     <SubModule>
-      <Name value="TradingCore" />
-      <DLLName value="TradingCore.dll" />
-      <SubModuleClassType value="TradingCore.SubModule" />
+      <Name value="SettlementAutomationCore" />
+      <DLLName value="SettlementAutomationCore.dll" />
+      <SubModuleClassType value="SettlementAutomationCore.SubModule" />
       <Tags>
         <Tag key="DedicatedServerType" value="none" />
       </Tags>

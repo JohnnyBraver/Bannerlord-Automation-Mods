@@ -13,6 +13,7 @@ using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using TaleWorlds.Library;
 using TaleWorlds.CampaignSystem.Inventory;
 using Bannerlord.UIExtenderEx;
+using SettlementAutomationCore;
 
 namespace TradingOptimizer
 {
@@ -83,7 +84,7 @@ namespace TradingOptimizer
             if (game.GameType is Campaign)
             {
                 _provider = new TradingOptimizerProvider();
-                TradingCore.TradeCoordinator.RegisterProvider(_provider);
+                AutomationRegistry.RegisterTradeProvider(_provider);
             }
         }
 
@@ -92,7 +93,7 @@ namespace TradingOptimizer
             base.OnGameEnd(game);
             if (_provider != null)
             {
-                TradingCore.TradeCoordinator.UnregisterProvider(_provider);
+                AutomationRegistry.UnregisterTradeProvider(_provider);
                 _provider = null;
             }
         }

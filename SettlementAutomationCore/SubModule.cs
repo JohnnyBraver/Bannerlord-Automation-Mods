@@ -10,7 +10,7 @@ using TaleWorlds.CampaignSystem.Inventory;
 using TaleWorlds.Core;
 using TaleWorlds.MountAndBlade;
 
-namespace TradingCore
+namespace SettlementAutomationCore
 {
     public class SubModule : MBSubModuleBase
     {
@@ -29,7 +29,7 @@ namespace TradingCore
                 var campaignStarter = gameStarter as CampaignGameStarter;
                 if (campaignStarter != null)
                 {
-                    campaignStarter.AddBehavior(new TradingCoreCampaignBehavior());
+                    campaignStarter.AddBehavior(new SettlementAutomationCampaignBehavior());
                 }
             }
         }
@@ -47,7 +47,7 @@ namespace TradingCore
             {
                 var sett = _pendingBackgroundTradeSettlement;
                 _pendingBackgroundTradeSettlement = null;
-                ExecuteBackgroundTrade(sett);
+                ExecuteBackgroundAutomation(sett);
             }
         }
 
@@ -101,22 +101,22 @@ namespace TradingCore
             }
         }
 
-        private static void ExecuteBackgroundTrade(Settlement settlement)
+        private static void ExecuteBackgroundAutomation(Settlement settlement)
         {
             if (settlement == null || MobileParty.MainParty == null || Hero.MainHero == null) return;
 
             try
             {
-                var providers = TradeCoordinator.ActiveProviders;
-                if (providers.Count == 0) return;
+                var registrations = AutomationRegistry.ActiveTradeProviders;
+                if (registrations.Count == 0) return;
 
-                // Step 1: Pre-Sell Phase
+                // Step 1: Pre-Sell Phase (Revenue Generation)
                 var preSellOrders = new List<TradeOrder>();
-                foreach (var provider in providers)
+                foreach (var reg in registrations)
                 {
                     try
                     {
-                        var orders = provider.GetPreSellOrders(MobileParty.MainParty, settlement);
+                        var orders = reg.Provider.GetPreSellOrders(MobileParty.MainParty, settlement);
                         if (orders != null) preSellOrders.AddRange(orders);
                     }
                     catch {}
@@ -152,16 +152,16 @@ namespace TradingCore
                     }
                 }
 
-                // Step 2: Main Phase
+                // Step 2: Main Phase (Reconciliation & Purchases)
                 var logic2 = CreateAndInitInventoryLogic(settlement);
                 if (logic2 != null)
                 {
                     var mainOrders = new List<TradeOrder>();
-                    foreach (var provider in providers)
+                    foreach (var reg in registrations)
                     {
                         try
                         {
-                            var orders = provider.GetMainOrders(MobileParty.MainParty, settlement, logic2);
+                            var orders = reg.Provider.GetMainOrders(MobileParty.MainParty, settlement, logic2);
                             if (orders != null) mainOrders.AddRange(orders);
                         }
                         catch {}
@@ -226,7 +226,7 @@ namespace TradingCore
         }
     }
 
-    public class TradingCoreCampaignBehavior : CampaignBehaviorBase
+    public class SettlementAutomationCampaignBehavior : CampaignBehaviorBase
     {
         private string _lastVisitedSettlementId = "";
 

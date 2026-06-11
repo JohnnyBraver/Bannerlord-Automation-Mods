@@ -6,7 +6,7 @@ using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Inventory;
 using TaleWorlds.Core;
-using TradingCore;
+using SettlementAutomationCore;
 
 namespace EquipmentManager
 {
