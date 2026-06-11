@@ -143,7 +143,7 @@ namespace TradingOptimizer
         [SettingPropertyBool("Trade Livestock", RequireRestart = false,
             HintText = "Include livestock (non-mount animals) in auto-trade decisions.")]
         [SettingPropertyGroup("Cargo & Limits", GroupOrder = 2)]
-        public bool TradeLivestock { get; set; } = true;
+        public bool TradeLivestock { get; set; } = false;
 
         [SettingPropertyBool("Trade Mounts", RequireRestart = false,
             HintText = "Include mounts (horses, camels) in auto-trade decisions.")]

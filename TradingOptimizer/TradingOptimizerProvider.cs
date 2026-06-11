@@ -83,6 +83,29 @@ namespace TradingOptimizer
                 }
             }
 
+            // Adjust final counts to subtract yields of slaughter arbitrage
+            foreach (var slaughter in report.ArbitrageSlaughters)
+            {
+                var item = slaughter.EqElement.Item;
+                if (item != null && item.HorseComponent != null)
+                {
+                    int meatYield = item.HorseComponent.MeatCount * slaughter.Amount;
+                    int hidesYield = item.HorseComponent.HideCount * slaughter.Amount;
+
+                    string meatId = DefaultItems.Meat.StringId;
+                    string hidesId = DefaultItems.Hides.StringId;
+
+                    if (meatYield > 0 && finalPlayerCounts.ContainsKey(meatId))
+                    {
+                        finalPlayerCounts[meatId] = Math.Max(0, finalPlayerCounts[meatId] - meatYield);
+                    }
+                    if (hidesYield > 0 && finalPlayerCounts.ContainsKey(hidesId))
+                    {
+                        finalPlayerCounts[hidesId] = Math.Max(0, finalPlayerCounts[hidesId] - hidesYield);
+                    }
+                }
+            }
+
             // All unique items across initial & final player inventory
             var allKeys = initialPlayerCounts.Keys.Union(finalPlayerCounts.Keys).Distinct();
 
@@ -100,6 +123,13 @@ namespace TradingOptimizer
                 {
                     orders.Add(new TradeOrder(eqElementMap[key], -diff, false));
                 }
+            }
+
+            // Manually append the buy and slaughter orders for arbitrage slaughters
+            foreach (var slaughter in report.ArbitrageSlaughters)
+            {
+                orders.Add(new TradeOrder(slaughter.EqElement, slaughter.Amount, true, false));
+                orders.Add(new TradeOrder(slaughter.EqElement, slaughter.Amount, false, true));
             }
 
             // Print summary to in-game logs if not simulation mode (or even if simulation mode, depending on user settings)

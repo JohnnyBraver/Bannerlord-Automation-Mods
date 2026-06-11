@@ -10,6 +10,7 @@ using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
+using TaleWorlds.Library;
 
 namespace TradingOptimizer
 {
@@ -30,10 +31,38 @@ namespace TradingOptimizer
         public List<(string Name, int Count, int Gold)> SoldItems { get; } = new List<(string, int, int)>();
         public List<(string Name, int Count, int Gold)> BoughtItems { get; } = new List<(string, int, int)>();
         public HashSet<string> SoldNormalItems { get; } = new HashSet<string>();
+        public List<(EquipmentElement EqElement, int Amount)> ArbitrageSlaughters { get; } = new List<(EquipmentElement, int)>();
     }
 
     public static class TradingEngine
     {
+        private static bool IsSlaughterArbitrageProfitable(InventoryLogic? logic, EquipmentElement eq, out int yieldValue, out int meatCount, out int hideCount)
+        {
+            yieldValue = 0;
+            meatCount = 0;
+            hideCount = 0;
+            var item = eq.Item;
+            if (item == null || item.HorseComponent == null) return false;
+
+            // Never slaughter riding mounts during town entry automation
+            bool isRidingMount = item.IsMountable && !item.HorseComponent.IsPackAnimal;
+            if (isRidingMount) return false;
+
+            meatCount = item.HorseComponent.MeatCount;
+            hideCount = item.HorseComponent.HideCount;
+            if (meatCount <= 0 && hideCount <= 0) return false;
+
+            var meatItem = DefaultItems.Meat;
+            var hidesItem = DefaultItems.Hides;
+
+            int meatPrice = logic != null ? logic.GetItemPrice(new EquipmentElement(meatItem), false) : meatItem.Value;
+            int hidesPrice = logic != null ? logic.GetItemPrice(new EquipmentElement(hidesItem), false) : hidesItem.Value;
+
+            yieldValue = (meatCount * meatPrice) + (hideCount * hidesPrice);
+            int buyPrice = logic != null ? logic.GetItemPrice(eq, true) : item.Value;
+
+            return buyPrice < yieldValue;
+        }
         private static readonly string LogPath = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "Mount and Blade II Bannerlord",
@@ -323,6 +352,68 @@ namespace TradingOptimizer
                     }
                 }
 
+                // 2a. Slaughter Arbitrage Sub-Phase
+                foreach (var item in merchantItems)
+                {
+                    if (item == null || item.ItemRosterElement.EquipmentElement.Item == null) continue;
+
+                    var eq = item.ItemRosterElement.EquipmentElement;
+                    if (IsSlaughterArbitrageProfitable(logic, eq, out int yieldValue, out int meatCount, out int hideCount))
+                    {
+                        int buyPrice = logic != null ? logic.GetItemPrice(eq, true) : eq.Item.Value;
+                        int available = item.ItemCount;
+                        if (available <= 0) continue;
+
+                        int toArbitrage = 0;
+                        int dailyWage = MobileParty.MainParty?.TotalWage ?? 0;
+                        int expenseReserve = dailyWage * settings.MinDaysExpensesToKeep;
+                        int minRequiredBalance = Math.Max(settings.MinimumGoldReserve, expenseReserve);
+                        int budget = currentBalance - minRequiredBalance;
+
+                        for (int i = 0; i < available; i++)
+                        {
+                            if (budget < buyPrice) break;
+
+                            // Simulating buy
+                            if (logic != null && Hero.MainHero != null)
+                            {
+                                var buyCommand = TransferCommand.Transfer(
+                                    1,
+                                    InventoryLogic.InventorySide.OtherInventory,
+                                    InventoryLogic.InventorySide.PlayerInventory,
+                                    new ItemRosterElement(eq, 1),
+                                    EquipmentIndex.None,
+                                    EquipmentIndex.None,
+                                    Hero.MainHero.CharacterObject
+                                );
+                                logic.AddTransferCommand(buyCommand);
+
+                                // Simulating slaughter
+                                var playerRosterEl = new ItemRosterElement(eq, 1);
+                                if (logic.CanSlaughterItem(playerRosterEl, InventoryLogic.InventorySide.PlayerInventory))
+                                {
+                                    logic.SlaughterItem(playerRosterEl);
+                                    toArbitrage++;
+                                    budget -= buyPrice;
+                                    currentBalance -= buyPrice;
+                                }
+                                else
+                                {
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (toArbitrage > 0)
+                        {
+                            report.ArbitrageSlaughters.Add((eq, toArbitrage));
+                            report.BoughtItems.Add((eq.Item.Name.ToString(), toArbitrage, buyPrice * toArbitrage));
+                            WriteLog($"[Slaughter Arbitrage] Bought and slaughtered {toArbitrage}x {eq.Item.Name} (Buy Price: {buyPrice}, Yield Value: {yieldValue})");
+                            InformationManager.DisplayMessage(new InformationMessage($"[TradingOptimizer] Slaughter arbitrage: Bought & Slaughtered {toArbitrage}x {eq.Item.Name}"));
+                        }
+                    }
+                }
+
                 while (true)
                 {
                     SPItemVM? bestItem = null;
@@ -344,7 +435,9 @@ namespace TradingOptimizer
                         int boughtSoFar = boughtQuantities[item];
                         int initialMerchantCount = item.ItemCount;
 
-                        if (boughtSoFar >= initialMerchantCount) continue;
+                        // Exclude items that were fully bought in slaughter arbitrage
+                        int arbitrageCount = report.ArbitrageSlaughters.Where(s => s.EqElement.Item.StringId == itemObj.StringId).Sum(s => s.Amount);
+                        if (boughtSoFar + arbitrageCount >= initialMerchantCount) continue;
 
                         float itemWeight = itemObj.Weight;
                         var playerItem = vm.RightItemListVM?.FirstOrDefault(r => r.ItemRosterElement.EquipmentElement.Item == itemObj);
@@ -352,7 +445,20 @@ namespace TradingOptimizer
                         int currentPrice = logic != null ? logic.GetItemPrice(item.ItemRosterElement.EquipmentElement, true) : itemObj.Value;
 
                         string skipReason = "";
-                        if (settings.LimitToInventoryCapacity && MobileParty.MainParty != null)
+                        
+                        // Herding Penalty Protection (limit animal purchases based on remaining herding slots)
+                        bool isAnimalOrMount = itemObj.IsAnimal || (itemObj.IsMountable && itemObj.HorseComponent != null);
+                        if (isAnimalOrMount && MobileParty.MainParty != null)
+                        {
+                            int totalAnimalsBoughtInSim = boughtQuantities.Where(p => p.Key.ItemRosterElement.EquipmentElement.Item.IsAnimal || (p.Key.ItemRosterElement.EquipmentElement.Item.IsMountable && p.Key.ItemRosterElement.EquipmentElement.Item.HorseComponent != null)).Sum(p => p.Value);
+                            int remainingSlots = SettlementAutomationCore.HerdingCalculator.GetRemainingAnimalSlots(MobileParty.MainParty);
+                            if (totalAnimalsBoughtInSim >= remainingSlots)
+                            {
+                                skipReason = "HerdingLimitExceeded";
+                            }
+                        }
+
+                        if (skipReason == "" && settings.LimitToInventoryCapacity && MobileParty.MainParty != null)
                         {
                             float currentWeight = GetRosterWeight(MobileParty.MainParty.ItemRoster);
                             float projectedWeight = currentWeight + netWeightAdded;
