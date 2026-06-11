@@ -32,40 +32,55 @@ namespace PartyManager
             if (totalAnimals > maxAllowed)
             {
                 int excess = totalAnimals - maxAllowed;
+                bool slaughter = settings.SlaughterAnimalsForHerding;
 
-                // 1. Sell Livestock first
+                // 1. Process Livestock first
                 foreach (var el in livestockItems)
                 {
                     if (excess <= 0) break;
-                    int toSell = Math.Min(excess, el.Amount);
-                    orders.Add(new TradeOrder(el.EquipmentElement, toSell, false));
-                    excess -= toSell;
+                    int toProcess = Math.Min(excess, el.Amount);
+                    orders.Add(new TradeOrder(el.EquipmentElement, toProcess, false, slaughter));
+                    excess -= toProcess;
                 }
 
-                // 2. Sell excess riding mounts (more riding mounts than foot troops)
-                int excessRiding = riding - infantry;
-                if (excess > 0 && excessRiding > 0)
+                // 2. Process Riding Mounts (respecting SellRidingMountsSetting)
+                var ridingMode = settings.SellRidingMountsSetting;
+                if (excess > 0 && ridingMode != SellRidingMountsMode.Never)
                 {
-                    foreach (var el in ridingItems)
+                    int excessRiding = 0;
+                    if (ridingMode == SellRidingMountsMode.ExcessOnly)
                     {
-                        if (excess <= 0 || excessRiding <= 0) break;
-                        int available = el.Amount;
-                        int toSell = Math.Min(Math.Min(excess, excessRiding), available);
-                        orders.Add(new TradeOrder(el.EquipmentElement, toSell, false));
-                        excess -= toSell;
-                        excessRiding -= toSell;
+                        excessRiding = Math.Max(0, riding - infantry);
+                    }
+                    else if (ridingMode == SellRidingMountsMode.All)
+                    {
+                        excessRiding = riding;
+                    }
+
+                    if (excessRiding > 0)
+                    {
+                        foreach (var el in ridingItems)
+                        {
+                            if (excess <= 0 || excessRiding <= 0) break;
+                            int available = el.Amount;
+                            int toSell = Math.Min(Math.Min(excess, excessRiding), available);
+                            // Ridable mounts are NEVER slaughtered (always sold)
+                            orders.Add(new TradeOrder(el.EquipmentElement, toSell, false, false));
+                            excess -= toSell;
+                            excessRiding -= toSell;
+                        }
                     }
                 }
 
-                // 3. Sell pack animals if still over herding limit
+                // 3. Process Pack Animals if still over herding limit
                 if (excess > 0)
                 {
                     foreach (var el in packItems)
                     {
                         if (excess <= 0) break;
-                        int toSell = Math.Min(excess, el.Amount);
-                        orders.Add(new TradeOrder(el.EquipmentElement, toSell, false));
-                        excess -= toSell;
+                        int toProcess = Math.Min(excess, el.Amount);
+                        orders.Add(new TradeOrder(el.EquipmentElement, toProcess, false, slaughter));
+                        excess -= toProcess;
                     }
                 }
             }
