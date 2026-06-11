@@ -7,6 +7,8 @@ using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Inventory;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.Core;
 using TaleWorlds.MountAndBlade;
 
@@ -107,12 +109,12 @@ namespace SettlementAutomationCore
 
             try
             {
-                var registrations = AutomationRegistry.ActiveTradeProviders;
-                if (registrations.Count == 0) return;
-
+                // ----------------------------------------------------
                 // Step 1: Pre-Sell Phase (Revenue Generation)
+                // ----------------------------------------------------
+                var tradeRegistrations = AutomationRegistry.ActiveTradeProviders;
                 var preSellOrders = new List<TradeOrder>();
-                foreach (var reg in registrations)
+                foreach (var reg in tradeRegistrations)
                 {
                     try
                     {
@@ -152,12 +154,201 @@ namespace SettlementAutomationCore
                     }
                 }
 
-                // Step 2: Main Phase (Reconciliation & Purchases)
+                // ----------------------------------------------------
+                // Step 2: Tavern / Ransom & Mercenaries Phase
+                // ----------------------------------------------------
+                var ransomRegistrations = AutomationRegistry.ActiveRansomProviders;
+                var ransomOrders = new List<RansomOrder>();
+                var mercOrders = new List<MercenaryRecruitOrder>();
+                foreach (var reg in ransomRegistrations)
+                {
+                    try
+                    {
+                        var rOrders = reg.Provider.GetRansomOrders(MobileParty.MainParty, settlement);
+                        if (rOrders != null) ransomOrders.AddRange(rOrders);
+
+                        var mOrders = reg.Provider.GetMercenaryRecruitOrders(MobileParty.MainParty, settlement);
+                        if (mOrders != null) mercOrders.AddRange(mOrders);
+                    }
+                    catch {}
+                }
+
+                // Apply ransoms
+                if (ransomOrders.Count > 0)
+                {
+                    try
+                    {
+                        var ransomRoster = TroopRoster.CreateDummyTroopRoster();
+                        foreach (var order in ransomOrders)
+                        {
+                            if (order.Prisoner != null && order.Amount > 0)
+                            {
+                                ransomRoster.AddToCounts(order.Prisoner, order.Amount);
+                            }
+                        }
+                        if (ransomRoster.Count > 0)
+                        {
+                            SellPrisonersAction.ApplyForSelectedPrisoners(MobileParty.MainParty.Party, settlement.Party, ransomRoster);
+                        }
+                    }
+                    catch {}
+                }
+
+                // Apply mercenary recruitment
+                if (mercOrders.Count > 0)
+                {
+                    try
+                    {
+                        var recruitmentBehavior = Campaign.Current?.GetCampaignBehavior<TaleWorlds.CampaignSystem.CampaignBehaviors.RecruitmentCampaignBehavior>();
+                        if (recruitmentBehavior != null)
+                        {
+                            var applyMercMethod = recruitmentBehavior.GetType().GetMethod("ApplyRecruitMercenary", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                            if (applyMercMethod != null)
+                            {
+                                foreach (var order in mercOrders)
+                                {
+                                    if (order.Troop != null && order.Amount > 0)
+                                    {
+                                        applyMercMethod.Invoke(recruitmentBehavior, new object[] { MobileParty.MainParty, settlement, order.Troop, order.Amount });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch {}
+                }
+
+                // ----------------------------------------------------
+                // Step 3: Notable Recruitment Phase
+                // ----------------------------------------------------
+                var recruitRegistrations = AutomationRegistry.ActiveRecruitProviders;
+                var recruitOrders = new List<RecruitOrder>();
+                foreach (var reg in recruitRegistrations)
+                {
+                    try
+                    {
+                        var orders = reg.Provider.GetRecruitOrders(MobileParty.MainParty, settlement);
+                        if (orders != null) recruitOrders.AddRange(orders);
+                    }
+                    catch {}
+                }
+
+                foreach (var order in recruitOrders)
+                {
+                    try
+                    {
+                        if (order.Notable == null || order.Notable.VolunteerTypes == null) continue;
+                        if (order.SlotIndex < 0 || order.SlotIndex >= order.Notable.VolunteerTypes.Length) continue;
+
+                        var troop = order.Notable.VolunteerTypes[order.SlotIndex];
+                        if (troop == null) continue;
+
+                        int cost = (int)Campaign.Current.Models.PartyWageModel.GetTroopRecruitmentCost(troop, Hero.MainHero, false).ResultNumber;
+                        if (Hero.MainHero.Gold >= cost)
+                        {
+                            order.Notable.VolunteerTypes[order.SlotIndex] = null;
+                            MobileParty.MainParty.MemberRoster.AddToCounts(troop, 1);
+                            GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, order.Notable, cost, false);
+                            CampaignEventDispatcher.Instance.OnUnitRecruited(troop, 1);
+                            CampaignEventDispatcher.Instance.OnTroopRecruited(Hero.MainHero, settlement, order.Notable, troop, 1);
+                        }
+                    }
+                    catch {}
+                }
+
+                // ----------------------------------------------------
+                // Step 4: Garrison Donation Phase
+                // ----------------------------------------------------
+                var garrisonRegistrations = AutomationRegistry.ActiveGarrisonProviders;
+                var garrisonOrders = new List<GarrisonOrder>();
+                foreach (var reg in garrisonRegistrations)
+                {
+                    try
+                    {
+                        var orders = reg.Provider.GetGarrisonOrders(MobileParty.MainParty, settlement);
+                        if (orders != null) garrisonOrders.AddRange(orders);
+                    }
+                    catch {}
+                }
+
+                var garrisonParty = settlement.Town?.GarrisonParty;
+                if (garrisonOrders.Count > 0 && garrisonParty != null)
+                {
+                    try
+                    {
+                        var donatorRoster = TroopRoster.CreateDummyTroopRoster();
+                        foreach (var order in garrisonOrders)
+                        {
+                            if (order.Troop != null && order.Amount > 0)
+                            {
+                                int available = MobileParty.MainParty.MemberRoster.GetTroopCount(order.Troop);
+                                int toDonate = Math.Min(order.Amount, available);
+                                if (toDonate > 0)
+                                {
+                                    MobileParty.MainParty.MemberRoster.AddToCounts(order.Troop, -toDonate);
+                                    garrisonParty.MemberRoster.AddToCounts(order.Troop, toDonate);
+                                    donatorRoster.AddToCounts(order.Troop, toDonate);
+                                }
+                            }
+                        }
+                        if (donatorRoster.Count > 0)
+                        {
+                            CampaignEventDispatcher.Instance.OnTroopGivenToSettlement(Hero.MainHero, settlement, donatorRoster);
+                        }
+                    }
+                    catch {}
+                }
+
+                // ----------------------------------------------------
+                // Step 5: Dungeon Donation Phase
+                // ----------------------------------------------------
+                var dungeonRegistrations = AutomationRegistry.ActiveDungeonProviders;
+                var dungeonOrders = new List<DungeonOrder>();
+                foreach (var reg in dungeonRegistrations)
+                {
+                    try
+                    {
+                        var orders = reg.Provider.GetDungeonOrders(MobileParty.MainParty, settlement);
+                        if (orders != null) dungeonOrders.AddRange(orders);
+                    }
+                    catch {}
+                }
+
+                if (dungeonOrders.Count > 0)
+                {
+                    try
+                    {
+                        var flattenedPrisoners = new FlattenedTroopRoster();
+                        foreach (var order in dungeonOrders)
+                        {
+                            if (order.Prisoner != null && order.Amount > 0)
+                            {
+                                int available = MobileParty.MainParty.PrisonRoster.GetTroopCount(order.Prisoner);
+                                int toDonate = Math.Min(order.Amount, available);
+                                if (toDonate > 0)
+                                {
+                                    MobileParty.MainParty.PrisonRoster.AddToCounts(order.Prisoner, -toDonate);
+                                    settlement.Party.PrisonRoster.AddToCounts(order.Prisoner, toDonate);
+                                    flattenedPrisoners.Add(order.Prisoner, toDonate, 0);
+                                }
+                            }
+                        }
+                        if (flattenedPrisoners.Count() > 0)
+                        {
+                            CampaignEventDispatcher.Instance.OnPrisonerDonatedToSettlement(MobileParty.MainParty, flattenedPrisoners, settlement);
+                        }
+                    }
+                    catch {}
+                }
+
+                // ----------------------------------------------------
+                // Step 6: Main Trade Phase (Reconciliation & Purchases)
+                // ----------------------------------------------------
                 var logic2 = CreateAndInitInventoryLogic(settlement);
                 if (logic2 != null)
                 {
                     var mainOrders = new List<TradeOrder>();
-                    foreach (var reg in registrations)
+                    foreach (var reg in tradeRegistrations)
                     {
                         try
                         {

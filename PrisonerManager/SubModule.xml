@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Module>
+  <Name value="Prisoner Manager" />
+  <Id value="PrisonerManager" />
+  <Version value="v1.0.0" />
+  <SingleplayerModule value="true" />
+  <DependedModules>
+    <DependedModule Id="Native" DependentVersion="v1.4.5" />
+    <DependedModule Id="SandBoxCore" DependentVersion="v1.4.5" />
+    <DependedModule Id="SettlementAutomationCore" />
+  </DependedModules>
+  <DependedModuleMetadatas>
+    <DependedModuleMetadata id="Bannerlord.Harmony" order="LoadBeforeThis" />
+    <DependedModuleMetadata id="Bannerlord.UIExtenderEx" order="LoadBeforeThis" optional="true" />
+    <DependedModuleMetadata id="Bannerlord.MBOptionScreen" order="LoadBeforeThis" optional="true" />
+  </DependedModuleMetadatas>
+  <SubModules>
+    <SubModule>
+      <Name value="PrisonerManager" />
+      <DLLName value="PrisonerManager.dll" />
+      <SubModuleClassType value="PrisonerManager.SubModule" />
+      <Tags>
+        <Tag key="DedicatedServerType" value="none" />
+      </Tags>
+    </SubModule>
+  </SubModules>
+</Module>

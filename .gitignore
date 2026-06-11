@@ -1,0 +1,5 @@
+# Build folders
+**/bin/
+**/obj/
+.vs/
+*.user

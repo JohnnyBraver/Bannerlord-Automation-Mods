@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using TaleWorlds.Core;
+using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Inventory;
@@ -28,7 +30,7 @@ namespace SettlementAutomationCore
     }
 
     // ----------------------------------------------------
-    // Provider Interfaces
+    // Order Types
     // ----------------------------------------------------
     public class TradeOrder
     {
@@ -44,6 +46,69 @@ namespace SettlementAutomationCore
         }
     }
 
+    public class RecruitOrder
+    {
+        public Hero Notable { get; }
+        public int SlotIndex { get; }
+        
+        public RecruitOrder(Hero notable, int slotIndex)
+        {
+            Notable = notable;
+            SlotIndex = slotIndex;
+        }
+    }
+
+    public class GarrisonOrder
+    {
+        public CharacterObject Troop { get; }
+        public int Amount { get; }
+        
+        public GarrisonOrder(CharacterObject troop, int amount)
+        {
+            Troop = troop;
+            Amount = amount;
+        }
+    }
+
+    public class RansomOrder
+    {
+        public CharacterObject Prisoner { get; }
+        public int Amount { get; }
+        
+        public RansomOrder(CharacterObject prisoner, int amount)
+        {
+            Prisoner = prisoner;
+            Amount = amount;
+        }
+    }
+
+    public class MercenaryRecruitOrder
+    {
+        public CharacterObject Troop { get; }
+        public int Amount { get; }
+        
+        public MercenaryRecruitOrder(CharacterObject troop, int amount)
+        {
+            Troop = troop;
+            Amount = amount;
+        }
+    }
+
+    public class DungeonOrder
+    {
+        public CharacterObject Prisoner { get; }
+        public int Amount { get; }
+        
+        public DungeonOrder(CharacterObject prisoner, int amount)
+        {
+            Prisoner = prisoner;
+            Amount = amount;
+        }
+    }
+
+    // ----------------------------------------------------
+    // Provider Interfaces
+    // ----------------------------------------------------
     public interface ITradeOrderProvider
     {
         string ProviderName { get; }
@@ -51,18 +116,29 @@ namespace SettlementAutomationCore
         List<TradeOrder> GetMainOrders(MobileParty party, Settlement settlement, InventoryLogic currentLogic);
     }
 
-    // Planned for future recruitment automation (PartyManager)
     public interface IRecruitOrderProvider
     {
         string ProviderName { get; }
-        // For recruiting logic (spends gold, modifies member roster)
+        List<RecruitOrder> GetRecruitOrders(MobileParty party, Settlement settlement);
     }
 
-    // Planned for future prisoner management (PrisonerManager)
-    public interface IPrisonerOrderProvider
+    public interface IGarrisonOrderProvider
     {
         string ProviderName { get; }
-        // For ransoming and donations logic
+        List<GarrisonOrder> GetGarrisonOrders(MobileParty party, Settlement settlement);
+    }
+
+    public interface IRansomOrderProvider
+    {
+        string ProviderName { get; }
+        List<RansomOrder> GetRansomOrders(MobileParty party, Settlement settlement);
+        List<MercenaryRecruitOrder> GetMercenaryRecruitOrders(MobileParty party, Settlement settlement);
+    }
+
+    public interface IDungeonOrderProvider
+    {
+        string ProviderName { get; }
+        List<DungeonOrder> GetDungeonOrders(MobileParty party, Settlement settlement);
     }
 
     // ----------------------------------------------------
@@ -72,7 +148,9 @@ namespace SettlementAutomationCore
     {
         private static readonly List<ProviderRegistration<ITradeOrderProvider>> TradeProviders = new();
         private static readonly List<ProviderRegistration<IRecruitOrderProvider>> RecruitProviders = new();
-        private static readonly List<ProviderRegistration<IPrisonerOrderProvider>> PrisonerProviders = new();
+        private static readonly List<ProviderRegistration<IGarrisonOrderProvider>> GarrisonProviders = new();
+        private static readonly List<ProviderRegistration<IRansomOrderProvider>> RansomProviders = new();
+        private static readonly List<ProviderRegistration<IDungeonOrderProvider>> DungeonProviders = new();
 
         // --- Trade Providers ---
         public static void RegisterTradeProvider(ITradeOrderProvider provider)
@@ -138,34 +216,98 @@ namespace SettlementAutomationCore
             }
         }
 
-        // --- Prisoner Providers ---
-        public static void RegisterPrisonerProvider(IPrisonerOrderProvider provider)
+        // --- Garrison Providers ---
+        public static void RegisterGarrisonProvider(IGarrisonOrderProvider provider)
         {
-            lock (PrisonerProviders)
+            lock (GarrisonProviders)
             {
-                if (!PrisonerProviders.Any(r => EqualityComparer<IPrisonerOrderProvider>.Default.Equals(r.Provider, provider)))
+                if (!GarrisonProviders.Any(r => EqualityComparer<IGarrisonOrderProvider>.Default.Equals(r.Provider, provider)))
                 {
                     string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
-                    PrisonerProviders.Add(new ProviderRegistration<IPrisonerOrderProvider>(provider, provider.ProviderName, callingAssembly));
+                    GarrisonProviders.Add(new ProviderRegistration<IGarrisonOrderProvider>(provider, provider.ProviderName, callingAssembly));
                 }
             }
         }
 
-        public static void UnregisterPrisonerProvider(IPrisonerOrderProvider provider)
+        public static void UnregisterGarrisonProvider(IGarrisonOrderProvider provider)
         {
-            lock (PrisonerProviders)
+            lock (GarrisonProviders)
             {
-                PrisonerProviders.RemoveAll(r => EqualityComparer<IPrisonerOrderProvider>.Default.Equals(r.Provider, provider));
+                GarrisonProviders.RemoveAll(r => EqualityComparer<IGarrisonOrderProvider>.Default.Equals(r.Provider, provider));
             }
         }
 
-        public static IReadOnlyList<ProviderRegistration<IPrisonerOrderProvider>> ActivePrisonerProviders
+        public static IReadOnlyList<ProviderRegistration<IGarrisonOrderProvider>> ActiveGarrisonProviders
         {
             get
             {
-                lock (PrisonerProviders)
+                lock (GarrisonProviders)
                 {
-                    return new List<ProviderRegistration<IPrisonerOrderProvider>>(PrisonerProviders);
+                    return new List<ProviderRegistration<IGarrisonOrderProvider>>(GarrisonProviders);
+                }
+            }
+        }
+
+        // --- Ransom Providers ---
+        public static void RegisterRansomProvider(IRansomOrderProvider provider)
+        {
+            lock (RansomProviders)
+            {
+                if (!RansomProviders.Any(r => EqualityComparer<IRansomOrderProvider>.Default.Equals(r.Provider, provider)))
+                {
+                    string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
+                    RansomProviders.Add(new ProviderRegistration<IRansomOrderProvider>(provider, provider.ProviderName, callingAssembly));
+                }
+            }
+        }
+
+        public static void UnregisterRansomProvider(IRansomOrderProvider provider)
+        {
+            lock (RansomProviders)
+            {
+                RansomProviders.RemoveAll(r => EqualityComparer<IRansomOrderProvider>.Default.Equals(r.Provider, provider));
+            }
+        }
+
+        public static IReadOnlyList<ProviderRegistration<IRansomOrderProvider>> ActiveRansomProviders
+        {
+            get
+            {
+                lock (RansomProviders)
+                {
+                    return new List<ProviderRegistration<IRansomOrderProvider>>(RansomProviders);
+                }
+            }
+        }
+
+        // --- Dungeon Providers ---
+        public static void RegisterDungeonProvider(IDungeonOrderProvider provider)
+        {
+            lock (DungeonProviders)
+            {
+                if (!DungeonProviders.Any(r => EqualityComparer<IDungeonOrderProvider>.Default.Equals(r.Provider, provider)))
+                {
+                    string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
+                    DungeonProviders.Add(new ProviderRegistration<IDungeonOrderProvider>(provider, provider.ProviderName, callingAssembly));
+                }
+            }
+        }
+
+        public static void UnregisterDungeonProvider(IDungeonOrderProvider provider)
+        {
+            lock (DungeonProviders)
+            {
+                DungeonProviders.RemoveAll(r => EqualityComparer<IDungeonOrderProvider>.Default.Equals(r.Provider, provider));
+            }
+        }
+
+        public static IReadOnlyList<ProviderRegistration<IDungeonOrderProvider>> ActiveDungeonProviders
+        {
+            get
+            {
+                lock (DungeonProviders)
+                {
+                    return new List<ProviderRegistration<IDungeonOrderProvider>>(DungeonProviders);
                 }
             }
         }
