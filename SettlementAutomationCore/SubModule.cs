@@ -11,6 +11,7 @@ using TaleWorlds.CampaignSystem.Roster;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.Core;
 using TaleWorlds.MountAndBlade;
+using TaleWorlds.Library;
 
 namespace SettlementAutomationCore
 {
@@ -184,6 +185,7 @@ namespace SettlementAutomationCore
                             if (order.Prisoner != null && order.Amount > 0)
                             {
                                 ransomRoster.AddToCounts(order.Prisoner, order.Amount);
+                                InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed {order.Amount}x {order.Prisoner.Name}"));
                             }
                         }
                         if (ransomRoster.Count > 0)
@@ -210,6 +212,7 @@ namespace SettlementAutomationCore
                                     if (order.Troop != null && order.Amount > 0)
                                     {
                                         applyMercMethod.Invoke(recruitmentBehavior, new object[] { MobileParty.MainParty, settlement, order.Troop, order.Amount });
+                                        InformationManager.DisplayMessage(new InformationMessage($"[Automation] Recruited {order.Amount}x {order.Troop.Name} (Mercenary)"));
                                     }
                                 }
                             }
@@ -251,6 +254,7 @@ namespace SettlementAutomationCore
                             GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, order.Notable, cost, false);
                             CampaignEventDispatcher.Instance.OnUnitRecruited(troop, 1);
                             CampaignEventDispatcher.Instance.OnTroopRecruited(Hero.MainHero, settlement, order.Notable, troop, 1);
+                            InformationManager.DisplayMessage(new InformationMessage($"[Automation] Recruited 1x {troop.Name} from {order.Notable.Name}"));
                         }
                     }
                     catch {}
@@ -288,6 +292,7 @@ namespace SettlementAutomationCore
                                     MobileParty.MainParty.MemberRoster.AddToCounts(order.Troop, -toDonate);
                                     garrisonParty.MemberRoster.AddToCounts(order.Troop, toDonate);
                                     donatorRoster.AddToCounts(order.Troop, toDonate);
+                                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Donated {toDonate}x {order.Troop.Name} to Garrison"));
                                 }
                             }
                         }
@@ -330,6 +335,7 @@ namespace SettlementAutomationCore
                                     MobileParty.MainParty.PrisonRoster.AddToCounts(order.Prisoner, -toDonate);
                                     settlement.Party.PrisonRoster.AddToCounts(order.Prisoner, toDonate);
                                     flattenedPrisoners.Add(order.Prisoner, toDonate, 0);
+                                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Donated {toDonate}x {order.Prisoner.Name} to Dungeon"));
                                 }
                             }
                         }
@@ -360,52 +366,74 @@ namespace SettlementAutomationCore
 
                     if (mainOrders.Count > 0)
                     {
-                        var itemOrderNetMap = new Dictionary<ItemObject, int>();
-                        var eqElementMap = new Dictionary<ItemObject, EquipmentElement>();
-
-                        foreach (var order in mainOrders)
-                        {
-                            if (order.EquipmentElement.Item == null) continue;
-                            var item = order.EquipmentElement.Item;
-                            eqElementMap[item] = order.EquipmentElement;
-
-                            int netChange = order.IsBuy ? order.Amount : -order.Amount;
-                            if (itemOrderNetMap.ContainsKey(item))
-                            {
-                                itemOrderNetMap[item] += netChange;
-                            }
-                            else
-                            {
-                                itemOrderNetMap[item] = netChange;
-                            }
-                        }
+                        var slaughters = mainOrders.Where(o => o.IsSlaughter).ToList();
+                        var normalOrders = mainOrders.Where(o => !o.IsSlaughter).ToList();
 
                         bool executedAny = false;
-                        foreach (var pair in itemOrderNetMap)
+
+                        // Execute Normal Trades first (so arbitrage buys are in player inventory before slaughtering)
+                        if (normalOrders.Count > 0)
                         {
-                            var item = pair.Key;
-                            int netAmount = pair.Value;
-                            if (netAmount == 0) continue;
+                            var itemOrderNetMap = new Dictionary<ItemObject, int>();
+                            var eqElementMap = new Dictionary<ItemObject, EquipmentElement>();
 
-                            bool isBuy = netAmount > 0;
-                            int absAmount = Math.Abs(netAmount);
+                            foreach (var order in normalOrders)
+                            {
+                                if (order.EquipmentElement.Item == null) continue;
+                                var item = order.EquipmentElement.Item;
+                                eqElementMap[item] = order.EquipmentElement;
 
-                            var sideFrom = isBuy ? InventoryLogic.InventorySide.OtherInventory : InventoryLogic.InventorySide.PlayerInventory;
-                            var sideTo = isBuy ? InventoryLogic.InventorySide.PlayerInventory : InventoryLogic.InventorySide.OtherInventory;
+                                int netChange = order.IsBuy ? order.Amount : -order.Amount;
+                                if (itemOrderNetMap.ContainsKey(item))
+                                {
+                                    itemOrderNetMap[item] += netChange;
+                                }
+                                else
+                                {
+                                    itemOrderNetMap[item] = netChange;
+                                }
+                            }
 
-                            var command = TransferCommand.Transfer(
-                                absAmount,
-                                sideFrom,
-                                sideTo,
-                                new ItemRosterElement(eqElementMap[item], absAmount),
-                                EquipmentIndex.None,
-                                EquipmentIndex.None,
-                                Hero.MainHero.CharacterObject
-                            );
-                            logic2.AddTransferCommand(command);
-                            executedAny = true;
+                            foreach (var pair in itemOrderNetMap)
+                            {
+                                var item = pair.Key;
+                                int netAmount = pair.Value;
+                                if (netAmount == 0) continue;
+
+                                bool isBuy = netAmount > 0;
+                                int absAmount = Math.Abs(netAmount);
+
+                                var sideFrom = isBuy ? InventoryLogic.InventorySide.OtherInventory : InventoryLogic.InventorySide.PlayerInventory;
+                                var sideTo = isBuy ? InventoryLogic.InventorySide.PlayerInventory : InventoryLogic.InventorySide.OtherInventory;
+
+                                var command = TransferCommand.Transfer(
+                                    absAmount,
+                                    sideFrom,
+                                    sideTo,
+                                    new ItemRosterElement(eqElementMap[item], absAmount),
+                                    EquipmentIndex.None,
+                                    EquipmentIndex.None,
+                                    Hero.MainHero.CharacterObject
+                                );
+                                logic2.AddTransferCommand(command);
+                                executedAny = true;
+                            }
                         }
 
+                        // Execute Slaughters
+                        foreach (var order in slaughters)
+                        {
+                            if (order.EquipmentElement.Item != null && order.Amount > 0)
+                            {
+                                var itemRosterEl = new ItemRosterElement(order.EquipmentElement, order.Amount);
+                                if (logic2.CanSlaughterItem(itemRosterEl, InventoryLogic.InventorySide.PlayerInventory))
+                                {
+                                    logic2.SlaughterItem(itemRosterEl);
+                                    executedAny = true;
+                                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Slaughtered {order.Amount}x {order.EquipmentElement.Item.Name}"));
+                                }
+                            }
+                        }
                         if (executedAny && logic2.IsThereAnyChanges())
                         {
                             logic2.DoneLogic();

@@ -37,12 +37,63 @@ namespace SettlementAutomationCore
         public EquipmentElement EquipmentElement { get; }
         public int Amount { get; }
         public bool IsBuy { get; } // true = buy, false = sell
+        public bool IsSlaughter { get; } // true = slaughter animal
         
-        public TradeOrder(EquipmentElement eqElement, int amount, bool isBuy)
+        public TradeOrder(EquipmentElement eqElement, int amount, bool isBuy, bool isSlaughter = false)
         {
             EquipmentElement = eqElement;
             Amount = amount;
             IsBuy = isBuy;
+            IsSlaughter = isSlaughter;
+        }
+    }
+
+    public static class HerdingCalculator
+    {
+        public static int GetMaxAnimalsAllowed(MobileParty party)
+        {
+            if (party == null) return 0;
+            int infantry = 0;
+            int cavalry = 0;
+            var memberRoster = party.MemberRoster;
+            for (int i = 0; i < memberRoster.Count; i++)
+            {
+                var el = memberRoster.GetElementCopyAtIndex(i);
+                if (el.Character != null)
+                {
+                    if (el.Character.IsMounted)
+                    {
+                        cavalry += el.Number;
+                    }
+                    else
+                    {
+                        infantry += el.Number;
+                    }
+                }
+            }
+            return (infantry * 2) + (cavalry * 1);
+        }
+
+        public static int GetCurrentAnimalsCount(MobileParty party)
+        {
+            if (party == null) return 0;
+            int count = 0;
+            var itemRoster = party.ItemRoster;
+            for (int i = 0; i < itemRoster.Count; i++)
+            {
+                var el = itemRoster.GetElementCopyAtIndex(i);
+                var item = el.EquipmentElement.Item;
+                if (item != null && (item.IsAnimal || (item.IsMountable && item.HorseComponent != null)))
+                {
+                    count += el.Amount;
+                }
+            }
+            return count;
+        }
+
+        public static int GetRemainingAnimalSlots(MobileParty party)
+        {
+            return Math.Max(0, GetMaxAnimalsAllowed(party) - GetCurrentAnimalsCount(party));
         }
     }
 
