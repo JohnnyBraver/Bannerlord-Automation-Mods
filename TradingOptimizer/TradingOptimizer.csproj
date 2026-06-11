@@ -25,6 +25,10 @@
       <Private>False</Private>
     </Reference>
   </ItemGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\TradingCore\TradingCore.csproj" />
+  </ItemGroup>
 
 
   <ItemGroup>

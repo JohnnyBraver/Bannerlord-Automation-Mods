@@ -3,6 +3,7 @@ using System.Linq;
 using System.Reflection;
 using HarmonyLib;
 using TaleWorlds.MountAndBlade;
+using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using Bannerlord.UIExtenderEx;
 
@@ -60,16 +61,32 @@ namespace EquipmentManager
             if (!_uiExtenderInitialized)
             {
                 _uiExtenderInitialized = true;
-                _uiExtender = new UIExtender("EquipmentManager");
+                _uiExtender = UIExtender.Create("EquipmentManager");
                 _uiExtender.Register(typeof(SubModule).Assembly);
                 _uiExtender.Enable();
             }
         }
 
-        protected override void OnApplicationTick(float dt)
+        private static EquipmentManagerProvider? _provider;
+
+        protected override void OnGameStart(TaleWorlds.Core.Game game, TaleWorlds.Core.IGameStarter gameStarter)
         {
-            base.OnApplicationTick(dt);
-            // Keybind removed; button injection via UIExtenderEx is now the trigger.
+            base.OnGameStart(game, gameStarter);
+            if (game.GameType is Campaign)
+            {
+                _provider = new EquipmentManagerProvider();
+                TradingCore.TradeCoordinator.RegisterProvider(_provider);
+            }
+        }
+
+        public override void OnGameEnd(TaleWorlds.Core.Game game)
+        {
+            base.OnGameEnd(game);
+            if (_provider != null)
+            {
+                TradingCore.TradeCoordinator.UnregisterProvider(_provider);
+                _provider = null;
+            }
         }
     }
 }

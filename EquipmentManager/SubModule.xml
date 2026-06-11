@@ -7,6 +7,7 @@
   <DependedModules>
     <DependedModule Id="Native" DependentVersion="v1.4.5" />
     <DependedModule Id="SandBoxCore" DependentVersion="v1.4.5" />
+    <DependedModule Id="TradingCore" />
   </DependedModules>
   <DependedModuleMetadatas>
     <DependedModuleMetadata id="Bannerlord.Harmony" order="LoadBeforeThis" />

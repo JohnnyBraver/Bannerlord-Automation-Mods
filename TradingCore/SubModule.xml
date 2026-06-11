@@ -1,24 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Module>
-  <Name value="Trading Optimizer" />
-  <Id value="TradingOptimizer" />
+  <Name value="Trading Core" />
+  <Id value="TradingCore" />
   <Version value="v1.0.0" />
   <SingleplayerModule value="true" />
   <DependedModules>
     <DependedModule Id="Native" DependentVersion="v1.4.5" />
     <DependedModule Id="SandBoxCore" DependentVersion="v1.4.5" />
-    <DependedModule Id="TradingCore" />
   </DependedModules>
   <DependedModuleMetadatas>
     <DependedModuleMetadata id="Bannerlord.Harmony" order="LoadBeforeThis" />
-    <DependedModuleMetadata id="Bannerlord.UIExtenderEx" order="LoadBeforeThis" optional="true" />
-    <DependedModuleMetadata id="Bannerlord.MBOptionScreen" order="LoadBeforeThis" optional="true" />
   </DependedModuleMetadatas>
   <SubModules>
     <SubModule>
-      <Name value="TradingOptimizer" />
-      <DLLName value="TradingOptimizer.dll" />
-      <SubModuleClassType value="TradingOptimizer.SubModule" />
+      <Name value="TradingCore" />
+      <DLLName value="TradingCore.dll" />
+      <SubModuleClassType value="TradingCore.SubModule" />
       <Tags>
         <Tag key="DedicatedServerType" value="none" />
       </Tags>

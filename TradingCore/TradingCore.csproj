@@ -12,24 +12,7 @@
   <ItemGroup>
     <PackageReference Include="Lib.Harmony" Version="2.3.3" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />
-    <Reference Include="Bannerlord.UIExtenderEx">
-      <HintPath>E:\SteamLibrary\steamapps\workshop\content\261550\2859222409\bin\Win64_Shipping_Client\Bannerlord.UIExtenderEx.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="MCMv5">
-      <HintPath>E:\SteamLibrary\steamapps\workshop\content\261550\2859238197\bin\Win64_Shipping_Client\MCMv5.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\Newtonsoft.Json.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
   </ItemGroup>
-  
-  <ItemGroup>
-    <ProjectReference Include="..\TradingCore\TradingCore.csproj" />
-  </ItemGroup>
-
 
   <ItemGroup>
     <Reference Include="TaleWorlds.Core">
@@ -68,23 +51,17 @@
       <HintPath>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.Localization.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
 
   <!-- Post-Build Action: Copy built outputs to the Bannerlord Modules folder -->
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <PropertyGroup>
-      <ModFolder>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\EquipmentManager</ModFolder>
+      <ModFolder>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\TradingCore</ModFolder>
       <ModBinFolder>$(ModFolder)\bin\Win64_Shipping_Client</ModBinFolder>
     </PropertyGroup>
     <MakeDir Directories="$(ModBinFolder)" Condition="!Exists('$(ModBinFolder)')" />
     <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll" DestinationFolder="$(ModBinFolder)" />
     <Copy SourceFiles="$(OutputPath)0Harmony.dll" DestinationFolder="$(ModBinFolder)" />
     <Copy SourceFiles="SubModule.xml" DestinationFolder="$(ModFolder)" />
-    <MakeDir Directories="$(ModFolder)\GUI\PrefabExtensions" Condition="!Exists('$(ModFolder)\GUI\PrefabExtensions')" />
-    <ItemGroup>
-      <GuiFiles Include="$(MSBuildProjectDirectory)\GUI\PrefabExtensions\*.*" />
-    </ItemGroup>
-    <Copy SourceFiles="@(GuiFiles)" DestinationFolder="$(ModFolder)\GUI\PrefabExtensions" />
   </Target>
 </Project>
