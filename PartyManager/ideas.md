@@ -13,6 +13,10 @@ This mod will handle party configuration, troop recruitment, mounts management, 
      - **Evaluation Time**: Evaluates the filter against the *final upgrade tier* of the troop tree (recommended) or the *purchase time tier*.
      - **Mounted Toggles**: Recruit only cavalry, only infantry, or both.
    - Automatically checks remaining party capacity and spends gold within budget limits.
+   - **Garrison Donation for Influence (Idea)**:
+     - Option to recruit troops even when over the party capacity cap.
+     - Automatically dumps those excess recruits into the settlement's garrison to gain **Influence** cheaply.
+     - Custom filters for influence thresholds, min cost-per-influence, and garrison capacity.
 
 2. **Mounts & Carry Capacity Management (Phase 3: Supplies & Investment)**
    - Auto-purchase riding/pack animals to maximize party speed and carry capacity.
