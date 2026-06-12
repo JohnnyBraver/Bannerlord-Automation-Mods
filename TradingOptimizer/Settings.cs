@@ -50,6 +50,22 @@ namespace TradingOptimizer
         public override string ToString() => _name;
     }
 
+    public enum TradingMode
+    {
+        None,
+        SellOnly,
+        BuyOnly,
+        BuyAndSell
+    }
+
+    public class TradingModeOption
+    {
+        private readonly string _name;
+        public TradingMode Value { get; }
+        public TradingModeOption(string name, TradingMode value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
     public class Settings : AttributeGlobalSettings<Settings>
     {
         public override string Id => "TradingOptimizer_v1";
@@ -75,6 +91,14 @@ namespace TradingOptimizer
             new LootHandlingModeOption("Liquidate (Sell All)", LootHandlingMode.Liquidate),
             new LootHandlingModeOption("XP Farm (Sell & Rebuy)", LootHandlingMode.XPFarm),
             new LootHandlingModeOption("Profit (Treat as Normal)", LootHandlingMode.Profit)
+        };
+
+        private static readonly IReadOnlyList<TradingModeOption> TradingModeOptions = new List<TradingModeOption>
+        {
+            new TradingModeOption("None (Disabled)", TradingMode.None),
+            new TradingModeOption("Sell Only", TradingMode.SellOnly),
+            new TradingModeOption("Buy Only", TradingMode.BuyOnly),
+            new TradingModeOption("Buy & Sell", TradingMode.BuyAndSell)
         };
 
         [SettingPropertyBool("Auto-trade on Settlement Entry", RequireRestart = false,
@@ -135,26 +159,28 @@ namespace TradingOptimizer
         [SettingPropertyGroup("Cargo & Limits", GroupOrder = 2)]
         public int MaxStackValueToBuy { get; set; } = 2000;
 
-        [SettingPropertyBool("Trade Food Items", RequireRestart = false,
-            HintText = "Allow trading food items for profit (only selling excess above keep limits).")]
+        [SettingPropertyDropdown("Food Trading Policy", RequireRestart = false,
+            HintText = "Control how food items are auto-traded.")]
         [SettingPropertyGroup("Cargo & Limits", GroupOrder = 2)]
-        public bool TradeFood { get; set; } = true;
+        public Dropdown<TradingModeOption> FoodTradingModeDropdown { get; set; } =
+            new Dropdown<TradingModeOption>(TradingModeOptions, 3); // Default: Buy & Sell (index 3)
 
         [SettingPropertyInteger("Party Food Days to Keep", 1, 100, RequireRestart = false,
             HintText = "Keep at least this many days of food supply for the party before selling food items.")]
         [SettingPropertyGroup("Cargo & Limits", GroupOrder = 2)]
         public int PartyFoodDaysToKeep { get; set; } = 10;
 
-
-        [SettingPropertyBool("Trade Livestock", RequireRestart = false,
-            HintText = "Include livestock (non-mount animals) in auto-trade decisions.")]
+        [SettingPropertyDropdown("Livestock Trading Policy", RequireRestart = false,
+            HintText = "Control how livestock (animals) are auto-traded.")]
         [SettingPropertyGroup("Cargo & Limits", GroupOrder = 2)]
-        public bool TradeLivestock { get; set; } = false;
+        public Dropdown<TradingModeOption> LivestockTradingModeDropdown { get; set; } =
+            new Dropdown<TradingModeOption>(TradingModeOptions, 0); // Default: None (index 0)
 
-        [SettingPropertyBool("Trade Mounts", RequireRestart = false,
-            HintText = "Include mounts (horses, camels) in auto-trade decisions.")]
+        [SettingPropertyDropdown("Mounts Trading Policy", RequireRestart = false,
+            HintText = "Control how mounts (horses, camels) are auto-traded.")]
         [SettingPropertyGroup("Cargo & Limits", GroupOrder = 2)]
-        public bool TradeMounts { get; set; } = false;
+        public Dropdown<TradingModeOption> MountsTradingModeDropdown { get; set; } =
+            new Dropdown<TradingModeOption>(TradingModeOptions, 0); // Default: None (index 0)
 
         [SettingPropertyInteger("Minimum Gold Reserve", 0, 50000, RequireRestart = false,
             HintText = "Never let your gold balance drop below this amount when buying. Default: 1000 denars.")]
@@ -171,5 +197,9 @@ namespace TradingOptimizer
         public TradingStance Stance => TradingStanceDropdown.SelectedValue.Value;
         public LootHandlingMode LootHandling => LootHandlingDropdown.SelectedValue.Value;
         public bool ShouldSplitTransactions => LootHandling == LootHandlingMode.XPFarm;
+
+        public TradingMode FoodTradingMode => FoodTradingModeDropdown.SelectedValue.Value;
+        public TradingMode LivestockTradingMode => LivestockTradingModeDropdown.SelectedValue.Value;
+        public TradingMode MountsTradingMode => MountsTradingModeDropdown.SelectedValue.Value;
     }
 }

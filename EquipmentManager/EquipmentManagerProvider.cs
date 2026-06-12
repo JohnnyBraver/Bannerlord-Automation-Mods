@@ -90,11 +90,15 @@ namespace EquipmentManager
 
                     if (costPerXp <= Settings.Instance.MaxCostPerXp)
                     {
-                        if (item.HasArmorComponent && hasArmorPerk && Settings.Instance.LockDonationArmor)
+                        if (item.HasArmorComponent && hasArmorPerk && 
+                            (Settings.Instance.LockDonationCategorySetting == LockDonationCategory.ArmorOnly || 
+                             Settings.Instance.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
                         {
                             shouldLock = true;
                         }
-                        else if ((item.WeaponComponent != null || item.PrimaryWeapon != null) && hasWeaponPerk && Settings.Instance.LockDonationWeapons)
+                        else if ((item.WeaponComponent != null || item.PrimaryWeapon != null) && hasWeaponPerk && 
+                                 (Settings.Instance.LockDonationCategorySetting == LockDonationCategory.WeaponsOnly || 
+                                  Settings.Instance.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
                         {
                             shouldLock = true;
                         }

@@ -6,6 +6,38 @@ using MCM.Common;
 
 namespace EquipmentManager
 {
+    public enum AutoEquipCategory
+    {
+        None,
+        ArmorOnly,
+        WeaponsOnly,
+        WeaponsAndArmor
+    }
+
+    public class AutoEquipCategoryOption
+    {
+        private readonly string _name;
+        public AutoEquipCategory Value { get; }
+        public AutoEquipCategoryOption(string name, AutoEquipCategory value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
+    public enum LockDonationCategory
+    {
+        None,
+        WeaponsOnly,
+        ArmorOnly,
+        WeaponsAndArmor
+    }
+
+    public class LockDonationCategoryOption
+    {
+        private readonly string _name;
+        public LockDonationCategory Value { get; }
+        public LockDonationCategoryOption(string name, LockDonationCategory value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
     public class Settings : AttributeGlobalSettings<Settings>
     {
         public override string Id => "EquipmentManager_v1";
@@ -23,20 +55,32 @@ namespace EquipmentManager
             "Legendary"
         };
 
+        private static readonly IReadOnlyList<AutoEquipCategoryOption> AutoEquipCategoryOptions = new List<AutoEquipCategoryOption>
+        {
+            new AutoEquipCategoryOption("None", AutoEquipCategory.None),
+            new AutoEquipCategoryOption("Armor Only", AutoEquipCategory.ArmorOnly),
+            new AutoEquipCategoryOption("Weapons Only", AutoEquipCategory.WeaponsOnly),
+            new AutoEquipCategoryOption("Weapons & Armor", AutoEquipCategory.WeaponsAndArmor)
+        };
+
+        private static readonly IReadOnlyList<LockDonationCategoryOption> LockDonationCategoryOptions = new List<LockDonationCategoryOption>
+        {
+            new LockDonationCategoryOption("None", LockDonationCategory.None),
+            new LockDonationCategoryOption("Weapons Only", LockDonationCategory.WeaponsOnly),
+            new LockDonationCategoryOption("Armor Only", LockDonationCategory.ArmorOnly),
+            new LockDonationCategoryOption("Weapons & Armor", LockDonationCategory.WeaponsAndArmor)
+        };
+
         [SettingPropertyBool("Auto-Equip Companions", RequireRestart = false,
             HintText = "Automatically equip companions when optimizing party equipment.")]
         [SettingPropertyGroup("General", GroupOrder = 0)]
         public bool AutoEquipCompanions { get; set; } = true;
 
-        [SettingPropertyBool("Auto-Equip Armor", RequireRestart = false,
-            HintText = "Enable auto-equipping armor items.")]
+        [SettingPropertyDropdown("Auto-Equip Loadout Category", RequireRestart = false,
+            HintText = "Choose which categories of equipment to automatically manage.")]
         [SettingPropertyGroup("General", GroupOrder = 0)]
-        public bool AutoEquipArmor { get; set; } = true;
-
-        [SettingPropertyBool("Auto-Equip Weapons", RequireRestart = false,
-            HintText = "Enable auto-equipping weapon items.")]
-        [SettingPropertyGroup("General", GroupOrder = 0)]
-        public bool AutoEquipWeapons { get; set; } = true;
+        public Dropdown<AutoEquipCategoryOption> AutoEquipCategoryDropdown { get; set; } =
+            new Dropdown<AutoEquipCategoryOption>(AutoEquipCategoryOptions, 3); // Default: Weapons & Armor
 
         [SettingPropertyBool("Optimize Civilian for Sneaking", RequireRestart = false,
             HintText = "When equipping for civilian loadouts, prioritize light/sneaky armor.")]
@@ -63,15 +107,11 @@ namespace EquipmentManager
         [SettingPropertyGroup("Keep Rules", GroupOrder = 2)]
         public bool KeepPositiveModifiers { get; set; } = true;
 
-        [SettingPropertyBool("Lock Donation Weapons", RequireRestart = false,
-            HintText = "Keep donation weapons locked in inventory instead of donating them for XP.")]
+        [SettingPropertyDropdown("Lock Donation Items", RequireRestart = false,
+            HintText = "Keep donation weapons or armor locked in inventory instead of donating them for XP.")]
         [SettingPropertyGroup("Keep Rules", GroupOrder = 2)]
-        public bool LockDonationWeapons { get; set; } = true;
-
-        [SettingPropertyBool("Lock Donation Armor", RequireRestart = false,
-            HintText = "Keep donation armor locked in inventory instead of donating them for XP.")]
-        [SettingPropertyGroup("Keep Rules", GroupOrder = 2)]
-        public bool LockDonationArmor { get; set; } = true;
+        public Dropdown<LockDonationCategoryOption> LockDonationCategoryDropdown { get; set; } =
+            new Dropdown<LockDonationCategoryOption>(LockDonationCategoryOptions, 3); // Default: Weapons & Armor
 
         [SettingPropertyFloatingInteger("Max Cost per XP", 0.1f, 10.0f, "#0.0", RequireRestart = false,
             HintText = "Maximum denar value of gear to discard per XP point gained from donation perks.")]
@@ -88,17 +128,19 @@ namespace EquipmentManager
         [SettingPropertyGroup("Economy", GroupOrder = 3)]
         public bool PreventEquipmentSaleInVillages { get; set; } = false;
 
-        [SettingPropertyBool("Prioritize Heavy Trash", RequireRestart = false,
-            HintText = "If enabled, sort equipment by weight (descending) before selling so that the heaviest junk gets unloaded first if the town runs out of gold.")]
+        [SettingPropertyBool("Prioritize Weight/Value Ratio", RequireRestart = false,
+            HintText = "If enabled, sort equipment by weight/value ratio descending before selling so that heavy, low-value items are sold first when town gold is low.")]
         [SettingPropertyGroup("Economy", GroupOrder = 3)]
         public bool PrioritizeHeavyTrash { get; set; } = false;
 
-        [SettingPropertyBool("Limit to Inventory Capacity", RequireRestart = false,
+        [SettingPropertyBool("Limit to Carry Capacity", RequireRestart = false,
             HintText = "Stop actions if they would cause party to exceed carry capacity.")]
         [SettingPropertyGroup("Economy", GroupOrder = 3)]
         public bool LimitToInventoryCapacity { get; set; } = true;
 
         // Compatibility wrappers
         public string MinQualityToKeep => MinQualityDropdown.SelectedValue;
+        public AutoEquipCategory AutoEquipCategorySetting => AutoEquipCategoryDropdown.SelectedValue.Value;
+        public LockDonationCategory LockDonationCategorySetting => LockDonationCategoryDropdown.SelectedValue.Value;
     }
 }

@@ -56,10 +56,15 @@ namespace FiefManager
         [SettingPropertyGroup("General", GroupOrder = 0)]
         public int DaysOfFunding { get; set; } = 10;
 
-        [SettingPropertyInteger("Max Reserve Gold Limit", 10000, 500000, "0", RequireRestart = false,
-            HintText = "Maximum gold reserve a fief is allowed to have (e.g. around 100,000 denars). Deposits will top up to this limit.")]
+        [SettingPropertyInteger("Max Reserve Limit (Town)", 10000, 500000, "0", RequireRestart = false,
+            HintText = "Maximum gold reserve a town fief is allowed to have. Deposits will top up to this limit.")]
         [SettingPropertyGroup("General", GroupOrder = 0)]
-        public int MaxReserveLimit { get; set; } = 100000;
+        public int MaxReserveLimitTown { get; set; } = 100000;
+
+        [SettingPropertyInteger("Max Reserve Limit (Castle)", 5000, 200000, "0", RequireRestart = false,
+            HintText = "Maximum gold reserve a castle fief is allowed to have. Deposits will top up to this limit.")]
+        [SettingPropertyGroup("General", GroupOrder = 0)]
+        public int MaxReserveLimitCastle { get; set; } = 50000;
 
         [SettingPropertyInteger("Min Player Gold Reserve", 1000, 500000, "0", RequireRestart = false,
             HintText = "Do not deposit gold to fiefs if player's gold is below this threshold.")]

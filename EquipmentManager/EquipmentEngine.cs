@@ -83,7 +83,7 @@ namespace EquipmentManager
                     var targetSide = isCivilian ? InventoryLogic.InventorySide.CivilianEquipment : InventoryLogic.InventorySide.BattleEquipment;
 
                     // A. Armor Slots
-                    if (Settings.Instance.AutoEquipArmor)
+                    if (Settings.Instance.AutoEquipCategorySetting == AutoEquipCategory.ArmorOnly || Settings.Instance.AutoEquipCategorySetting == AutoEquipCategory.WeaponsAndArmor)
                     {
                         foreach (var slot in armorSlots)
                         {
@@ -164,7 +164,7 @@ namespace EquipmentManager
                     }
 
                     // B. Weapon Slots (Only evaluate if slot is not empty)
-                    if (Settings.Instance.AutoEquipWeapons)
+                    if (Settings.Instance.AutoEquipCategorySetting == AutoEquipCategory.WeaponsOnly || Settings.Instance.AutoEquipCategorySetting == AutoEquipCategory.WeaponsAndArmor)
                     {
                         foreach (var slot in weaponSlots)
                         {
@@ -303,11 +303,15 @@ namespace EquipmentManager
 
                         if (costPerXp <= Settings.Instance.MaxCostPerXp)
                         {
-                            if (item.HasArmorComponent && hasArmorPerk && Settings.Instance.LockDonationArmor)
+                            if (item.HasArmorComponent && hasArmorPerk && 
+                                (Settings.Instance.LockDonationCategorySetting == LockDonationCategory.ArmorOnly || 
+                                 Settings.Instance.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
                             {
                                 shouldLock = true;
                             }
-                            else if ((item.WeaponComponent != null || item.PrimaryWeapon != null) && hasWeaponPerk && Settings.Instance.LockDonationWeapons)
+                            else if ((item.WeaponComponent != null || item.PrimaryWeapon != null) && hasWeaponPerk && 
+                                     (Settings.Instance.LockDonationCategorySetting == LockDonationCategory.WeaponsOnly || 
+                                      Settings.Instance.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
                             {
                                 shouldLock = true;
                             }

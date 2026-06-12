@@ -142,7 +142,21 @@ namespace TradingOptimizer
                     // Only sell trade goods (commodities)
                     if (!itemObj.IsTradeGood) continue;
 
-                    if (itemObj.IsFood && !settings.TradeFood) continue;
+                    if (itemObj.IsFood)
+                    {
+                        var mode = settings.FoodTradingMode;
+                        if (mode == TradingMode.None || mode == TradingMode.BuyOnly) continue;
+                    }
+                    else if (itemObj.IsAnimal && !itemObj.IsMountable)
+                    {
+                        var mode = settings.LivestockTradingMode;
+                        if (mode == TradingMode.None || mode == TradingMode.BuyOnly) continue;
+                    }
+                    else if (itemObj.IsMountable)
+                    {
+                        var mode = settings.MountsTradingMode;
+                        if (mode == TradingMode.None || mode == TradingMode.BuyOnly) continue;
+                    }
 
                     int minToKeep = 0;
                     if (itemObj.IsFood)
@@ -415,11 +429,21 @@ namespace TradingOptimizer
                         // Only buy trade goods
                         if (!itemObj.IsTradeGood) continue;
 
-                        if (itemObj.IsFood && !settings.TradeFood) continue;
-
-                        // Check Settings filters (Livestock vs Mounts)
-                        if (itemObj.IsAnimal && !itemObj.IsMountable && !settings.TradeLivestock) continue;
-                        if (itemObj.IsMountable && !settings.TradeMounts) continue;
+                        if (itemObj.IsFood)
+                        {
+                            var mode = settings.FoodTradingMode;
+                            if (mode == TradingMode.None || mode == TradingMode.SellOnly) continue;
+                        }
+                        else if (itemObj.IsAnimal && !itemObj.IsMountable)
+                        {
+                            var mode = settings.LivestockTradingMode;
+                            if (mode == TradingMode.None || mode == TradingMode.SellOnly) continue;
+                        }
+                        else if (itemObj.IsMountable)
+                        {
+                            var mode = settings.MountsTradingMode;
+                            if (mode == TradingMode.None || mode == TradingMode.SellOnly) continue;
+                        }
 
                         int boughtSoFar = boughtQuantities[item];
                         int initialMerchantCount = item.ItemCount;

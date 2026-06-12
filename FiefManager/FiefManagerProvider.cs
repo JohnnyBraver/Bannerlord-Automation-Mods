@@ -71,7 +71,8 @@ namespace FiefManager
                 try
                 {
                     int dailyCost = settlement.IsCastle ? 250 : 500;
-                    int targetReserve = Math.Min(settings.DaysOfFunding * dailyCost, settings.MaxReserveLimit);
+                    int maxLimit = settlement.IsTown ? settings.MaxReserveLimitTown : settings.MaxReserveLimitCastle;
+                    int targetReserve = Math.Min(settings.DaysOfFunding * dailyCost, maxLimit);
                     int currentReserve = town.BoostBuildingProcess;
                     int needed = targetReserve - currentReserve;
                     if (needed > 0)

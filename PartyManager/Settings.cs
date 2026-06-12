@@ -51,6 +51,22 @@ namespace PartyManager
         public override string ToString() => _name;
     }
 
+    public enum VolunteerRecruitPolicy
+    {
+        None,
+        RegularOnly,
+        NobleOnly,
+        RegularAndNoble
+    }
+
+    public class VolunteerRecruitPolicyOption
+    {
+        private readonly string _name;
+        public VolunteerRecruitPolicy Value { get; }
+        public VolunteerRecruitPolicyOption(string name, VolunteerRecruitPolicy value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
     public class Settings : AttributeGlobalSettings<Settings>
     {
         public override string Id => "PartyManager_v1";
@@ -79,18 +95,22 @@ namespace PartyManager
             new PostBattleSlaughterOption("All Animals (including mounts)", PostBattleSlaughterMode.All)
         };
 
+        private static readonly IReadOnlyList<VolunteerRecruitPolicyOption> VolunteerRecruitPolicyOptions = new List<VolunteerRecruitPolicyOption>
+        {
+            new VolunteerRecruitPolicyOption("None", VolunteerRecruitPolicy.None),
+            new VolunteerRecruitPolicyOption("Regular Only", VolunteerRecruitPolicy.RegularOnly),
+            new VolunteerRecruitPolicyOption("Noble Only", VolunteerRecruitPolicy.NobleOnly),
+            new VolunteerRecruitPolicyOption("Regular & Noble", VolunteerRecruitPolicy.RegularAndNoble)
+        };
+
         // --- Recruitment settings ---
         [SettingPropertyBool("Auto-Recruit Volunteers", RequireRestart = false, HintText = "Enable auto-recruitment from town/village notables.")]
         [SettingPropertyGroup("Recruitment", GroupOrder = 0)]
         public bool AutoRecruitVolunteers { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Regular Troops", RequireRestart = false, HintText = "Recruit standard volunteer tree troops.")]
+        [SettingPropertyDropdown("Volunteer Recruitment Policy", RequireRestart = false, HintText = "Choose which classes of volunteer troops to recruit.")]
         [SettingPropertyGroup("Recruitment", GroupOrder = 0)]
-        public bool RecruitRegular { get; set; } = true;
-
-        [SettingPropertyBool("Recruit Noble Troops", RequireRestart = false, HintText = "Recruit elite/noble volunteer tree troops.")]
-        [SettingPropertyGroup("Recruitment", GroupOrder = 0)]
-        public bool RecruitNoble { get; set; } = true;
+        public Dropdown<VolunteerRecruitPolicyOption> VolunteerRecruitDropdown { get; set; } = new Dropdown<VolunteerRecruitPolicyOption>(VolunteerRecruitPolicyOptions, 3); // Default: Regular & Noble
 
         [SettingPropertyBool("Recruit Mercenary Troops", RequireRestart = false, HintText = "Recruit mercenary troops from taverns.")]
         [SettingPropertyGroup("Recruitment", GroupOrder = 0)]
@@ -194,5 +214,8 @@ namespace PartyManager
         public EvalTime EvalTimeSetting => EvalTimeDropdown.SelectedValue.Value;
         public SellRidingMountsMode SellRidingMountsSetting => SellRidingMountsDropdown.SelectedValue.Value;
         public PostBattleSlaughterMode PostBattleSlaughterSetting => PostBattleSlaughterDropdown.SelectedValue.Value;
+        public VolunteerRecruitPolicy VolunteerRecruitSetting => VolunteerRecruitDropdown.SelectedValue.Value;
+        public bool RecruitRegularSetting => VolunteerRecruitSetting == VolunteerRecruitPolicy.RegularOnly || VolunteerRecruitSetting == VolunteerRecruitPolicy.RegularAndNoble;
+        public bool RecruitNobleSetting => VolunteerRecruitSetting == VolunteerRecruitPolicy.NobleOnly || VolunteerRecruitSetting == VolunteerRecruitPolicy.RegularAndNoble;
     }
 }

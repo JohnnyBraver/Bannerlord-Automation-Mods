@@ -462,12 +462,12 @@ namespace PartyManager
                         
                         // Noble / Regular Troop Class check for leaf
                         bool leafIsNoble = leaf.Tier >= 6;
-                        if (leafIsNoble && !settings.RecruitNoble)
+                        if (leafIsNoble && !settings.RecruitNobleSetting)
                         {
                             logLines.Add($"{leafInfo} failed: Noble class, but RecruitNoble is disabled.");
                             continue;
                         }
-                        if (!leafIsNoble && !settings.RecruitRegular)
+                        if (!leafIsNoble && !settings.RecruitRegularSetting)
                         {
                             logLines.Add($"{leafInfo} failed: Regular class, but RecruitRegular is disabled.");
                             continue;
@@ -510,12 +510,12 @@ namespace PartyManager
                 // Purchase time evaluation
                 int maxLeafTier = leafTroops.Count > 0 ? leafTroops.Max(l => l.Tier) : troop.Tier;
                 bool isNoble = maxLeafTier >= 6;
-                if (isNoble && !settings.RecruitNoble)
+                if (isNoble && !settings.RecruitNobleSetting)
                 {
                     logLines.Add("Failed: Purchase troop marked as Noble, but RecruitNoble is disabled.");
                     isMatch = false;
                 }
-                else if (!isNoble && !settings.RecruitRegular)
+                else if (!isNoble && !settings.RecruitRegularSetting)
                 {
                     logLines.Add("Failed: Purchase troop marked as Regular, but RecruitRegular is disabled.");
                     isMatch = false;
