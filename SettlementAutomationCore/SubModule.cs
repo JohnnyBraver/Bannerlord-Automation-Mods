@@ -167,7 +167,7 @@ namespace SettlementAutomationCore
                         {
                             try
                             {
-                                SellPrisonersAction.ApplyForSelectedPrisoners(MobileParty.MainParty.Party, settlement.Party, ransomRoster);
+                                SellPrisonersAction.ApplyForSelectedPrisoners(MobileParty.MainParty.Party, null, ransomRoster);
                                 foreach (var element in ransomRoster.GetTroopRoster())
                                 {
                                     InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed {element.Number}x {element.Character.Name}"));
@@ -538,6 +538,13 @@ namespace SettlementAutomationCore
                     }
                     catch {}
                 }
+            }
+            catch {}
+
+            // Refresh active game menu UI if we are in one to show the updated gold, prisoners, etc.
+            try
+            {
+                Campaign.Current?.CurrentMenuContext?.Refresh();
             }
             catch {}
         }
