@@ -18,6 +18,7 @@ namespace SettlementAutomationCore
     public class SubModule : MBSubModuleBase
     {
         private static Settlement? _pendingBackgroundTradeSettlement = null;
+        private static readonly object QueueLock = new object();
 
         protected override void OnSubModuleLoad()
         {
@@ -39,68 +40,29 @@ namespace SettlementAutomationCore
 
         public static void QueueBackgroundTrade(Settlement settlement)
         {
-            _pendingBackgroundTradeSettlement = settlement;
+            lock (QueueLock)
+            {
+                _pendingBackgroundTradeSettlement = settlement;
+            }
         }
 
         protected override void OnApplicationTick(float dt)
         {
             base.OnApplicationTick(dt);
 
-            if (_pendingBackgroundTradeSettlement != null)
+            Settlement? sett = null;
+            lock (QueueLock)
             {
-                var sett = _pendingBackgroundTradeSettlement;
-                _pendingBackgroundTradeSettlement = null;
+                if (_pendingBackgroundTradeSettlement != null)
+                {
+                    sett = _pendingBackgroundTradeSettlement;
+                    _pendingBackgroundTradeSettlement = null;
+                }
+            }
+
+            if (sett != null)
+            {
                 ExecuteBackgroundAutomation(sett);
-            }
-        }
-
-        private static IMarketData? GetMarketData(Settlement settlement)
-        {
-            if (settlement.IsTown) return settlement.Town?.MarketData;
-            if (settlement.IsVillage) return settlement.Village?.Bound?.Town?.MarketData;
-            return null;
-        }
-
-        private static InventoryLogic? CreateAndInitInventoryLogic(Settlement settlement)
-        {
-            if (settlement == null || MobileParty.MainParty == null || Hero.MainHero == null) return null;
-            try
-            {
-                var logic = new InventoryLogic(MobileParty.MainParty, Hero.MainHero.CharacterObject, settlement.Party);
-
-                var initMethod = typeof(InventoryLogic).GetMethods()
-                    .FirstOrDefault(m => m.Name == "Initialize" && m.GetParameters().Length == 13);
-
-                if (initMethod == null) return null;
-
-                var categoryTypeEnum = typeof(InventoryLogic).Assembly.GetType("Helpers.InventoryScreenHelper+InventoryCategoryType");
-                var modeEnum = typeof(InventoryLogic).Assembly.GetType("Helpers.InventoryScreenHelper+InventoryMode");
-                if (categoryTypeEnum == null || modeEnum == null) return null;
-
-                var categoryTypeAll = Enum.Parse(categoryTypeEnum, "All");
-                var modeTrade = Enum.Parse(modeEnum, "Trade");
-
-                initMethod.Invoke(logic, new object[] {
-                    settlement.ItemRoster,
-                    MobileParty.MainParty.ItemRoster,
-                    MobileParty.MainParty.MemberRoster,
-                    true, // isTrading
-                    false, // isSpecialActionsPermitted
-                    Hero.MainHero.CharacterObject,
-                    categoryTypeAll,
-                    GetMarketData(settlement)!,
-                    false, // useBasePrices
-                    modeTrade,
-                    settlement.Name,
-                    null!, // leftMemberRoster
-                    null! // otherSideCapacityData
-                });
-
-                return logic;
-            }
-            catch
-            {
-                return null;
             }
         }
 
@@ -127,7 +89,7 @@ namespace SettlementAutomationCore
 
                 if (preSellOrders.Count > 0)
                 {
-                    var logic1 = CreateAndInitInventoryLogic(settlement);
+                    var logic1 = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
                     if (logic1 != null)
                     {
                         bool executedAny = false;
@@ -350,7 +312,7 @@ namespace SettlementAutomationCore
                 // ----------------------------------------------------
                 // Step 6: Main Trade Phase (Reconciliation & Purchases)
                 // ----------------------------------------------------
-                var logic2 = CreateAndInitInventoryLogic(settlement);
+                var logic2 = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
                 if (logic2 != null)
                 {
                     var mainOrders = new List<TradeOrder>();

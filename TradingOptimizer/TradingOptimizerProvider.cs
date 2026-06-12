@@ -28,7 +28,7 @@ namespace TradingOptimizer
                 return orders;
             }
 
-            var tempLogic = CreateAndInitInventoryLogic(party, settlement);
+            var tempLogic = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(party, settlement);
             if (tempLogic == null) return orders;
 
             Func<TaleWorlds.Core.WeaponComponentData, TaleWorlds.Core.ItemObject.ItemUsageSetFlags> dummyFunc = w => (TaleWorlds.Core.ItemObject.ItemUsageSetFlags)0;
@@ -172,54 +172,5 @@ namespace TradingOptimizer
             }
         }
 
-        private static IMarketData? GetMarketData(Settlement settlement)
-        {
-            if (settlement.IsTown) return settlement.Town?.MarketData;
-            if (settlement.IsVillage) return settlement.Village?.Bound?.Town?.MarketData;
-            return null;
-        }
-
-        private static InventoryLogic? CreateAndInitInventoryLogic(MobileParty party, Settlement settlement)
-        {
-            if (settlement == null || party == null || Hero.MainHero == null) return null;
-            try
-            {
-                var logic = new InventoryLogic(party, Hero.MainHero.CharacterObject, settlement.Party);
-
-                var initMethod = typeof(InventoryLogic).GetMethods()
-                    .FirstOrDefault(m => m.Name == "Initialize" && m.GetParameters().Length == 13);
-
-                if (initMethod == null) return null;
-
-                var categoryTypeEnum = typeof(InventoryLogic).Assembly.GetType("Helpers.InventoryScreenHelper+InventoryCategoryType");
-                var modeEnum = typeof(InventoryLogic).Assembly.GetType("Helpers.InventoryScreenHelper+InventoryMode");
-                if (categoryTypeEnum == null || modeEnum == null) return null;
-
-                var categoryTypeAll = Enum.Parse(categoryTypeEnum, "All");
-                var modeTrade = Enum.Parse(modeEnum, "Trade");
-
-                initMethod.Invoke(logic, new object[] {
-                    settlement.ItemRoster,
-                    party.ItemRoster,
-                    party.MemberRoster,
-                    true, // isTrading
-                    false, // isSpecialActionsPermitted
-                    Hero.MainHero.CharacterObject,
-                    categoryTypeAll,
-                    GetMarketData(settlement)!,
-                    false, // useBasePrices
-                    modeTrade,
-                    settlement.Name,
-                    null!, // leftMemberRoster
-                    null! // otherSideCapacityData
-                });
-
-                return logic;
-            }
-            catch
-            {
-                return null;
-            }
-        }
     }
 }

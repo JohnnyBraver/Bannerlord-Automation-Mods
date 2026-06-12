@@ -63,25 +63,9 @@ namespace TradingOptimizer
 
             return buyPrice < yieldValue;
         }
-        private static readonly string LogPath = System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            "Mount and Blade II Bannerlord",
-            "Configs",
-            "TradingOptimizer_Log.txt"
-        );
-
         public static void WriteLog(string message)
         {
-            try
-            {
-                string? dir = System.IO.Path.GetDirectoryName(LogPath);
-                if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
-                {
-                    System.IO.Directory.CreateDirectory(dir);
-                }
-                System.IO.File.AppendAllText(LogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
-            }
-            catch {}
+            SettlementAutomationCore.Helpers.Logger.WriteLog("TradingOptimizer", message);
         }
 
         public static TradeTransactionReport RunOptimization(SPInventoryVM vm, bool isSellPhase, bool isBuyPhase, HashSet<string>? excludedItems = null)

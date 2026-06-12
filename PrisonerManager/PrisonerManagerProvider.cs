@@ -33,7 +33,7 @@ namespace PrisonerManager
 
                 // 2. Keep Nobles check
                 var leafTroops = new List<CharacterObject>();
-                GetLeafTroops(prisoner, leafTroops);
+                SettlementAutomationCore.Helpers.TroopHelper.GetLeafTroops(prisoner, leafTroops);
                 int maxLeafTier = leafTroops.Count > 0 ? leafTroops.Max(l => l.Tier) : prisoner.Tier;
                 bool isNoble = maxLeafTier >= 6;
                 if (isNoble && settings.KeepNobles) continue;
@@ -102,21 +102,6 @@ namespace PrisonerManager
             return orders;
         }
 
-        private static void GetLeafTroops(CharacterObject troop, List<CharacterObject> leafTroops)
-        {
-            if (troop.UpgradeTargets == null || troop.UpgradeTargets.Length == 0)
-            {
-                leafTroops.Add(troop);
-                return;
-            }
-            foreach (var target in troop.UpgradeTargets)
-            {
-                if (target != null)
-                {
-                    GetLeafTroops(target, leafTroops);
-                }
-            }
-        }
 
         private class PrisonerInfo
         {
