@@ -110,7 +110,12 @@ namespace EquipmentManager
 
             if (Settings.Instance.PrioritizeHeavyTrash)
             {
-                orders = orders.OrderByDescending(o => o.EquipmentElement.Item?.Weight ?? 0f).ToList();
+                orders = orders.OrderByDescending(o =>
+                {
+                    var item = o.EquipmentElement.Item;
+                    float price = currentLogic.GetItemPrice(o.EquipmentElement, false);
+                    return (float)(item?.Weight ?? 0f) / (price > 0f ? price : 1f);
+                }).ToList();
             }
 
             return orders;

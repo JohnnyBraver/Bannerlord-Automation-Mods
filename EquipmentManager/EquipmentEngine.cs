@@ -344,10 +344,15 @@ namespace EquipmentManager
                     }
                 }
 
-                // Prioritize heavy items if enabled
+                // Prioritize heavy items if enabled (using weight/price ratio descending)
                 if (Settings.Instance.PrioritizeHeavyTrash)
                 {
-                    itemsToSell = itemsToSell.OrderByDescending(itemVM => itemVM.ItemRosterElement.EquipmentElement.Item.Weight).ToList();
+                    itemsToSell = itemsToSell.OrderByDescending(itemVM =>
+                    {
+                        var item = itemVM.ItemRosterElement.EquipmentElement.Item;
+                        int price = inventoryLogic.GetItemPrice(itemVM.ItemRosterElement.EquipmentElement, false);
+                        return (float)item.Weight / (price > 0 ? price : 1);
+                    }).ToList();
                 }
 
                 var soldLogs = new List<string>();
