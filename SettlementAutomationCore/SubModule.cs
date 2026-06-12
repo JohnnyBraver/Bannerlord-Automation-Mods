@@ -204,6 +204,14 @@ namespace SettlementAutomationCore
                                 if (totalRansomGold > 0 && Hero.MainHero != null)
                                 {
                                     GiveGoldAction.ApplyBetweenCharacters(null, Hero.MainHero, totalRansomGold, false);
+                                    try
+                                    {
+                                        Campaign.Current.SkillLevelingManager?.OnPrisonerSell(MobileParty.MainParty, in ransomRoster);
+                                    }
+                                    catch (Exception xpEx)
+                                    {
+                                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Failed to award Roguery XP via SkillLevelingManager: {xpEx.Message}");
+                                    }
                                 }
                             }
                         }
