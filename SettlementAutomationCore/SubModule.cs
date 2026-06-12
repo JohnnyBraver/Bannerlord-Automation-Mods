@@ -198,7 +198,8 @@ namespace SettlementAutomationCore
                     catch {}
                 }
 
-                var recruitedPerNotable = new Dictionary<Hero, Dictionary<CharacterObject, int>>();
+                var recruitedMap = new Dictionary<CharacterObject, int>();
+                int totalCount = 0;
                 foreach (var order in recruitOrders)
                 {
                     try
@@ -218,37 +219,24 @@ namespace SettlementAutomationCore
                             CampaignEventDispatcher.Instance.OnUnitRecruited(troop, 1);
                             CampaignEventDispatcher.Instance.OnTroopRecruited(Hero.MainHero, settlement, order.Notable, troop, 1);
                             
-                            if (!recruitedPerNotable.ContainsKey(order.Notable))
+                            if (recruitedMap.ContainsKey(troop))
                             {
-                                recruitedPerNotable[order.Notable] = new Dictionary<CharacterObject, int>();
-                            }
-                            var notableMap = recruitedPerNotable[order.Notable];
-                            if (notableMap.ContainsKey(troop))
-                            {
-                                notableMap[troop]++;
+                                recruitedMap[troop]++;
                             }
                             else
                             {
-                                notableMap[troop] = 1;
+                                recruitedMap[troop] = 1;
                             }
+                            totalCount++;
                         }
                     }
                     catch {}
                 }
 
-                if (recruitedPerNotable.Count > 0)
+                if (totalCount > 0)
                 {
-                    var notableSummaries = new List<string>();
-                    int totalCount = 0;
-                    foreach (var pair in recruitedPerNotable)
-                    {
-                        var notable = pair.Key;
-                        var troopMap = pair.Value;
-                        var troopParts = troopMap.Select(kvp => $"{kvp.Value}x {kvp.Key.Name}");
-                        totalCount += troopMap.Values.Sum();
-                        notableSummaries.Add($"{notable.Name} ({string.Join(", ", troopParts)})");
-                    }
-                    string msg = $"Recruited in {settlement.Name}: {string.Join(", ", notableSummaries)} (Total: {totalCount})";
+                    var troopParts = recruitedMap.Select(kvp => $"{kvp.Value}x {kvp.Key.Name}");
+                    string msg = $"Recruited in {settlement.Name}: {string.Join(", ", troopParts)} (Total: {totalCount})";
                     InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
                     Helpers.Logger.WriteLog("SettlementAutomationCore", msg);
                 }
