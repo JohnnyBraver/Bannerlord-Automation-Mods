@@ -77,38 +77,55 @@ namespace PrisonerManager
                 int discardedTotal = 0;
                 var prisonRoster = party.PrisonRoster;
 
-                // Loop from Tier 1 up to DiscardUpToTier
-                for (int tier = 1; tier <= settings.DiscardUpToTier; tier++)
+                // Collect all non-hero candidates matching settings.DiscardUpToTier
+                var candidates = new List<TaleWorlds.CampaignSystem.Roster.TroopRosterElement>();
+                for (int i = 0; i < prisonRoster.Count; i++)
+                {
+                    var el = prisonRoster.GetElementCopyAtIndex(i);
+                    if (el.Character != null && !el.Character.IsHero && el.Character.Tier <= settings.DiscardUpToTier && el.Number > 0)
+                    {
+                        candidates.Add(el);
+                    }
+                }
+
+                // Sort candidates by value approximation: mounted units and higher tier units are sorted last (retaining them)
+                var sortedCandidates = candidates.OrderBy(c => {
+                    // Lower tiers are discarded first
+                    int baseScore = c.Character.Tier * 100;
+                    
+                    // Mounted units have higher value, so we add score to protect them
+                    if (c.Character.IsMounted)
+                    {
+                        baseScore += 50;
+                    }
+                    
+                    // Nobles are extremely valuable
+                    var leafTroops = new List<CharacterObject>();
+                    SettlementAutomationCore.Helpers.TroopHelper.GetLeafTroops(c.Character, leafTroops);
+                    int maxLeafTier = leafTroops.Count > 0 ? leafTroops.Max(l => l.Tier) : c.Character.Tier;
+                    if (maxLeafTier >= 6)
+                    {
+                        baseScore += 500;
+                    }
+                    
+                    return baseScore;
+                }).ToList();
+
+                foreach (var cand in sortedCandidates)
                 {
                     if (excess <= 0) break;
-
-                    // Collect all prisoners of current tier
-                    var candidates = new List<TaleWorlds.CampaignSystem.Roster.TroopRosterElement>();
-                    for (int i = 0; i < prisonRoster.Count; i++)
+                    int toDiscard = Math.Min(excess, cand.Number);
+                    if (toDiscard > 0)
                     {
-                        var el = prisonRoster.GetElementCopyAtIndex(i);
-                        if (el.Character != null && !el.Character.IsHero && el.Character.Tier == tier && el.Number > 0)
-                        {
-                            candidates.Add(el);
-                        }
-                    }
-
-                    foreach (var cand in candidates)
-                    {
-                        if (excess <= 0) break;
-                        int toDiscard = Math.Min(excess, cand.Number);
-                        if (toDiscard > 0)
-                        {
-                            prisonRoster.AddToCounts(cand.Character, -toDiscard);
-                            excess -= toDiscard;
-                            discardedTotal += toDiscard;
-                        }
+                        prisonRoster.AddToCounts(cand.Character, -toDiscard);
+                        excess -= toDiscard;
+                        discardedTotal += toDiscard;
                     }
                 }
 
                 if (discardedTotal > 0)
                 {
-                    string msg = $"Auto-discarded {discardedTotal} low tier prisoners post-battle due to party capacity limits.";
+                    string msg = $"Auto-discarded {discardedTotal} low-value prisoners post-battle due to party capacity limits.";
                     InformationManager.DisplayMessage(new InformationMessage($"[PrisonerManager] {msg}"));
                     SettlementAutomationCore.Helpers.Logger.WriteLog("PrisonerManager", msg);
                 }
