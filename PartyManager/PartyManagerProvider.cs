@@ -10,7 +10,7 @@ using SettlementAutomationCore;
 
 namespace PartyManager
 {
-    public class PartyManagerProvider : ITradeOrderProvider, IRecruitOrderProvider, IGarrisonOrderProvider, IRansomOrderProvider, IDungeonOrderProvider
+    public class PartyManagerProvider : ITradeOrderProvider, IRecruitOrderProvider, IGarrisonOrderProvider, IRansomOrderProvider, IDungeonOrderProvider, ILogisticsGoalProvider
     {
         public string ProviderName => "PartyManager";
 
@@ -131,6 +131,12 @@ namespace PartyManager
             if (settings.PreventHerdingPenalty)
             {
                 orders.AddRange(GetPreSellOrders(party, settlement));
+            }
+
+            // If TradingOptimizer is active, delegate buying to it via the logistics goals
+            if (AutomationRegistry.IsTradeOptimizerActive())
+            {
+                return orders;
             }
 
             // Auto-Buy Mounts (Phase 3)
@@ -299,6 +305,63 @@ namespace PartyManager
             }
 
             return orders;
+        }
+
+        // ----------------------------------------------------
+        // ILogisticsGoalProvider
+        // ----------------------------------------------------
+        public void SubmitLogisticsGoals(MobileParty party, Settlement settlement)
+        {
+            var settings = Settings.Instance;
+            if (settings == null) return;
+
+            // 1. Submit Food Restock Goal
+            if (settings.AutoBuyFood && party != null && Hero.MainHero != null)
+            {
+                int partySize = party.MemberRoster.TotalManCount;
+                if (partySize > 0)
+                {
+                    int syncedDaysLimit = GetSyncedFoodDaysLimit();
+                    bool isSurvivalMode = partySize < settings.MinPartySizeForVariety || Hero.MainHero.Gold < settings.MinGoldForVariety;
+                    int targetQuantity;
+                    int minGoldReserve;
+
+                    if (isSurvivalMode)
+                    {
+                        targetQuantity = (int)Math.Ceiling(partySize * syncedDaysLimit / 20.0f);
+                        int dailyWage = party.TotalWage;
+                        minGoldReserve = Math.Max(1000, dailyWage * 2);
+                    }
+                    else
+                    {
+                        // Variety mode: buy up to minToKeep of each food type (typically 9 or 10 varieties)
+                        int minToKeep = (int)Math.Ceiling(partySize * syncedDaysLimit / 200.0f);
+                        targetQuantity = 10 * minToKeep; // Assuming up to 10 food types
+                        minGoldReserve = settings.MinGoldForVariety;
+                    }
+
+                    AutomationRegistry.RegisterLogisticsGoal(new LogisticsGoal(
+                        LogisticsGoalType.FoodRestock,
+                        targetQuantity,
+                        minGoldReserve,
+                        isSurvivalMode
+                    ));
+                }
+            }
+
+            // 2. Submit Speed Mounts Goal
+            if (settings.AutoBuyMounts && Hero.MainHero != null)
+            {
+                CalculatePartyAnimals(party, out int infantry, out _, out _, out _, out _, out _, out _, out _);
+                if (infantry > 0)
+                {
+                    AutomationRegistry.RegisterLogisticsGoal(new LogisticsGoal(
+                        LogisticsGoalType.SpeedMounts,
+                        infantry,
+                        settings.MinGoldForMounts
+                    ));
+                }
+            }
         }
 
         private class RosterElementInfo

@@ -73,6 +73,20 @@ namespace SettlementAutomationCore
             try
             {
                 // ----------------------------------------------------
+                // Step 0: Collect Logistics Goals from active providers
+                // ----------------------------------------------------
+                AutomationRegistry.ClearLogisticsGoals();
+                var goalProviders = AutomationRegistry.ActiveGoalProviders;
+                foreach (var reg in goalProviders)
+                {
+                    try
+                    {
+                        reg.Provider.SubmitLogisticsGoals(MobileParty.MainParty, settlement);
+                    }
+                    catch {}
+                }
+
+                // ----------------------------------------------------
                 // Step 1: Pre-Sell Phase (Revenue Generation)
                 // ----------------------------------------------------
                 var tradeRegistrations = AutomationRegistry.ActiveTradeProviders;

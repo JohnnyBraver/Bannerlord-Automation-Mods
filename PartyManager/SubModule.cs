@@ -37,6 +37,7 @@ namespace PartyManager
                 AutomationRegistry.RegisterGarrisonProvider(_provider);
                 AutomationRegistry.RegisterRansomProvider(_provider);
                 AutomationRegistry.RegisterDungeonProvider(_provider);
+                AutomationRegistry.RegisterGoalProvider(_provider);
             }
         }
 
@@ -50,6 +51,7 @@ namespace PartyManager
                 AutomationRegistry.UnregisterGarrisonProvider(_provider);
                 AutomationRegistry.UnregisterRansomProvider(_provider);
                 AutomationRegistry.UnregisterDungeonProvider(_provider);
+                AutomationRegistry.UnregisterGoalProvider(_provider);
                 _provider = null;
             }
         }

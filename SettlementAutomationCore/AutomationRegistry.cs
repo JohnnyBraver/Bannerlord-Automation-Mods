@@ -192,6 +192,34 @@ namespace SettlementAutomationCore
         List<DungeonOrder> GetDungeonOrders(MobileParty party, Settlement settlement);
     }
 
+    public enum LogisticsGoalType
+    {
+        FoodRestock,
+        SpeedMounts
+    }
+
+    public class LogisticsGoal
+    {
+        public LogisticsGoalType GoalType { get; }
+        public int TargetQuantity { get; }
+        public int MinGoldReserve { get; }
+        public bool IsSurvivalMode { get; }
+
+        public LogisticsGoal(LogisticsGoalType goalType, int targetQuantity, int minGoldReserve, bool isSurvivalMode = false)
+        {
+            GoalType = goalType;
+            TargetQuantity = targetQuantity;
+            MinGoldReserve = minGoldReserve;
+            IsSurvivalMode = isSurvivalMode;
+        }
+    }
+
+    public interface ILogisticsGoalProvider
+    {
+        string ProviderName { get; }
+        void SubmitLogisticsGoals(MobileParty party, Settlement settlement);
+    }
+
     public interface IFiefAutomationProvider
     {
         string ProviderName { get; }
@@ -209,6 +237,8 @@ namespace SettlementAutomationCore
         private static readonly List<ProviderRegistration<IRansomOrderProvider>> RansomProviders = new();
         private static readonly List<ProviderRegistration<IDungeonOrderProvider>> DungeonProviders = new();
         private static readonly List<ProviderRegistration<IFiefAutomationProvider>> FiefProviders = new();
+        private static readonly List<ProviderRegistration<ILogisticsGoalProvider>> GoalProviders = new();
+        private static readonly List<LogisticsGoal> CurrentGoals = new();
 
         // --- Trade Providers ---
         public static void RegisterTradeProvider(ITradeOrderProvider provider)
@@ -399,6 +429,73 @@ namespace SettlementAutomationCore
                 {
                     return new List<ProviderRegistration<IFiefAutomationProvider>>(FiefProviders);
                 }
+            }
+        }
+
+        // --- Goal Providers & Goals ---
+        public static void RegisterGoalProvider(ILogisticsGoalProvider provider)
+        {
+            lock (GoalProviders)
+            {
+                if (!GoalProviders.Any(r => EqualityComparer<ILogisticsGoalProvider>.Default.Equals(r.Provider, provider)))
+                {
+                    string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
+                    GoalProviders.Add(new ProviderRegistration<ILogisticsGoalProvider>(provider, provider.ProviderName, callingAssembly));
+                }
+            }
+        }
+
+        public static void UnregisterGoalProvider(ILogisticsGoalProvider provider)
+        {
+            lock (GoalProviders)
+            {
+                GoalProviders.RemoveAll(r => EqualityComparer<ILogisticsGoalProvider>.Default.Equals(r.Provider, provider));
+            }
+        }
+
+        public static IReadOnlyList<ProviderRegistration<ILogisticsGoalProvider>> ActiveGoalProviders
+        {
+            get
+            {
+                lock (GoalProviders)
+                {
+                    return new List<ProviderRegistration<ILogisticsGoalProvider>>(GoalProviders);
+                }
+            }
+        }
+
+        public static void ClearLogisticsGoals()
+        {
+            lock (CurrentGoals)
+            {
+                CurrentGoals.Clear();
+            }
+        }
+
+        public static void RegisterLogisticsGoal(LogisticsGoal goal)
+        {
+            lock (CurrentGoals)
+            {
+                CurrentGoals.Add(goal);
+            }
+        }
+
+        public static IReadOnlyList<LogisticsGoal> ActiveLogisticsGoals
+        {
+            get
+            {
+                lock (CurrentGoals)
+                {
+                    return new List<LogisticsGoal>(CurrentGoals);
+                }
+            }
+        }
+
+        public static bool IsTradeOptimizerActive()
+        {
+            lock (TradeProviders)
+            {
+                return TradeProviders.Any(p => p.ProviderName == "TradingOptimizer");
             }
         }
     }
