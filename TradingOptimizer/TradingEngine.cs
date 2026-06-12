@@ -936,16 +936,21 @@ namespace TradingOptimizer
                             int merchantCount = food.ItemCount - bCount;
                             int price = logic != null ? logic.GetItemPrice(food.ItemRosterElement.EquipmentElement, true) : itemObj.Value;
 
+                            int criticalMin = (int)Math.Ceiling(targetPerType / 10.0f);
                             float referencePrice = GetWorldAveragePrice(food.ItemRosterElement.EquipmentElement);
                             if (referencePrice <= 0f) referencePrice = itemObj.Value;
-                            if (price > referencePrice * settings.LogisticsPriceThrottleFactor)
-                            {
-                                WriteLog($"[Logistics] Skipping food variety purchase of {itemObj.Name}: price {price} is above threshold ({referencePrice * settings.LogisticsPriceThrottleFactor:F1})");
-                                continue;
-                            }
 
                             for (int i = 0; i < Math.Min(typeNeeded, merchantCount); i++)
                             {
+                                int currentlyOwnedDuringLoop = ownedOfThis + i;
+                                bool isCritical = settings.ForceBuyMinVarietyFood && (currentlyOwnedDuringLoop < criticalMin);
+
+                                if (!isCritical && price > referencePrice * settings.LogisticsPriceThrottleFactor)
+                                {
+                                    WriteLog($"[Logistics] Skipping food variety purchase of {itemObj.Name}: price {price} is above threshold ({referencePrice * settings.LogisticsPriceThrottleFactor:F1})");
+                                    break;
+                                }
+
                                 if (currentBalance - price < minRequiredBalance) break;
                                 if (settings.LimitToInventoryCapacity && MobileParty.MainParty != null)
                                 {

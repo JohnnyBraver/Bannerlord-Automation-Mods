@@ -149,6 +149,11 @@ namespace TradingOptimizer
         [SettingPropertyGroup("Price Thresholds", GroupOrder = 1)]
         public float LogisticsPriceThrottleFactor { get; set; } = 5.0f;
 
+        [SettingPropertyBool("Force Buy Critical Variety Food", RequireRestart = false,
+            HintText = "If current supply of a food type is under 1/10 of its target variety quantity (rounded up), force buy it regardless of price to prevent complete lack of that food type.")]
+        [SettingPropertyGroup("Price Thresholds", GroupOrder = 1)]
+        public bool ForceBuyMinVarietyFood { get; set; } = true;
+
         [SettingPropertyBool("Limit to Carry Capacity", RequireRestart = false,
             HintText = "Stop buying when your party's carry weight would be exceeded.")]
         [SettingPropertyGroup("Cargo & Limits", GroupOrder = 2)]
