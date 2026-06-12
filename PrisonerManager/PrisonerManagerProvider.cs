@@ -4,6 +4,7 @@ using System.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
 using SettlementAutomationCore;
 
 namespace PrisonerManager
@@ -31,14 +32,10 @@ namespace PrisonerManager
                 // 1. Keep Heroes check
                 if (prisoner.IsHero && settings.KeepHeroes) continue;
 
-                // 2. Keep Nobles check
-                var leafTroops = new List<CharacterObject>();
-                SettlementAutomationCore.Helpers.TroopHelper.GetLeafTroops(prisoner, leafTroops);
-                int maxLeafTier = leafTroops.Count > 0 ? leafTroops.Max(l => l.Tier) : prisoner.Tier;
-                bool isNoble = maxLeafTier >= 6;
-                if (isNoble && settings.KeepNobles) continue;
+                // 2. Keep Recruit Candidate check
+                if (MatchKeepFilter(prisoner, settings)) continue;
 
-                // 3. Min Tier check
+                // 3. Min Tier to ransom check
                 if (prisoner.Tier < settings.MinRansomTier) continue;
 
                 // Ransom all available amount of this prisoner type
@@ -52,6 +49,37 @@ namespace PrisonerManager
             }
 
             return orders;
+        }
+
+        private bool MatchKeepFilter(CharacterObject prisoner, Settings settings)
+        {
+            // Noble / Regular Troop Class check
+            var leafTroops = new List<CharacterObject>();
+            SettlementAutomationCore.Helpers.TroopHelper.GetLeafTroops(prisoner, leafTroops);
+            int maxLeafTier = leafTroops.Count > 0 ? leafTroops.Max(l => l.Tier) : prisoner.Tier;
+
+            bool isNoble = maxLeafTier >= 6;
+            if (isNoble && settings.KeepNobles) return true;
+            if (!isNoble && !settings.KeepRegulars) return false;
+
+            // Combat Mounted / Foot check
+            bool isMounted = prisoner.IsMounted;
+            if (isMounted && !settings.KeepMounted) return false;
+            if (!isMounted && !settings.KeepFoot) return false;
+
+            // Archetype check
+            bool isCrossbow = prisoner.GetSkillValue(DefaultSkills.Crossbow) > 30;
+            bool isBow = prisoner.GetSkillValue(DefaultSkills.Bow) > 30;
+            bool isThrowing = prisoner.GetSkillValue(DefaultSkills.Throwing) > 30;
+            bool isRanged = isCrossbow || isBow || isThrowing;
+
+            if (isRanged && !settings.KeepRanged) return false;
+            if (!isRanged && !settings.KeepMelee) return false;
+
+            // Tier evaluation (recruit filters usually match range)
+            if (prisoner.Tier < settings.KeepMinTier || prisoner.Tier > settings.KeepMaxTier) return false;
+
+            return true;
         }
 
         public List<MercenaryRecruitOrder> GetMercenaryRecruitOrders(MobileParty party, Settlement settlement)
