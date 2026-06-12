@@ -945,9 +945,9 @@ namespace TradingOptimizer
                                 int currentlyOwnedDuringLoop = ownedOfThis + i;
                                 bool isCritical = settings.ForceBuyMinVarietyFood && (currentlyOwnedDuringLoop < criticalMin);
 
-                                if (!isCritical && price > referencePrice * settings.LogisticsPriceThrottleFactor)
+                                if (!isCritical && price > referencePrice * settings.FoodLogisticsPriceThrottleFactor)
                                 {
-                                    WriteLog($"[Logistics] Skipping food variety purchase of {itemObj.Name}: price {price} is above threshold ({referencePrice * settings.LogisticsPriceThrottleFactor:F1})");
+                                    WriteLog($"[Logistics] Skipping food variety purchase of {itemObj.Name}: price {price} is above threshold ({referencePrice * settings.FoodLogisticsPriceThrottleFactor:F1})");
                                     break;
                                 }
 
@@ -1011,9 +1011,9 @@ namespace TradingOptimizer
 
                         float referencePrice = GetWorldAveragePrice(mount.ItemRosterElement.EquipmentElement);
                         if (referencePrice <= 0f) referencePrice = itemObj.Value;
-                        if (price > referencePrice * settings.LogisticsPriceThrottleFactor)
+                        if (price > referencePrice * settings.MountsLogisticsPriceThrottleFactor)
                         {
-                            WriteLog($"[Logistics] Skipping mount purchase of {itemObj.Name}: price {price} is above threshold ({referencePrice * settings.LogisticsPriceThrottleFactor:F1})");
+                            WriteLog($"[Logistics] Skipping mount purchase of {itemObj.Name}: price {price} is above threshold ({referencePrice * settings.MountsLogisticsPriceThrottleFactor:F1})");
                             continue;
                         }
 
