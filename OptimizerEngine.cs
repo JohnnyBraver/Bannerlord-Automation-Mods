@@ -138,7 +138,18 @@ namespace SmithingOptimizer
             SetCurrentWeaponDesign(craftingLogic, originalDesign);
 
             // Return sorted results
-            return results.OrderByDescending(c => c.Score).ToList();
+            var sortedResults = results.OrderByDescending(c => c.Score).ToList();
+            if (sortedResults.Count > 0)
+            {
+                var best = sortedResults[0];
+                string message = $"Optimized template '{template?.TemplateName?.ToString() ?? "Unknown"}' (Goal: {goal}). Best design: " +
+                    $"Blade={best.Blade?.Name?.ToString() ?? "None"}, Guard={best.Guard?.Name?.ToString() ?? "None"}, " +
+                    $"Grip={best.Grip?.Name?.ToString() ?? "None"}, Pommel={best.Pommel?.Name?.ToString() ?? "None"}. " +
+                    $"Score={best.Score:F1}, Value={best.Value}, MaxDamage={best.MaxDamage}, Slider Scales: " +
+                    $"[{best.BladeScale}%, {best.GuardScale}%, {best.GripScale}%, {best.PommelScale}%]";
+                WriteLog(message);
+            }
+            return sortedResults;
         }
 
         private static void AccumulateCosts(CraftingPiece piece, int[] costs)
@@ -310,6 +321,26 @@ namespace SmithingOptimizer
             {
                 // Ignore errors
             }
+        }
+
+        private static void WriteLog(string message)
+        {
+            try
+            {
+                string path = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "Mount and Blade II Bannerlord",
+                    "Configs",
+                    "SmithingOptimizer_Log.txt"
+                );
+                string dir = System.IO.Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                {
+                    System.IO.Directory.CreateDirectory(dir);
+                }
+                System.IO.File.AppendAllText(path, "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] " + message + "\n");
+            }
+            catch {}
         }
     }
 }
