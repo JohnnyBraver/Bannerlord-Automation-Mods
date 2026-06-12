@@ -83,6 +83,16 @@ namespace EquipmentManager
         [SettingPropertyGroup("Economy", GroupOrder = 3)]
         public bool SellUnlockedEquipment { get; set; } = true;
 
+        [SettingPropertyBool("Prevent Equipment Sale in Villages", RequireRestart = false,
+            HintText = "If enabled, auto-trading/selling will never sell equipment when entering villages. Safe to keep enabled to save valuable gear for rich towns.")]
+        [SettingPropertyGroup("Economy", GroupOrder = 3)]
+        public bool PreventEquipmentSaleInVillages { get; set; } = false;
+
+        [SettingPropertyBool("Prioritize Heavy Trash", RequireRestart = false,
+            HintText = "If enabled, sort equipment by weight (descending) before selling so that the heaviest junk gets unloaded first if the town runs out of gold.")]
+        [SettingPropertyGroup("Economy", GroupOrder = 3)]
+        public bool PrioritizeHeavyTrash { get; set; } = false;
+
         [SettingPropertyBool("Limit to Inventory Capacity", RequireRestart = false,
             HintText = "Stop actions if they would cause party to exceed carry capacity.")]
         [SettingPropertyGroup("Economy", GroupOrder = 3)]

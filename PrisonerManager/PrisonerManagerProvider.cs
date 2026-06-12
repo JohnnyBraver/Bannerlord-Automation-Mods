@@ -19,6 +19,8 @@ namespace PrisonerManager
         public List<RansomOrder> GetRansomOrders(MobileParty party, Settlement settlement)
         {
             var orders = new List<RansomOrder>();
+            if (!settlement.IsTown) return orders;
+
             var settings = Settings.Instance;
             if (settings == null || !settings.AutoRansom) return orders;
 
@@ -94,6 +96,8 @@ namespace PrisonerManager
         public List<DungeonOrder> GetDungeonOrders(MobileParty party, Settlement settlement)
         {
             var orders = new List<DungeonOrder>();
+            if (!settlement.IsTown && !settlement.IsCastle) return orders;
+
             var settings = Settings.Instance;
             if (settings == null || !settings.AutoDonate) return orders;
 

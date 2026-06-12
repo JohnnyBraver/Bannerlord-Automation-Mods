@@ -33,10 +33,11 @@ namespace TradingOptimizer
             try
             {
                 var settings = Settings.Instance;
-                if (settings != null && CampaignTime.Now.ToDays < settings.InitialSettlementDaysDelay)
+                float elapsedDays = Campaign.Current.Models.CampaignTimeModel.CampaignStartTime.ElapsedDaysUntilNow;
+                if (settings != null && elapsedDays < settings.InitialSettlementDaysDelay)
                 {
                     InformationManager.DisplayMessage(new InformationMessage(
-                        $"[TradingOptimizer] Manual trade disabled during economy settling period (Day {CampaignTime.Now.ToDays:F1}/{settings.InitialSettlementDaysDelay})"
+                        $"[TradingOptimizer] Manual trade disabled during economy settling period (Day {elapsedDays:F1}/{settings.InitialSettlementDaysDelay})"
                     ));
                     return;
                 }

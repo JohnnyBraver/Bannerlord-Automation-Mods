@@ -13,12 +13,20 @@ namespace EquipmentManager
 {
     public static class EquipmentEngine
     {
+        private static readonly FieldInfo? InventoryLogicField = typeof(SPInventoryVM)
+            .GetField("_inventoryLogic", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        public static InventoryLogic? GetInventoryLogic(SPInventoryVM vm)
+        {
+            if (vm == null) return null;
+            return InventoryLogicField?.GetValue(vm) as InventoryLogic;
+        }
+
         public static void OptimizeEquipment(SPInventoryVM vm)
         {
             if (vm == null) return;
 
-            var inventoryLogicField = typeof(SPInventoryVM).GetField("_inventoryLogic", BindingFlags.Instance | BindingFlags.NonPublic);
-            var inventoryLogic = inventoryLogicField?.GetValue(vm) as InventoryLogic;
+            var inventoryLogic = GetInventoryLogic(vm);
             if (inventoryLogic == null) return;
 
             // 1. Gather all heroes to process
@@ -315,7 +323,10 @@ namespace EquipmentManager
             }
 
             // 5. Sell Phase
-            if (Settings.Instance.SellUnlockedEquipment && vm.RightItemListVM != null)
+            var settlement = inventoryLogic.CurrentSettlementComponent?.Settlement;
+            bool skipSell = settlement != null && Settings.Instance.PreventEquipmentSaleInVillages && settlement.IsVillage;
+
+            if (Settings.Instance.SellUnlockedEquipment && vm.RightItemListVM != null && !skipSell)
             {
                 var itemsToSell = new List<SPItemVM>();
                 foreach (var itemVM in vm.RightItemListVM)
@@ -333,18 +344,72 @@ namespace EquipmentManager
                     }
                 }
 
+                // Prioritize heavy items if enabled
+                if (Settings.Instance.PrioritizeHeavyTrash)
+                {
+                    itemsToSell = itemsToSell.OrderByDescending(itemVM => itemVM.ItemRosterElement.EquipmentElement.Item.Weight).ToList();
+                }
+
                 var soldLogs = new List<string>();
                 foreach (var itemVM in itemsToSell)
                 {
                     try
                     {
-                        itemVM.ExecuteSell(itemVM.ItemCount);
+                        int count = itemVM.ItemCount;
                         var item = itemVM.ItemRosterElement.EquipmentElement.Item;
-                        soldLogs.Add($"{itemVM.ItemCount}x {item.Name}");
+                        if (item == null || count <= 0) continue;
+
+                        // Check merchant gold limits
+                        if (vm.IsOtherInventoryGoldRelevant)
+                        {
+                            int merchantGold = vm.LeftInventoryOwnerGold;
+                            int currentDebt = inventoryLogic.TotalAmount; // positive means merchant owes us (gold we gained)
+                            int remainingGold = merchantGold - currentDebt;
+
+                            if (remainingGold <= 0)
+                            {
+                                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Stopped selling equipment: Merchant has no gold left ({remainingGold} denars).");
+                                break;
+                            }
+
+                            int price = inventoryLogic.GetItemPrice(itemVM.ItemRosterElement.EquipmentElement, false);
+                            if (price > 0)
+                            {
+                                int maxAffordable = remainingGold / price;
+                                if (maxAffordable <= 0)
+                                {
+                                    // Sell at most 1 to take the last few coins, or skip
+                                    if (remainingGold > 0 && remainingGold >= price / 2) // if they have at least half the price
+                                    {
+                                        count = 1;
+                                    }
+                                    else
+                                    {
+                                        continue; // skip this item, try to find a cheaper one or stop
+                                    }
+                                }
+                                else
+                                {
+                                    count = Math.Min(count, maxAffordable);
+                                }
+                            }
+                        }
+
+                        var command = TransferCommand.Transfer(
+                            count,
+                            InventoryLogic.InventorySide.PlayerInventory,
+                            InventoryLogic.InventorySide.OtherInventory,
+                            new ItemRosterElement(itemVM.ItemRosterElement.EquipmentElement, count),
+                            EquipmentIndex.None,
+                            EquipmentIndex.None,
+                            Hero.MainHero.CharacterObject
+                        );
+                        inventoryLogic.AddTransferCommand(command);
+                        soldLogs.Add($"{count}x {item.Name}");
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
-                        // Ignore single item sell error
+                        SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error selling {itemVM.ItemRosterElement.EquipmentElement.Item?.Name}: {ex.Message}");
                     }
                 }
                 if (soldLogs.Count > 0)

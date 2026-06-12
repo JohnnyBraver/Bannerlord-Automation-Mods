@@ -22,9 +22,10 @@ namespace TradingOptimizer
             if (settings == null || !settings.AutoTradeOnEnterSettlement) return orders;
 
             // Check if enough campaign days have passed to let the initial economy stabilize
-            if (CampaignTime.Now.ToDays < settings.InitialSettlementDaysDelay)
+            float elapsedDays = Campaign.Current.Models.CampaignTimeModel.CampaignStartTime.ElapsedDaysUntilNow;
+            if (elapsedDays < settings.InitialSettlementDaysDelay)
             {
-                TradingEngine.WriteLog($"[Settling Period] Skipped auto-trade simulation for {settlement.Name} (Campaign Day {CampaignTime.Now.ToDays:F1} < Settling Limit {settings.InitialSettlementDaysDelay})");
+                TradingEngine.WriteLog($"[Settling Period] Skipped auto-trade simulation for {settlement.Name} (Campaign Day {elapsedDays:F1} < Settling Limit {settings.InitialSettlementDaysDelay})");
                 return orders;
             }
 

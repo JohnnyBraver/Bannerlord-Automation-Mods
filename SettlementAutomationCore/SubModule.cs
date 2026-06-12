@@ -210,6 +210,40 @@ namespace SettlementAutomationCore
                         var troop = order.Notable.VolunteerTypes[order.SlotIndex];
                         if (troop == null) continue;
 
+                        // Check party size limit before recruiting
+                        int currentSize = MobileParty.MainParty.MemberRoster.TotalManCount;
+                        int limit = MobileParty.MainParty.Party.PartySizeLimit;
+
+                        bool canOverRecruit = false;
+                        try
+                        {
+                            foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+                            {
+                                if (assembly.GetName().Name == "PartyManager")
+                                {
+                                    var settingsType = assembly.GetType("PartyManager.Settings");
+                                    if (settingsType != null)
+                                    {
+                                        var instanceProp = settingsType.GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                                        var settingsInstance = instanceProp?.GetValue(null);
+                                        if (settingsInstance != null)
+                                        {
+                                            bool enableGarrisonDonation = (bool)(settingsType.GetProperty("EnableGarrisonDonation")?.GetValue(settingsInstance) ?? false);
+                                            int maxGarrisonSize = (int)(settingsType.GetProperty("MaxGarrisonSize")?.GetValue(settingsInstance) ?? 400);
+
+                                            canOverRecruit = enableGarrisonDonation && settlement.Town != null &&
+                                                             settlement.Town.GarrisonParty != null &&
+                                                             settlement.Town.GarrisonParty.MemberRoster.TotalManCount < maxGarrisonSize;
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        catch {}
+
+                        if (currentSize >= limit && !canOverRecruit) continue;
+
                         int cost = (int)Campaign.Current.Models.PartyWageModel.GetTroopRecruitmentCost(troop, Hero.MainHero, false).ResultNumber;
                         if (Hero.MainHero.Gold >= cost)
                         {

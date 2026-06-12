@@ -23,6 +23,7 @@ namespace EquipmentManager
         {
             var orders = new List<TradeOrder>();
             if (!Settings.Instance.SellUnlockedEquipment) return orders;
+            if (Settings.Instance.PreventEquipmentSaleInVillages && settlement.IsVillage) return orders;
 
             var tracker = Campaign.Current?.GetCampaignBehavior<IViewDataTracker>();
             var locks = new HashSet<string>(tracker?.GetInventoryLocks() ?? Enumerable.Empty<string>());
@@ -105,6 +106,11 @@ namespace EquipmentManager
                     // Sell this equipment!
                     orders.Add(new TradeOrder(eqEl, rosterElement.Amount, false));
                 }
+            }
+
+            if (Settings.Instance.PrioritizeHeavyTrash)
+            {
+                orders = orders.OrderByDescending(o => o.EquipmentElement.Item?.Weight ?? 0f).ToList();
             }
 
             return orders;
