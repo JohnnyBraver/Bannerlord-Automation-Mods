@@ -33,7 +33,7 @@ namespace PrisonerManager
 
         [SettingPropertyBool("Keep Regular Troops", RequireRestart = false, HintText = "Keep regular troops (if matching filters below for recruiting).")]
         [SettingPropertyGroup("2. Keep / Recruit Filters", GroupOrder = 1)]
-        public bool KeepRegulars { get; set; } = true;
+        public bool KeepRegulars { get; set; } = false;
 
         [SettingPropertyBool("Keep Melee Archetype", RequireRestart = false, HintText = "Keep melee units (one-handed/two-handed/polearm) for recruiting.")]
         [SettingPropertyGroup("2. Keep / Recruit Filters", GroupOrder = 1)]
