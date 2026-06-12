@@ -67,6 +67,37 @@ namespace PartyManager
         public override string ToString() => _name;
     }
 
+    public enum PrisonerKeepPolicy
+    {
+        RansomAll,
+        KeepAll,
+        KeepSelected
+    }
+
+    public class PrisonerKeepPolicyOption
+    {
+        private readonly string _name;
+        public PrisonerKeepPolicy Value { get; }
+        public PrisonerKeepPolicyOption(string name, PrisonerKeepPolicy value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
+    public enum BanditPrisonerKeepPolicy
+    {
+        RansomAll,
+        KeepAll,
+        KeepNobleOnly,
+        KeepSelected
+    }
+
+    public class BanditPrisonerKeepPolicyOption
+    {
+        private readonly string _name;
+        public BanditPrisonerKeepPolicy Value { get; }
+        public BanditPrisonerKeepPolicyOption(string name, BanditPrisonerKeepPolicy value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
     public class Settings : AttributeGlobalSettings<Settings>
     {
         public override string Id => "PartyManager_v1";
@@ -101,6 +132,21 @@ namespace PartyManager
             new VolunteerRecruitPolicyOption("Regular Only", VolunteerRecruitPolicy.RegularOnly),
             new VolunteerRecruitPolicyOption("Noble Only", VolunteerRecruitPolicy.NobleOnly),
             new VolunteerRecruitPolicyOption("Regular & Noble", VolunteerRecruitPolicy.RegularAndNoble)
+        };
+
+        private static readonly IReadOnlyList<PrisonerKeepPolicyOption> PrisonerKeepPolicyOptions = new List<PrisonerKeepPolicyOption>
+        {
+            new PrisonerKeepPolicyOption("Ransom All", PrisonerKeepPolicy.RansomAll),
+            new PrisonerKeepPolicyOption("Keep All", PrisonerKeepPolicy.KeepAll),
+            new PrisonerKeepPolicyOption("Keep Selected", PrisonerKeepPolicy.KeepSelected)
+        };
+
+        private static readonly IReadOnlyList<BanditPrisonerKeepPolicyOption> BanditPrisonerKeepPolicyOptions = new List<BanditPrisonerKeepPolicyOption>
+        {
+            new BanditPrisonerKeepPolicyOption("Ransom All", BanditPrisonerKeepPolicy.RansomAll),
+            new BanditPrisonerKeepPolicyOption("Keep All", BanditPrisonerKeepPolicy.KeepAll),
+            new BanditPrisonerKeepPolicyOption("Keep Noble Only", BanditPrisonerKeepPolicy.KeepNobleOnly),
+            new BanditPrisonerKeepPolicyOption("Keep Selected", BanditPrisonerKeepPolicy.KeepSelected)
         };
 
         // --- Recruitment settings ---
@@ -211,11 +257,69 @@ namespace PartyManager
         [SettingPropertyGroup("Garrison Donation", GroupOrder = 3)]
         public int MinDonationTier { get; set; } = 1;
 
+        // --- Prisoner Ransom Settings ---
+        [SettingPropertyBool("Auto-Ransom Prisoners", RequireRestart = false, HintText = "Automatically ransom standard prisoners for gold in taverns.")]
+        [SettingPropertyGroup("Prisoners", GroupOrder = 4)]
+        public bool AutoRansomPrisoners { get; set; } = true;
+
+        [SettingPropertyInteger("Min Tier to Ransom", 1, 6, RequireRestart = false, HintText = "Minimum tier of prisoner to automatically ransom.")]
+        [SettingPropertyGroup("Prisoners", GroupOrder = 4)]
+        public int MinRansomTier { get; set; } = 1;
+
+        [SettingPropertyBool("Keep Hero Prisoners", RequireRestart = false, HintText = "Never automatically ransom or donate hero/lord prisoners.")]
+        [SettingPropertyGroup("Prisoners", GroupOrder = 4)]
+        public bool KeepHeroPrisoners { get; set; } = true;
+
+        [SettingPropertyDropdown("Noble Prisoner Keep Policy", RequireRestart = false, HintText = "Keep policy for noble/elite prisoners.")]
+        [SettingPropertyGroup("Prisoners/Keep Filters", GroupOrder = 5)]
+        public Dropdown<PrisonerKeepPolicyOption> NoblePrisonerKeepPolicyDropdown { get; set; } = new Dropdown<PrisonerKeepPolicyOption>(PrisonerKeepPolicyOptions, 1); // Keep All
+
+        [SettingPropertyDropdown("Regular Prisoner Keep Policy", RequireRestart = false, HintText = "Keep policy for standard regular prisoners.")]
+        [SettingPropertyGroup("Prisoners/Keep Filters", GroupOrder = 5)]
+        public Dropdown<PrisonerKeepPolicyOption> RegularPrisonerKeepPolicyDropdown { get; set; } = new Dropdown<PrisonerKeepPolicyOption>(PrisonerKeepPolicyOptions, 0); // Ransom All
+
+        [SettingPropertyDropdown("Bandit Prisoner Keep Policy", RequireRestart = false, HintText = "Keep policy for bandit prisoners.")]
+        [SettingPropertyGroup("Prisoners/Keep Filters", GroupOrder = 5)]
+        public Dropdown<BanditPrisonerKeepPolicyOption> BanditPrisonerKeepPolicyDropdown { get; set; } = new Dropdown<BanditPrisonerKeepPolicyOption>(BanditPrisonerKeepPolicyOptions, 0); // Ransom All
+
+        [SettingPropertyBool("Bypass Noble Prisoner Tier Limit", RequireRestart = false, HintText = "If enabled, noble prisoners (and noble-upgrading bandits if kept) will bypass the min tier keep limit.")]
+        [SettingPropertyGroup("Prisoners/Keep Filters", GroupOrder = 5)]
+        public bool BypassNoblePrisonerTierLimit { get; set; } = true;
+
+        [SettingPropertyInteger("Min Prisoner Tier to Keep", 1, 6, RequireRestart = false, HintText = "Minimum tier of regular/bandit prisoner to keep for recruitment.")]
+        [SettingPropertyGroup("Prisoners/Keep Filters", GroupOrder = 5)]
+        public int MinPrisonerTierToKeep { get; set; } = 3;
+
+        // --- Prisoner Donation Settings ---
+        [SettingPropertyBool("Auto-Donate Prisoners to Dungeon", RequireRestart = false, HintText = "Automatically donate prisoners to friendly town/castle dungeons to farm influence/XP.")]
+        [SettingPropertyGroup("Prisoners/Dungeon Donation", GroupOrder = 6)]
+        public bool AutoDonatePrisoners { get; set; } = false;
+
+        [SettingPropertyInteger("Min Tier to Donate", 1, 6, RequireRestart = false, HintText = "Minimum tier of prisoner to donate.")]
+        [SettingPropertyGroup("Prisoners/Dungeon Donation", GroupOrder = 6)]
+        public int MinDonateTier { get; set; } = 3;
+
+        [SettingPropertyBool("Prioritize High Tier for Donation", RequireRestart = false, HintText = "Donate higher tier prisoners first to maximize influence return.")]
+        [SettingPropertyGroup("Prisoners/Dungeon Donation", GroupOrder = 6)]
+        public bool PrioritizeHighTierDonation { get; set; } = true;
+
+        // --- Prisoner Discard Settings ---
+        [SettingPropertyBool("Auto Discard Post-Battle Excess Prisoners", RequireRestart = false, HintText = "Automatically dump/discard low tier prisoners post-battle if player party is over prisoner capacity.")]
+        [SettingPropertyGroup("Prisoners/Post-Battle Discard", GroupOrder = 7)]
+        public bool AutoDiscardPrisonersPostBattle { get; set; } = false;
+
+        [SettingPropertyInteger("Discard Prisoners Up To Tier", 1, 6, RequireRestart = false, HintText = "Discard excess prisoners up to (and including) this tier.")]
+        [SettingPropertyGroup("Prisoners/Post-Battle Discard", GroupOrder = 7)]
+        public int DiscardPrisonersUpToTier { get; set; } = 2;
+
         public EvalTime EvalTimeSetting => EvalTimeDropdown.SelectedValue.Value;
         public SellRidingMountsMode SellRidingMountsSetting => SellRidingMountsDropdown.SelectedValue.Value;
         public PostBattleSlaughterMode PostBattleSlaughterSetting => PostBattleSlaughterDropdown.SelectedValue.Value;
         public VolunteerRecruitPolicy VolunteerRecruitSetting => VolunteerRecruitDropdown.SelectedValue.Value;
         public bool RecruitRegularSetting => VolunteerRecruitSetting == VolunteerRecruitPolicy.RegularOnly || VolunteerRecruitSetting == VolunteerRecruitPolicy.RegularAndNoble;
         public bool RecruitNobleSetting => VolunteerRecruitSetting == VolunteerRecruitPolicy.NobleOnly || VolunteerRecruitSetting == VolunteerRecruitPolicy.RegularAndNoble;
+        public PrisonerKeepPolicy NoblePrisonerKeepPolicySetting => NoblePrisonerKeepPolicyDropdown.SelectedValue.Value;
+        public PrisonerKeepPolicy RegularPrisonerKeepPolicySetting => RegularPrisonerKeepPolicyDropdown.SelectedValue.Value;
+        public BanditPrisonerKeepPolicy BanditPrisonerKeepPolicySetting => BanditPrisonerKeepPolicyDropdown.SelectedValue.Value;
     }
 }
