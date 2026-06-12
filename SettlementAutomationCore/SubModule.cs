@@ -447,41 +447,19 @@ namespace SettlementAutomationCore
 
     public class SettlementAutomationCampaignBehavior : CampaignBehaviorBase
     {
-        private string _lastVisitedSettlementId = "";
-
         public override void RegisterEvents()
         {
             CampaignEvents.SettlementEntered.AddNonSerializedListener(this, OnSettlementEntered);
-            CampaignEvents.OnSettlementLeftEvent.AddNonSerializedListener(this, OnSettlementLeft);
         }
 
         private void OnSettlementEntered(MobileParty party, Settlement settlement, Hero hero)
         {
             if (party == MobileParty.MainParty && settlement != null && (settlement.IsTown || settlement.IsVillage))
             {
-                if (settlement.StringId != _lastVisitedSettlementId)
-                {
-                    _lastVisitedSettlementId = settlement.StringId;
-                    SubModule.QueueBackgroundTrade(settlement);
-                }
+                SubModule.QueueBackgroundTrade(settlement);
             }
         }
 
-        private void OnSettlementLeft(MobileParty party, Settlement settlement)
-        {
-            if (party == MobileParty.MainParty && settlement != null)
-            {
-                _lastVisitedSettlementId = "";
-            }
-        }
-
-        public override void SyncData(IDataStore dataStore)
-        {
-            try
-            {
-                dataStore.SyncData("_lastVisitedSettlementId", ref _lastVisitedSettlementId);
-            }
-            catch {}
-        }
+        public override void SyncData(IDataStore dataStore) { }
     }
 }
