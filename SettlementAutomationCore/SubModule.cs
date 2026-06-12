@@ -161,15 +161,57 @@ namespace SettlementAutomationCore
                             if (order.Prisoner != null && order.Amount > 0)
                             {
                                 ransomRoster.AddToCounts(order.Prisoner, order.Amount);
-                                InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed {order.Amount}x {order.Prisoner.Name}"));
                             }
                         }
                         if (ransomRoster.Count > 0)
                         {
-                            SellPrisonersAction.ApplyForSelectedPrisoners(MobileParty.MainParty.Party, settlement.Party, ransomRoster);
+                            try
+                            {
+                                SellPrisonersAction.ApplyForSelectedPrisoners(MobileParty.MainParty.Party, settlement.Party, ransomRoster);
+                                foreach (var element in ransomRoster.GetTroopRoster())
+                                {
+                                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed {element.Number}x {element.Character.Name}"));
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Native ApplyForSelectedPrisoners failed ({ex.Message}). Applying manual ransom fallback.");
+                                int totalRansomGold = 0;
+                                foreach (var element in ransomRoster.GetTroopRoster())
+                                {
+                                    var character = element.Character;
+                                    int count = element.Number;
+                                    if (character == null || count <= 0) continue;
+
+                                    int unitValue = 0;
+                                    var model = Campaign.Current?.Models?.RansomValueCalculationModel;
+                                    if (model != null)
+                                    {
+                                        unitValue = model.PrisonerRansomValue(character, Hero.MainHero);
+                                    }
+                                    else
+                                    {
+                                        unitValue = character.Tier * 15;
+                                    }
+
+                                    int ransomAmount = unitValue * count;
+                                    totalRansomGold += ransomAmount;
+
+                                    MobileParty.MainParty.PrisonRoster.AddToCounts(character, -count);
+                                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed {count}x {character.Name} for {ransomAmount} denars"));
+                                }
+
+                                if (totalRansomGold > 0 && Hero.MainHero != null)
+                                {
+                                    GiveGoldAction.ApplyBetweenCharacters(null, Hero.MainHero, totalRansomGold, false);
+                                }
+                            }
                         }
                     }
-                    catch {}
+                    catch (Exception ex)
+                    {
+                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Ransom phase error: {ex}");
+                    }
                 }
 
                 // Apply mercenary recruitment
