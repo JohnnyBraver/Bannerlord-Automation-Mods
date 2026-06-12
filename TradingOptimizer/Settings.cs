@@ -144,10 +144,10 @@ namespace TradingOptimizer
         [SettingPropertyGroup("Price Thresholds", GroupOrder = 1)]
         public float SellPriceThresholdFactor { get; set; } = 1.30f;
 
-        [SettingPropertyFloatingInteger("Logistics Price Throttle Factor", 1.5f, 10.0f, "#0.0", RequireRestart = false,
-            HintText = "Postpone non-urgent logistics purchases (variety food, mounts) if their price exceeds this multiplier of their average price. Default: 5.0 (500%).")]
+        [SettingPropertyFloatingInteger("Logistics Price Throttle Factor", 1.0f, 10.0f, "#0.00", RequireRestart = false,
+            HintText = "Postpone non-urgent logistics purchases (variety food, mounts) if their price exceeds this multiplier of their average price. Default: 1.30 (130% - where red begins).")]
         [SettingPropertyGroup("Price Thresholds", GroupOrder = 1)]
-        public float LogisticsPriceThrottleFactor { get; set; } = 5.0f;
+        public float LogisticsPriceThrottleFactor { get; set; } = 1.30f;
 
         [SettingPropertyBool("Force Buy Critical Variety Food", RequireRestart = false,
             HintText = "If current supply of a food type is under 1/10 of its target variety quantity (rounded up), force buy it regardless of price to prevent complete lack of that food type.")]
