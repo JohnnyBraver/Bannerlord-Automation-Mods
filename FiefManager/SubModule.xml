@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Module>
+  <Name value="Fief Manager" />
+  <Id value="FiefManager" />
+  <Version value="v1.0.0" />
+  <SingleplayerModule value="true" />
+  <DependedModules>
+    <DependedModule Id="Native" />
+    <DependedModule Id="SandBoxCore" />
+    <DependedModule Id="SettlementAutomationCore" />
+  </DependedModules>
+  <DependedModuleMetadatas>
+    <DependedModuleMetadata id="Bannerlord.Harmony" order="LoadBeforeThis" />
+    <DependedModuleMetadata id="Bannerlord.UIExtenderEx" order="LoadBeforeThis" optional="true" />
+    <DependedModuleMetadata id="Bannerlord.MBOptionScreen" order="LoadBeforeThis" optional="true" />
+  </DependedModuleMetadatas>
+  <SubModules>
+    <SubModule>
+      <Name value="FiefManager" />
+      <DLLName value="FiefManager.dll" />
+      <SubModuleClassType value="FiefManager.SubModule" />
+      <Tags>
+        <Tag key="DedicatedServerType" value="none" />
+      </Tags>
+    </SubModule>
+  </SubModules>
+</Module>
