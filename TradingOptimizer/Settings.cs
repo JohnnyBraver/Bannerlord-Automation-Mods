@@ -144,6 +144,11 @@ namespace TradingOptimizer
         [SettingPropertyGroup("Price Thresholds", GroupOrder = 1)]
         public float SellPriceThresholdFactor { get; set; } = 1.30f;
 
+        [SettingPropertyFloatingInteger("Logistics Price Throttle Factor", 1.5f, 10.0f, "#0.0", RequireRestart = false,
+            HintText = "Postpone non-urgent logistics purchases (variety food, mounts) if their price exceeds this multiplier of their average price. Default: 5.0 (500%).")]
+        [SettingPropertyGroup("Price Thresholds", GroupOrder = 1)]
+        public float LogisticsPriceThrottleFactor { get; set; } = 5.0f;
+
         [SettingPropertyBool("Limit to Carry Capacity", RequireRestart = false,
             HintText = "Stop buying when your party's carry weight would be exceeded.")]
         [SettingPropertyGroup("Cargo & Limits", GroupOrder = 2)]

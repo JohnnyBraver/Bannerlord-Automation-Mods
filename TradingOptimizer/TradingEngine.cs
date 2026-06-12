@@ -936,6 +936,14 @@ namespace TradingOptimizer
                             int merchantCount = food.ItemCount - bCount;
                             int price = logic != null ? logic.GetItemPrice(food.ItemRosterElement.EquipmentElement, true) : itemObj.Value;
 
+                            float referencePrice = GetWorldAveragePrice(food.ItemRosterElement.EquipmentElement);
+                            if (referencePrice <= 0f) referencePrice = itemObj.Value;
+                            if (price > referencePrice * settings.LogisticsPriceThrottleFactor)
+                            {
+                                WriteLog($"[Logistics] Skipping food variety purchase of {itemObj.Name}: price {price} is above threshold ({referencePrice * settings.LogisticsPriceThrottleFactor:F1})");
+                                continue;
+                            }
+
                             for (int i = 0; i < Math.Min(typeNeeded, merchantCount); i++)
                             {
                                 if (currentBalance - price < minRequiredBalance) break;
@@ -995,6 +1003,14 @@ namespace TradingOptimizer
                         int bCount = boughtQuantities.TryGetValue(mount, out int bVal) ? bVal : 0;
                         int merchantCount = mount.ItemCount - bCount;
                         int price = logic != null ? logic.GetItemPrice(mount.ItemRosterElement.EquipmentElement, true) : itemObj.Value;
+
+                        float referencePrice = GetWorldAveragePrice(mount.ItemRosterElement.EquipmentElement);
+                        if (referencePrice <= 0f) referencePrice = itemObj.Value;
+                        if (price > referencePrice * settings.LogisticsPriceThrottleFactor)
+                        {
+                            WriteLog($"[Logistics] Skipping mount purchase of {itemObj.Name}: price {price} is above threshold ({referencePrice * settings.LogisticsPriceThrottleFactor:F1})");
+                            continue;
+                        }
 
                         for (int i = 0; i < merchantCount; i++)
                         {
