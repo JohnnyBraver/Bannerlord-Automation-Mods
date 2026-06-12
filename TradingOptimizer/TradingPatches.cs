@@ -32,6 +32,15 @@ namespace TradingOptimizer
             if (ActiveInventoryVM == null) return;
             try
             {
+                var settings = Settings.Instance;
+                if (settings != null && CampaignTime.Now.ToDays < settings.InitialSettlementDaysDelay)
+                {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"[TradingOptimizer] Manual trade disabled during economy settling period (Day {CampaignTime.Now.ToDays:F1}/{settings.InitialSettlementDaysDelay})"
+                    ));
+                    return;
+                }
+
                 int initialGold = Hero.MainHero?.Gold ?? 0;
                 var report = TradingEngine.RunOptimization(ActiveInventoryVM, isSellPhase: true, isBuyPhase: true);
                 
