@@ -142,10 +142,13 @@ namespace TradingOptimizer
                     // Only sell trade goods (commodities)
                     if (!itemObj.IsTradeGood) continue;
 
+                    if (itemObj.IsFood && !settings.TradeFood) continue;
+
                     int minToKeep = 0;
                     if (itemObj.IsFood)
                     {
-                        minToKeep = (int)Math.Ceiling(partySize * settings.FoodDaysToKeepPerSoldier);
+                        int syncedDaysLimit = GetSyncedFoodDaysLimit();
+                        minToKeep = (int)Math.Ceiling(partySize * syncedDaysLimit / 200.0f);
                     }
 
                     int maxSellable = item.ItemCount - minToKeep;
@@ -412,6 +415,8 @@ namespace TradingOptimizer
                         // Only buy trade goods
                         if (!itemObj.IsTradeGood) continue;
 
+                        if (itemObj.IsFood && !settings.TradeFood) continue;
+
                         // Check Settings filters (Livestock vs Mounts)
                         if (itemObj.IsAnimal && !itemObj.IsMountable && !settings.TradeLivestock) continue;
                         if (itemObj.IsMountable && !settings.TradeMounts) continue;
@@ -674,6 +679,39 @@ namespace TradingOptimizer
                 WriteLog($"[Average Price Check Error] {ex.Message}");
             }
             return 0f;
+        }
+
+        private static int GetSyncedFoodDaysLimit()
+        {
+            var settings = Settings.Instance;
+            int limit = settings?.PartyFoodDaysToKeep ?? 10;
+            try
+            {
+                foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    if (assembly.GetName().Name == "PartyManager")
+                    {
+                        var settingsType = assembly.GetType("PartyManager.Settings");
+                        if (settingsType != null)
+                        {
+                            var instanceProp = settingsType.GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                            var settingsInstance = instanceProp?.GetValue(null);
+                            if (settingsInstance != null)
+                            {
+                                var limitProp = settingsType.GetProperty("PartyFoodDaysToKeep", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                                if (limitProp != null)
+                                {
+                                    int pmLimit = (int)limitProp.GetValue(settingsInstance);
+                                    return Math.Max(limit, pmLimit);
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            catch {}
+            return limit;
         }
 
         private static float GetRosterWeight(ItemRoster? roster)

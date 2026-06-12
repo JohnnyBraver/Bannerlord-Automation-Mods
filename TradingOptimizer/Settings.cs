@@ -135,10 +135,16 @@ namespace TradingOptimizer
         [SettingPropertyGroup("Cargo & Limits", GroupOrder = 2)]
         public int MaxStackValueToBuy { get; set; } = 2000;
 
-        [SettingPropertyFloatingInteger("Food Days to Keep per Soldier", 0f, 5f, "#0.0", RequireRestart = false,
-            HintText = "Keep at least this many days of food per soldier before selling food items.")]
+        [SettingPropertyBool("Trade Food Items", RequireRestart = false,
+            HintText = "Allow trading food items for profit (only selling excess above keep limits).")]
         [SettingPropertyGroup("Cargo & Limits", GroupOrder = 2)]
-        public float FoodDaysToKeepPerSoldier { get; set; } = 0.1f;
+        public bool TradeFood { get; set; } = true;
+
+        [SettingPropertyInteger("Party Food Days to Keep", 1, 100, RequireRestart = false,
+            HintText = "Keep at least this many days of food supply for the party before selling food items.")]
+        [SettingPropertyGroup("Cargo & Limits", GroupOrder = 2)]
+        public int PartyFoodDaysToKeep { get; set; } = 10;
+
 
         [SettingPropertyBool("Trade Livestock", RequireRestart = false,
             HintText = "Include livestock (non-mount animals) in auto-trade decisions.")]

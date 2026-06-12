@@ -88,6 +88,39 @@ namespace PartyManager
             return orders;
         }
 
+        private int GetSyncedFoodDaysLimit()
+        {
+            var settings = Settings.Instance;
+            int limit = settings?.PartyFoodDaysToKeep ?? 10;
+            try
+            {
+                foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    if (assembly.GetName().Name == "TradingOptimizer")
+                    {
+                        var settingsType = assembly.GetType("TradingOptimizer.Settings");
+                        if (settingsType != null)
+                        {
+                            var instanceProp = settingsType.GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                            var settingsInstance = instanceProp?.GetValue(null);
+                            if (settingsInstance != null)
+                            {
+                                var limitProp = settingsType.GetProperty("PartyFoodDaysToKeep", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                                if (limitProp != null)
+                                {
+                                    int toLimit = (int)limitProp.GetValue(settingsInstance);
+                                    return Math.Max(limit, toLimit);
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            catch {}
+            return limit;
+        }
+
         public List<TradeOrder> GetMainOrders(MobileParty party, Settlement settlement, InventoryLogic currentLogic)
         {
             var orders = new List<TradeOrder>();
@@ -101,7 +134,7 @@ namespace PartyManager
             }
 
             // Auto-Buy Mounts (Phase 3)
-            if (settings.AutoBuyMounts)
+            if (settings.AutoBuyMounts && Hero.MainHero != null && Hero.MainHero.Gold >= settings.DoingWellGoldReserveMounts)
             {
                 CalculatePartyAnimals(party, out int infantry, out int cavalry, out int riding, out int pack, out int livestock,
                     out _, out _, out _);
@@ -128,7 +161,7 @@ namespace PartyManager
                     // Sort mounts by price ascending
                     buyableMounts = buyableMounts.OrderBy(m => m.Price).ToList();
 
-                    int budget = Hero.MainHero.Gold - 1000; // Keep at least 1000 denars reserve
+                    int budget = Hero.MainHero.Gold - settings.DoingWellGoldReserveMounts;
                     foreach (var m in buyableMounts)
                     {
                         if (mountsNeeded <= 0 || budget <= 0) break;
@@ -143,6 +176,123 @@ namespace PartyManager
                             orders.Add(new TradeOrder(m.EqElement, toBuy, true));
                             mountsNeeded -= toBuy;
                             budget -= toBuy * m.Price;
+                        }
+                    }
+                }
+            }
+
+            // Auto-Buy Food (Phase 3)
+            if (settings.AutoBuyFood && party != null && Hero.MainHero != null)
+            {
+                int partySize = party.MemberRoster.TotalManCount;
+                if (partySize > 0)
+                {
+                    int dailyWage = party.TotalWage;
+                    int minGoldReserve = Math.Max(1000, dailyWage * 2);
+                    int foodBudget = Hero.MainHero.Gold - minGoldReserve;
+
+                    if (foodBudget > 0)
+                    {
+                        var otherElements = currentLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
+                        var foodItems = new List<RosterElementInfo>();
+
+                        for (int i = 0; i < otherElements.Count; i++)
+                        {
+                            var el = otherElements[i];
+                            if (el.IsEmpty || el.Amount <= 0) continue;
+                            var item = el.EquipmentElement.Item;
+                            if (item != null && item.IsFood)
+                            {
+                                int price = currentLogic.GetItemPrice(el.EquipmentElement, true);
+                                foodItems.Add(new RosterElementInfo(el.EquipmentElement, el.Amount, price));
+                            }
+                        }
+
+                        if (foodItems.Count > 0)
+                        {
+                            // Sort by price ascending to buy cheapest first
+                            foodItems = foodItems.OrderBy(f => f.Price).ToList();
+
+                            int syncedDaysLimit = GetSyncedFoodDaysLimit();
+                            bool isSurvivalMode = partySize < settings.MinPartySizeForVariety || Hero.MainHero.Gold < settings.DoingWellGoldReserveFoodVariety;
+
+                            var playerInventory = currentLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+
+                            if (isSurvivalMode)
+                            {
+                                // Survival Mode: Buy cheapest food to meet total food target
+                                int totalFoodTarget = (int)Math.Ceiling(partySize * syncedDaysLimit / 20.0f);
+                                int totalOwned = 0;
+                                for (int j = 0; j < playerInventory.Count; j++)
+                                {
+                                    var pEl = playerInventory[j];
+                                    if (pEl.EquipmentElement.Item != null && pEl.EquipmentElement.Item.IsFood)
+                                    {
+                                        totalOwned += pEl.Amount;
+                                    }
+                                }
+
+                                int totalNeeded = totalFoodTarget - totalOwned;
+                                if (totalNeeded > 0)
+                                {
+                                    foreach (var food in foodItems)
+                                    {
+                                        if (totalNeeded <= 0 || foodBudget <= 0) break;
+
+                                        int toBuy = Math.Min(totalNeeded, food.Amount);
+                                        int cost = toBuy * food.Price;
+                                        if (cost > foodBudget)
+                                        {
+                                            toBuy = foodBudget / food.Price;
+                                        }
+
+                                        if (toBuy > 0)
+                                        {
+                                            orders.Add(new TradeOrder(food.EqElement, toBuy, true));
+                                            totalNeeded -= toBuy;
+                                            foodBudget -= toBuy * food.Price;
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // Variety Mode: Buy up to minToKeep of each food type
+                                int minToKeep = (int)Math.Ceiling(partySize * syncedDaysLimit / 200.0f);
+
+                                foreach (var food in foodItems)
+                                {
+                                    if (foodBudget <= 0) break;
+
+                                    var itemObj = food.EqElement.Item;
+                                    int owned = 0;
+                                    for (int j = 0; j < playerInventory.Count; j++)
+                                    {
+                                        var pEl = playerInventory[j];
+                                        if (pEl.EquipmentElement.Item != null && pEl.EquipmentElement.Item.StringId == itemObj.StringId)
+                                        {
+                                            owned += pEl.Amount;
+                                        }
+                                    }
+
+                                    int needed = minToKeep - owned;
+                                    if (needed > 0)
+                                    {
+                                        int toBuy = Math.Min(needed, food.Amount);
+                                        int cost = toBuy * food.Price;
+                                        if (cost > foodBudget)
+                                        {
+                                            toBuy = foodBudget / food.Price;
+                                        }
+
+                                        if (toBuy > 0)
+                                        {
+                                            orders.Add(new TradeOrder(food.EqElement, toBuy, true));
+                                            foodBudget -= toBuy * food.Price;
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
