@@ -6,12 +6,78 @@ using MCM.Common;
 
 namespace PrisonerManager
 {
+    public enum KeepPolicy
+    {
+        SellAll,
+        KeepAll,
+        KeepSelected
+    }
+
+    public class KeepPolicyOption
+    {
+        private readonly string _name;
+        public KeepPolicy Value { get; }
+        public KeepPolicyOption(string name, KeepPolicy value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
+    public enum BanditKeepPolicy
+    {
+        SellAll,
+        KeepAll,
+        KeepNobleOnly,
+        KeepSelected
+    }
+
+    public class BanditKeepPolicyOption
+    {
+        private readonly string _name;
+        public BanditKeepPolicy Value { get; }
+        public BanditKeepPolicyOption(string name, BanditKeepPolicy value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
+    public enum KeepEvalTime
+    {
+        FinalUpgradeTier,
+        CurrentTier
+    }
+
+    public class KeepEvalTimeOption
+    {
+        private readonly string _name;
+        public KeepEvalTime Value { get; }
+        public KeepEvalTimeOption(string name, KeepEvalTime value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
     public class Settings : AttributeGlobalSettings<Settings>
     {
         public override string Id => "PrisonerManager_v1";
         public override string DisplayName => "Prisoner Manager";
         public override string FolderName => "PrisonerManager";
         public override string FormatType => "json";
+
+        private static readonly IReadOnlyList<KeepPolicyOption> KeepPolicyOptions = new List<KeepPolicyOption>
+        {
+            new KeepPolicyOption("Ransom All", KeepPolicy.SellAll),
+            new KeepPolicyOption("Keep All", KeepPolicy.KeepAll),
+            new KeepPolicyOption("Keep Selected", KeepPolicy.KeepSelected)
+        };
+
+        private static readonly IReadOnlyList<BanditKeepPolicyOption> BanditKeepPolicyOptions = new List<BanditKeepPolicyOption>
+        {
+            new BanditKeepPolicyOption("Ransom All", BanditKeepPolicy.SellAll),
+            new BanditKeepPolicyOption("Keep All", BanditKeepPolicy.KeepAll),
+            new BanditKeepPolicyOption("Keep Noble Only", BanditKeepPolicy.KeepNobleOnly),
+            new BanditKeepPolicyOption("Keep Selected", BanditKeepPolicy.KeepSelected)
+        };
+
+        private static readonly IReadOnlyList<KeepEvalTimeOption> KeepEvalTimeOptions = new List<KeepEvalTimeOption>
+        {
+            new KeepEvalTimeOption("Final Upgrade Leaves", KeepEvalTime.FinalUpgradeTier),
+            new KeepEvalTimeOption("Current Troop Type", KeepEvalTime.CurrentTier)
+        };
 
         // --- Ransom Settings ---
         [SettingPropertyBool("Auto-Ransom Prisoners", RequireRestart = false, HintText = "Automatically ransom standard prisoners for gold in taverns.")]
@@ -27,37 +93,46 @@ namespace PrisonerManager
         [SettingPropertyGroup("2. Keep / Recruit Filters", GroupOrder = 1)]
         public bool KeepHeroes { get; set; } = true;
 
-        [SettingPropertyBool("Keep Noble Prisoners", RequireRestart = false, HintText = "Do not auto-ransom noble/elite prisoners (useful for recruiting later).")]
+        [SettingPropertyDropdown("Noble Keep Policy", RequireRestart = false, HintText = "Keep policy for noble/elite prisoners.")]
         [SettingPropertyGroup("2. Keep / Recruit Filters", GroupOrder = 1)]
-        public bool KeepNobles { get; set; } = true;
+        public Dropdown<KeepPolicyOption> NobleKeepPolicyDropdown { get; set; } = new Dropdown<KeepPolicyOption>(KeepPolicyOptions, 1);
 
-        [SettingPropertyBool("Keep Regular Troops", RequireRestart = false, HintText = "Keep regular troops (if matching filters below for recruiting).")]
+        [SettingPropertyDropdown("Regular Keep Policy", RequireRestart = false, HintText = "Keep policy for standard regular prisoners.")]
         [SettingPropertyGroup("2. Keep / Recruit Filters", GroupOrder = 1)]
-        public bool KeepRegulars { get; set; } = false;
+        public Dropdown<KeepPolicyOption> RegularKeepPolicyDropdown { get; set; } = new Dropdown<KeepPolicyOption>(KeepPolicyOptions, 0);
 
-        [SettingPropertyBool("Keep Melee Archetype", RequireRestart = false, HintText = "Keep melee units (one-handed/two-handed/polearm) for recruiting.")]
+        [SettingPropertyDropdown("Bandit Keep Policy", RequireRestart = false, HintText = "Keep policy for bandit prisoners.")]
         [SettingPropertyGroup("2. Keep / Recruit Filters", GroupOrder = 1)]
-        public bool KeepMelee { get; set; } = true;
+        public Dropdown<BanditKeepPolicyOption> BanditKeepPolicyDropdown { get; set; } = new Dropdown<BanditKeepPolicyOption>(BanditKeepPolicyOptions, 0);
 
-        [SettingPropertyBool("Keep Ranged Archetype", RequireRestart = false, HintText = "Keep ranged units (bow/crossbow/throwing) for recruiting.")]
+        [SettingPropertyDropdown("Evaluation Target Type", RequireRestart = false, HintText = "Evaluate keep filters against the prisoner's current troop type or their final upgrade leaves.")]
         [SettingPropertyGroup("2. Keep / Recruit Filters", GroupOrder = 1)]
-        public bool KeepRanged { get; set; } = true;
+        public Dropdown<KeepEvalTimeOption> KeepEvalTimeDropdown { get; set; } = new Dropdown<KeepEvalTimeOption>(KeepEvalTimeOptions, 0);
 
-        [SettingPropertyBool("Keep Mounted Troops", RequireRestart = false, HintText = "Keep cavalry units for recruiting.")]
+        [SettingPropertyBool("Bypass Noble Tier Limit", RequireRestart = false, HintText = "If enabled, noble prisoners (and noble-upgrading bandits if kept) will bypass the min tier keep limit.")]
         [SettingPropertyGroup("2. Keep / Recruit Filters", GroupOrder = 1)]
+        public bool BypassNobleTierLimit { get; set; } = true;
+
+        [SettingPropertyInteger("Min Tier to Keep", 1, 6, RequireRestart = false, HintText = "Minimum tier of regular/bandit prisoner to keep for recruitment.")]
+        [SettingPropertyGroup("2. Keep / Recruit Filters", GroupOrder = 1)]
+        public int MinTierToKeep { get; set; } = 3;
+
+        // --- Keep Selected Archetypes Subgroup ---
+        [SettingPropertyBool("Keep Mounted Archetype", RequireRestart = false, HintText = "Keep cavalry units when policy is Keep Selected.")]
+        [SettingPropertyGroup("2. Keep / Recruit Filters/Selected Archetypes", GroupOrder = 2)]
         public bool KeepMounted { get; set; } = true;
 
-        [SettingPropertyBool("Keep Foot Troops", RequireRestart = false, HintText = "Keep infantry units for recruiting.")]
-        [SettingPropertyGroup("2. Keep / Recruit Filters", GroupOrder = 1)]
+        [SettingPropertyBool("Keep Foot Archetype", RequireRestart = false, HintText = "Keep infantry units when policy is Keep Selected.")]
+        [SettingPropertyGroup("2. Keep / Recruit Filters/Selected Archetypes", GroupOrder = 2)]
         public bool KeepFoot { get; set; } = true;
 
-        [SettingPropertyInteger("Keep Min Tier", 1, 6, RequireRestart = false, HintText = "Minimum tier of troop to keep for recruitment.")]
-        [SettingPropertyGroup("2. Keep / Recruit Filters", GroupOrder = 1)]
-        public int KeepMinTier { get; set; } = 3;
+        [SettingPropertyBool("Keep Melee Archetype", RequireRestart = false, HintText = "Keep melee units when policy is Keep Selected.")]
+        [SettingPropertyGroup("2. Keep / Recruit Filters/Selected Archetypes", GroupOrder = 2)]
+        public bool KeepMelee { get; set; } = true;
 
-        [SettingPropertyInteger("Keep Max Tier", 1, 6, RequireRestart = false, HintText = "Maximum tier of troop to keep for recruitment.")]
-        [SettingPropertyGroup("2. Keep / Recruit Filters", GroupOrder = 1)]
-        public int KeepMaxTier { get; set; } = 6;
+        [SettingPropertyBool("Keep Ranged Archetype", RequireRestart = false, HintText = "Keep ranged units when policy is Keep Selected.")]
+        [SettingPropertyGroup("2. Keep / Recruit Filters/Selected Archetypes", GroupOrder = 2)]
+        public bool KeepRanged { get; set; } = true;
 
         // --- Donation Settings ---
         [SettingPropertyBool("Auto-Donate Prisoners to Dungeon", RequireRestart = false, HintText = "Automatically donate prisoners to friendly town/castle dungeons to farm influence/XP.")]
@@ -80,5 +155,10 @@ namespace PrisonerManager
         [SettingPropertyInteger("Discard Up To Tier", 1, 6, RequireRestart = false, HintText = "Discard excess prisoners up to (and including) this tier.")]
         [SettingPropertyGroup("4. Post-Battle Discard", GroupOrder = 3)]
         public int DiscardUpToTier { get; set; } = 2;
+
+        public KeepPolicy NobleKeepPolicySetting => NobleKeepPolicyDropdown.SelectedValue.Value;
+        public KeepPolicy RegularKeepPolicySetting => RegularKeepPolicyDropdown.SelectedValue.Value;
+        public BanditKeepPolicy BanditKeepPolicySetting => BanditKeepPolicyDropdown.SelectedValue.Value;
+        public KeepEvalTime KeepEvalTimeSetting => KeepEvalTimeDropdown.SelectedValue.Value;
     }
 }

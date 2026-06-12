@@ -55,33 +55,87 @@ namespace PrisonerManager
 
         private bool MatchKeepFilter(CharacterObject prisoner, Settings settings)
         {
-            // Noble / Regular Troop Class check
-            var leafTroops = new List<CharacterObject>();
-            SettlementAutomationCore.Helpers.TroopHelper.GetLeafTroops(prisoner, leafTroops);
-            int maxLeafTier = leafTroops.Count > 0 ? leafTroops.Max(l => l.Tier) : prisoner.Tier;
+            var evalTroops = new List<CharacterObject>();
+            if (settings.KeepEvalTimeSetting == KeepEvalTime.FinalUpgradeTier)
+            {
+                SettlementAutomationCore.Helpers.TroopHelper.GetLeafTroops(prisoner, evalTroops);
+            }
+            else
+            {
+                evalTroops.Add(prisoner);
+            }
 
-            bool isNoble = maxLeafTier >= 6;
-            if (isNoble && settings.KeepNobles) return true;
-            if (!isNoble && !settings.KeepRegulars) return false;
+            if (evalTroops.Count == 0)
+            {
+                evalTroops.Add(prisoner);
+            }
 
-            // Combat Mounted / Foot check
-            bool isMounted = prisoner.IsMounted;
-            if (isMounted && !settings.KeepMounted) return false;
-            if (!isMounted && !settings.KeepFoot) return false;
+            bool isBandit = prisoner.Culture != null && prisoner.Culture.IsBandit;
 
-            // Archetype check
-            bool isCrossbow = prisoner.GetSkillValue(DefaultSkills.Crossbow) > 30;
-            bool isBow = prisoner.GetSkillValue(DefaultSkills.Bow) > 30;
-            bool isThrowing = prisoner.GetSkillValue(DefaultSkills.Throwing) > 30;
-            bool isRanged = isCrossbow || isBow || isThrowing;
+            foreach (var evalTroop in evalTroops)
+            {
+                bool evalTroopIsNoble = evalTroop.Tier >= 6;
+                bool needsArchetypeCheck = false;
 
-            if (isRanged && !settings.KeepRanged) return false;
-            if (!isRanged && !settings.KeepMelee) return false;
+                // Step 1: Check keeping policies by category
+                if (isBandit)
+                {
+                    var policy = settings.BanditKeepPolicySetting;
+                    if (policy == BanditKeepPolicy.SellAll) continue;
+                    if (policy == BanditKeepPolicy.KeepNobleOnly && !evalTroopIsNoble) continue;
+                    if (policy == BanditKeepPolicy.KeepSelected)
+                    {
+                        var noblePolicy = settings.NobleKeepPolicySetting;
+                        var regularPolicy = settings.RegularKeepPolicySetting;
+                        if (evalTroopIsNoble && noblePolicy == KeepPolicy.SellAll) continue;
+                        if (!evalTroopIsNoble && regularPolicy == KeepPolicy.SellAll) continue;
+                        
+                        needsArchetypeCheck = true;
+                    }
+                }
+                else
+                {
+                    if (evalTroopIsNoble)
+                    {
+                        var policy = settings.NobleKeepPolicySetting;
+                        if (policy == KeepPolicy.SellAll) continue;
+                        if (policy == KeepPolicy.KeepSelected) needsArchetypeCheck = true;
+                    }
+                    else
+                    {
+                        var policy = settings.RegularKeepPolicySetting;
+                        if (policy == KeepPolicy.SellAll) continue;
+                        if (policy == KeepPolicy.KeepSelected) needsArchetypeCheck = true;
+                    }
+                }
 
-            // Tier evaluation (recruit filters usually match range)
-            if (prisoner.Tier < settings.KeepMinTier || prisoner.Tier > settings.KeepMaxTier) return false;
+                // Step 2: Check archetype filters (if required by KeepSelected)
+                if (needsArchetypeCheck)
+                {
+                    bool isMounted = evalTroop.IsMounted;
+                    if (isMounted && !settings.KeepMounted) continue;
+                    if (!isMounted && !settings.KeepFoot) continue;
 
-            return true;
+                    bool isCrossbow = evalTroop.GetSkillValue(DefaultSkills.Crossbow) > 30;
+                    bool isBow = evalTroop.GetSkillValue(DefaultSkills.Bow) > 30;
+                    bool isThrowing = evalTroop.GetSkillValue(DefaultSkills.Throwing) > 30;
+                    bool isRanged = isCrossbow || isBow || isThrowing;
+
+                    if (isRanged && !settings.KeepRanged) continue;
+                    if (!isRanged && !settings.KeepMelee) continue;
+                }
+
+                // Step 3: Check tier limits
+                if (!(evalTroopIsNoble && settings.BypassNobleTierLimit))
+                {
+                    if (prisoner.Tier < settings.MinTierToKeep) continue;
+                }
+
+                // If any evaluated path satisfies the filters, keep this prisoner
+                return true;
+            }
+
+            return false;
         }
 
         public List<MercenaryRecruitOrder> GetMercenaryRecruitOrders(MobileParty party, Settlement settlement)
