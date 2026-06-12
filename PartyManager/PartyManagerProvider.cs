@@ -261,12 +261,19 @@ namespace PartyManager
                 if (notable == null || notable.VolunteerTypes == null) continue;
 
                 // Check relation level and recruit slots unlocked
-                int slotsCount = Campaign.Current.Models.VolunteerModel.MaximumIndexHeroCanRecruitFromHero(Hero.MainHero, notable, -101);
-                for (int slot = 0; slot < slotsCount; slot++)
+                int maxIndex = Campaign.Current.Models.VolunteerModel.MaximumIndexHeroCanRecruitFromHero(Hero.MainHero, notable, -101);
+                
+                for (int slot = 0; slot < notable.VolunteerTypes.Length; slot++)
                 {
-                    if (slot >= notable.VolunteerTypes.Length) break;
                     var troop = notable.VolunteerTypes[slot];
                     if (troop == null) continue;
+
+                    if (slot > maxIndex)
+                    {
+                        SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", 
+                            $"[Recruit Slot Locked] Slot {slot} for notable {notable.Name} is locked. Relation allows recruiting up to index {maxIndex} (unlocked slots: {maxIndex + 1}). Troop: {troop.Name} (Tier {troop.Tier})");
+                        continue;
+                    }
 
                     if (MatchTroopFilter(troop, settings))
                     {
@@ -280,48 +287,123 @@ namespace PartyManager
 
         private bool MatchTroopFilter(CharacterObject troop, Settings settings)
         {
-            // Noble / Regular Troop Class check
             var leafTroops = new List<CharacterObject>();
             SettlementAutomationCore.Helpers.TroopHelper.GetLeafTroops(troop, leafTroops);
-            int maxLeafTier = leafTroops.Count > 0 ? leafTroops.Max(l => l.Tier) : troop.Tier;
 
-            bool isNoble = maxLeafTier >= 6;
-            if (isNoble && !settings.RecruitNoble) return false;
-            if (!isNoble && !settings.RecruitRegular) return false;
-
-            // Combat Mounted / Foot check
-            bool isMounted = troop.IsMounted;
-            if (isMounted && !settings.RecruitMounted) return false;
-            if (!isMounted && !settings.RecruitFoot) return false;
+            string logPrefix = $"[Recruit Filter: {troop.Name} (Tier {troop.Tier})]";
+            var logLines = new List<string>();
 
             // Tier evaluation (final leaf evaluation or purchase evaluation)
+            bool isMatch = false;
             if (settings.EvalTimeSetting == EvalTime.FinalUpgradeTier)
             {
-                if (leafTroops.Count == 0) return false;
-
-                // Require at least one final upgrade leaf to match tier and combat archetype filters
-                bool leafMatched = false;
-                foreach (var leaf in leafTroops)
+                if (leafTroops.Count == 0)
                 {
-                    if (leaf.Tier >= settings.MinRecruitTier && leaf.Tier <= settings.MaxRecruitTier)
-                    {
-                        if (MatchArchetype(leaf, settings))
-                        {
-                            leafMatched = true;
-                            break;
-                        }
-                    }
+                    logLines.Add("Failed: No upgrade leaf troops found.");
+                    isMatch = false;
                 }
-                if (!leafMatched) return false;
+                else
+                {
+                    // Require at least one final upgrade leaf to match all filters (noble/regular, tier, mounted/foot, archetype)
+                    bool leafMatched = false;
+                    foreach (var leaf in leafTroops)
+                    {
+                        string leafInfo = $"Leaf {leaf.Name} (Tier {leaf.Tier})";
+                        
+                        // Noble / Regular Troop Class check for leaf
+                        bool leafIsNoble = leaf.Tier >= 6;
+                        if (leafIsNoble && !settings.RecruitNoble)
+                        {
+                            logLines.Add($"{leafInfo} failed: Noble class, but RecruitNoble is disabled.");
+                            continue;
+                        }
+                        if (!leafIsNoble && !settings.RecruitRegular)
+                        {
+                            logLines.Add($"{leafInfo} failed: Regular class, but RecruitRegular is disabled.");
+                            continue;
+                        }
+
+                        if (leaf.Tier < settings.MinRecruitTier || leaf.Tier > settings.MaxRecruitTier)
+                        {
+                            logLines.Add($"{leafInfo} failed: Tier {leaf.Tier} not in range [{settings.MinRecruitTier}-{settings.MaxRecruitTier}].");
+                            continue;
+                        }
+
+                        // Combat Mounted / Foot check for leaf
+                        bool leafMounted = leaf.IsMounted;
+                        if (leafMounted && !settings.RecruitMounted)
+                        {
+                            logLines.Add($"{leafInfo} failed: Mounted unit, but RecruitMounted is disabled.");
+                            continue;
+                        }
+                        if (!leafMounted && !settings.RecruitFoot)
+                        {
+                            logLines.Add($"{leafInfo} failed: Foot unit, but RecruitFoot is disabled.");
+                            continue;
+                        }
+
+                        if (!MatchArchetype(leaf, settings))
+                        {
+                            logLines.Add($"{leafInfo} failed: Combat archetype mismatch (Crossbow skill={leaf.GetSkillValue(DefaultSkills.Crossbow)}, Bow skill={leaf.GetSkillValue(DefaultSkills.Bow)}, Throwing skill={leaf.GetSkillValue(DefaultSkills.Throwing)}).");
+                            continue;
+                        }
+
+                        logLines.Add($"{leafInfo} matched all filters.");
+                        leafMatched = true;
+                        break;
+                    }
+                    isMatch = leafMatched;
+                }
             }
             else
             {
                 // Purchase time evaluation
-                if (troop.Tier < settings.MinRecruitTier || troop.Tier > settings.MaxRecruitTier) return false;
-                if (!MatchArchetype(troop, settings)) return false;
+                int maxLeafTier = leafTroops.Count > 0 ? leafTroops.Max(l => l.Tier) : troop.Tier;
+                bool isNoble = maxLeafTier >= 6;
+                if (isNoble && !settings.RecruitNoble)
+                {
+                    logLines.Add("Failed: Purchase troop marked as Noble, but RecruitNoble is disabled.");
+                    isMatch = false;
+                }
+                else if (!isNoble && !settings.RecruitRegular)
+                {
+                    logLines.Add("Failed: Purchase troop marked as Regular, but RecruitRegular is disabled.");
+                    isMatch = false;
+                }
+                else
+                {
+                    // Combat Mounted / Foot check on purchase troop
+                    bool isMounted = troop.IsMounted;
+                    if (isMounted && !settings.RecruitMounted)
+                    {
+                        logLines.Add("Failed: Mounted unit, but RecruitMounted is disabled.");
+                        isMatch = false;
+                    }
+                    else if (!isMounted && !settings.RecruitFoot)
+                    {
+                        logLines.Add("Failed: Foot unit, but RecruitFoot is disabled.");
+                        isMatch = false;
+                    }
+                    else if (troop.Tier < settings.MinRecruitTier || troop.Tier > settings.MaxRecruitTier)
+                    {
+                        logLines.Add($"Failed: Tier {troop.Tier} not in range [{settings.MinRecruitTier}-{settings.MaxRecruitTier}].");
+                        isMatch = false;
+                    }
+                    else if (!MatchArchetype(troop, settings))
+                    {
+                        logLines.Add("Failed: Combat archetype mismatch.");
+                        isMatch = false;
+                    }
+                    else
+                    {
+                        logLines.Add("Matched all filters.");
+                        isMatch = true;
+                    }
+                }
             }
 
-            return true;
+            SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", $"{logPrefix} Result: {isMatch}. Details: {string.Join(" | ", logLines)}");
+            return isMatch;
         }
 
         private bool MatchArchetype(CharacterObject troop, Settings settings)
