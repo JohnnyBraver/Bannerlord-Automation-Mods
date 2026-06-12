@@ -133,6 +133,10 @@ namespace EquipmentManager
                                 var command = TransferCommand.Transfer(1, InventoryLogic.InventorySide.PlayerInventory, targetSide, equipElement, EquipmentIndex.None, slot, hero.CharacterObject);
                                 inventoryLogic.AddTransferCommand(command);
 
+                                string slotName = GetSlotName(slot);
+                                string setName = isCivilian ? "Civilian" : "Combat";
+                                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Equipped {upgradeElement.EquipmentElement.Item.Name} on {hero.Name} in {slotName} slot ({setName} set).");
+
                                 // If we successfully upgraded, update currentArmor for drawback comparison
                                 currentArmor = upgradeElement.EquipmentElement;
                             }
@@ -206,6 +210,9 @@ namespace EquipmentManager
                                 var equipElement = new ItemRosterElement(upgradeElement.EquipmentElement, 1);
                                 var command = TransferCommand.Transfer(1, InventoryLogic.InventorySide.PlayerInventory, targetSide, equipElement, EquipmentIndex.None, slot, hero.CharacterObject);
                                 inventoryLogic.AddTransferCommand(command);
+
+                                string setName = isCivilian ? "Civilian" : "Combat";
+                                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Equipped {upgradeElement.EquipmentElement.Item.Name} on {hero.Name} in Weapon slot {slot} ({setName} set).");
 
                                 currentWeapon = upgradeElement.EquipmentElement;
                             }
@@ -302,6 +309,7 @@ namespace EquipmentManager
                     if (shouldLock)
                     {
                         itemVM.IsLocked = true;
+                        SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Locked item to keep: {item.Name} (Tier {item.Tier}, Quality: {modifier?.ItemQuality.ToString() ?? "Standard"})");
                     }
                 }
             }
@@ -325,16 +333,23 @@ namespace EquipmentManager
                     }
                 }
 
+                var soldLogs = new List<string>();
                 foreach (var itemVM in itemsToSell)
                 {
                     try
                     {
                         itemVM.ExecuteSell(itemVM.ItemCount);
+                        var item = itemVM.ItemRosterElement.EquipmentElement.Item;
+                        soldLogs.Add($"{itemVM.ItemCount}x {item.Name}");
                     }
                     catch (Exception)
                     {
                         // Ignore single item sell error
                     }
+                }
+                if (soldLogs.Count > 0)
+                {
+                    SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Sold unlocked equipment: {string.Join(", ", soldLogs)}");
                 }
             }
 

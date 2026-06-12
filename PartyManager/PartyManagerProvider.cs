@@ -255,8 +255,6 @@ namespace PartyManager
 
             if (currentSize >= limit && !canOverRecruit) return orders;
 
-            SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", $"=== AutoRecruit for {settlement.Name} (Party Size: {currentSize}/{limit}) ===");
-
             // Cycle through settlement notables
             foreach (var notable in settlement.Notables)
             {
@@ -264,18 +262,13 @@ namespace PartyManager
 
                 // Check relation level and recruit slots unlocked
                 int slotsCount = Campaign.Current.Models.VolunteerModel.MaximumIndexHeroCanRecruitFromHero(Hero.MainHero, notable, -101);
-                for (int slot = 0; slot < notable.VolunteerTypes.Length; slot++)
+                for (int slot = 0; slot < slotsCount; slot++)
                 {
+                    if (slot >= notable.VolunteerTypes.Length) break;
                     var troop = notable.VolunteerTypes[slot];
                     if (troop == null) continue;
 
-                    if (slot >= slotsCount)
-                    {
-                        SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", $"Notable: {notable.Name}, Slot Index: {slot}, Troop: {troop.Name} - Skipped: Slot locked by relation (unlocked slots count: {slotsCount}).");
-                        continue;
-                    }
-
-                    if (MatchTroopFilter(troop, settings, notable.Name.ToString(), slot))
+                    if (MatchTroopFilter(troop, settings))
                     {
                         orders.Add(new RecruitOrder(notable, slot));
                     }
@@ -285,7 +278,7 @@ namespace PartyManager
             return orders;
         }
 
-        private bool MatchTroopFilter(CharacterObject troop, Settings settings, string notableName, int slotIndex)
+        private bool MatchTroopFilter(CharacterObject troop, Settings settings)
         {
             // Noble / Regular Troop Class check
             var leafTroops = new List<CharacterObject>();
@@ -293,29 +286,13 @@ namespace PartyManager
             int maxLeafTier = leafTroops.Count > 0 ? leafTroops.Max(l => l.Tier) : troop.Tier;
 
             bool isNoble = maxLeafTier >= 6;
-            if (isNoble && !settings.RecruitNoble)
-            {
-                SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", $"Notable: {notableName}, Slot Index: {slotIndex}, Troop: {troop.Name} - Skipped: Is noble, but RecruitNoble is disabled.");
-                return false;
-            }
-            if (!isNoble && !settings.RecruitRegular)
-            {
-                SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", $"Notable: {notableName}, Slot Index: {slotIndex}, Troop: {troop.Name} - Skipped: Is regular, but RecruitRegular is disabled.");
-                return false;
-            }
+            if (isNoble && !settings.RecruitNoble) return false;
+            if (!isNoble && !settings.RecruitRegular) return false;
 
             // Combat Mounted / Foot check
             bool isMounted = troop.IsMounted;
-            if (isMounted && !settings.RecruitMounted)
-            {
-                SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", $"Notable: {notableName}, Slot Index: {slotIndex}, Troop: {troop.Name} - Skipped: Is mounted, but RecruitMounted is disabled.");
-                return false;
-            }
-            if (!isMounted && !settings.RecruitFoot)
-            {
-                SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", $"Notable: {notableName}, Slot Index: {slotIndex}, Troop: {troop.Name} - Skipped: Is foot, but RecruitFoot is disabled.");
-                return false;
-            }
+            if (isMounted && !settings.RecruitMounted) return false;
+            if (!isMounted && !settings.RecruitFoot) return false;
 
             // Tier evaluation (final leaf evaluation or purchase evaluation)
             if (settings.EvalTimeSetting == EvalTime.FinalUpgradeTier)
@@ -335,28 +312,15 @@ namespace PartyManager
                         }
                     }
                 }
-                if (!leafMatched)
-                {
-                    SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", $"Notable: {notableName}, Slot Index: {slotIndex}, Troop: {troop.Name} - Skipped: Final upgrade tier/archetype filter mismatch.");
-                    return false;
-                }
+                if (!leafMatched) return false;
             }
             else
             {
                 // Purchase time evaluation
-                if (troop.Tier < settings.MinRecruitTier || troop.Tier > settings.MaxRecruitTier)
-                {
-                    SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", $"Notable: {notableName}, Slot Index: {slotIndex}, Troop: {troop.Name} - Skipped: Tier {troop.Tier} is out of range ({settings.MinRecruitTier}-{settings.MaxRecruitTier}).");
-                    return false;
-                }
-                if (!MatchArchetype(troop, settings))
-                {
-                    SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", $"Notable: {notableName}, Slot Index: {slotIndex}, Troop: {troop.Name} - Skipped: Combat archetype filter mismatch.");
-                    return false;
-                }
+                if (troop.Tier < settings.MinRecruitTier || troop.Tier > settings.MaxRecruitTier) return false;
+                if (!MatchArchetype(troop, settings)) return false;
             }
 
-            SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", $"Notable: {notableName}, Slot Index: {slotIndex}, Troop: {troop.Name} - Matched and queued.");
             return true;
         }
 
@@ -497,7 +461,7 @@ namespace PartyManager
                 {
                     var troop = data.TroopType;
                     int count = data.Number;
-                    if (MatchTroopFilter(troop, settings, "Tavern Mercenary", -1))
+                    if (MatchTroopFilter(troop, settings))
                     {
                         int cost = (int)Campaign.Current.Models.PartyWageModel.GetTroopRecruitmentCost(troop, Hero.MainHero, false).ResultNumber;
                         int budget = Hero.MainHero.Gold - 1000;

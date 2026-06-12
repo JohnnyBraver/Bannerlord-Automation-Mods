@@ -248,7 +248,9 @@ namespace SettlementAutomationCore
                         totalCount += troopMap.Values.Sum();
                         notableSummaries.Add($"{notable.Name} ({string.Join(", ", troopParts)})");
                     }
-                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Recruited: {string.Join(", ", notableSummaries)} (Total: {totalCount})"));
+                    string msg = $"Recruited in {settlement.Name}: {string.Join(", ", notableSummaries)} (Total: {totalCount})";
+                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
+                    Helpers.Logger.WriteLog("SettlementAutomationCore", msg);
                 }
 
                 // ----------------------------------------------------
@@ -272,6 +274,7 @@ namespace SettlementAutomationCore
                     try
                     {
                         var donatorRoster = TroopRoster.CreateDummyTroopRoster();
+                        var donatedLogParts = new List<string>();
                         foreach (var order in garrisonOrders)
                         {
                             if (order.Troop != null && order.Amount > 0)
@@ -283,6 +286,7 @@ namespace SettlementAutomationCore
                                     MobileParty.MainParty.MemberRoster.AddToCounts(order.Troop, -toDonate);
                                     garrisonParty.MemberRoster.AddToCounts(order.Troop, toDonate);
                                     donatorRoster.AddToCounts(order.Troop, toDonate);
+                                    donatedLogParts.Add($"{toDonate}x {order.Troop.Name}");
                                     InformationManager.DisplayMessage(new InformationMessage($"[Automation] Donated {toDonate}x {order.Troop.Name} to Garrison"));
                                 }
                             }
@@ -290,6 +294,7 @@ namespace SettlementAutomationCore
                         if (donatorRoster.Count > 0)
                         {
                             CampaignEventDispatcher.Instance.OnTroopGivenToSettlement(Hero.MainHero, settlement, donatorRoster);
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Donated to Garrison at {settlement.Name}: {string.Join(", ", donatedLogParts)}");
                         }
                     }
                     catch {}
@@ -315,6 +320,7 @@ namespace SettlementAutomationCore
                     try
                     {
                         var flattenedPrisoners = new FlattenedTroopRoster();
+                        var dungeonLogParts = new List<string>();
                         foreach (var order in dungeonOrders)
                         {
                             if (order.Prisoner != null && order.Amount > 0)
@@ -326,6 +332,7 @@ namespace SettlementAutomationCore
                                     MobileParty.MainParty.PrisonRoster.AddToCounts(order.Prisoner, -toDonate);
                                     settlement.Party.PrisonRoster.AddToCounts(order.Prisoner, toDonate);
                                     flattenedPrisoners.Add(order.Prisoner, toDonate, 0);
+                                    dungeonLogParts.Add($"{toDonate}x {order.Prisoner.Name}");
                                     InformationManager.DisplayMessage(new InformationMessage($"[Automation] Donated {toDonate}x {order.Prisoner.Name} to Dungeon"));
                                 }
                             }
@@ -333,6 +340,7 @@ namespace SettlementAutomationCore
                         if (flattenedPrisoners.Count() > 0)
                         {
                             CampaignEventDispatcher.Instance.OnPrisonerDonatedToSettlement(MobileParty.MainParty, flattenedPrisoners, settlement);
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Donated to Dungeon at {settlement.Name}: {string.Join(", ", dungeonLogParts)}");
                         }
                     }
                     catch {}

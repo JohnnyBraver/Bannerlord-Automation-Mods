@@ -45,6 +45,12 @@ namespace PrisonerManager
                 orders.Add(new RansomOrder(prisoner, el.Number));
             }
 
+            if (orders.Count > 0)
+            {
+                var summary = string.Join(", ", orders.Select(o => $"{o.Amount}x {o.Prisoner.Name}"));
+                SettlementAutomationCore.Helpers.Logger.WriteLog("PrisonerManager", $"Ransom Orders compiled for {settlement.Name}: {summary}");
+            }
+
             return orders;
         }
 
@@ -97,6 +103,12 @@ namespace PrisonerManager
             foreach (var candidate in candidates)
             {
                 orders.Add(new DungeonOrder(candidate.Prisoner, candidate.Amount));
+            }
+
+            if (orders.Count > 0)
+            {
+                var summary = string.Join(", ", orders.Select(o => $"{o.Amount}x {o.Prisoner.Name}"));
+                SettlementAutomationCore.Helpers.Logger.WriteLog("PrisonerManager", $"Dungeon Donation Orders compiled for {settlement.Name}: {summary}");
             }
 
             return orders;
