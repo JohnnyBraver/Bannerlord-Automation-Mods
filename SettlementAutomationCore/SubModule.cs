@@ -439,6 +439,19 @@ namespace SettlementAutomationCore
                         }
                     }
                 }
+
+                // ----------------------------------------------------
+                // Step 7: Fief Management Phase
+                // ----------------------------------------------------
+                var fiefRegistrations = AutomationRegistry.ActiveFiefProviders;
+                foreach (var reg in fiefRegistrations)
+                {
+                    try
+                    {
+                        reg.Provider.ProcessFiefAutomation(MobileParty.MainParty, settlement);
+                    }
+                    catch {}
+                }
             }
             catch {}
         }

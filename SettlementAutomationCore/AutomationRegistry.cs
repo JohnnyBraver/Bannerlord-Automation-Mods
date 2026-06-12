@@ -192,6 +192,12 @@ namespace SettlementAutomationCore
         List<DungeonOrder> GetDungeonOrders(MobileParty party, Settlement settlement);
     }
 
+    public interface IFiefAutomationProvider
+    {
+        string ProviderName { get; }
+        void ProcessFiefAutomation(MobileParty party, Settlement settlement);
+    }
+
     // ----------------------------------------------------
     // Automation Registry
     // ----------------------------------------------------
@@ -202,6 +208,7 @@ namespace SettlementAutomationCore
         private static readonly List<ProviderRegistration<IGarrisonOrderProvider>> GarrisonProviders = new();
         private static readonly List<ProviderRegistration<IRansomOrderProvider>> RansomProviders = new();
         private static readonly List<ProviderRegistration<IDungeonOrderProvider>> DungeonProviders = new();
+        private static readonly List<ProviderRegistration<IFiefAutomationProvider>> FiefProviders = new();
 
         // --- Trade Providers ---
         public static void RegisterTradeProvider(ITradeOrderProvider provider)
@@ -359,6 +366,38 @@ namespace SettlementAutomationCore
                 lock (DungeonProviders)
                 {
                     return new List<ProviderRegistration<IDungeonOrderProvider>>(DungeonProviders);
+                }
+            }
+        }
+
+        // --- Fief Providers ---
+        public static void RegisterFiefProvider(IFiefAutomationProvider provider)
+        {
+            lock (FiefProviders)
+            {
+                if (!FiefProviders.Any(r => EqualityComparer<IFiefAutomationProvider>.Default.Equals(r.Provider, provider)))
+                {
+                    string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
+                    FiefProviders.Add(new ProviderRegistration<IFiefAutomationProvider>(provider, provider.ProviderName, callingAssembly));
+                }
+            }
+        }
+
+        public static void UnregisterFiefProvider(IFiefAutomationProvider provider)
+        {
+            lock (FiefProviders)
+            {
+                FiefProviders.RemoveAll(r => EqualityComparer<IFiefAutomationProvider>.Default.Equals(r.Provider, provider));
+            }
+        }
+
+        public static IReadOnlyList<ProviderRegistration<IFiefAutomationProvider>> ActiveFiefProviders
+        {
+            get
+            {
+                lock (FiefProviders)
+                {
+                    return new List<ProviderRegistration<IFiefAutomationProvider>>(FiefProviders);
                 }
             }
         }
