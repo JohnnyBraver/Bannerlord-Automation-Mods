@@ -134,7 +134,7 @@ namespace PartyManager
             }
 
             // Auto-Buy Mounts (Phase 3)
-            if (settings.AutoBuyMounts && Hero.MainHero != null && Hero.MainHero.Gold >= settings.DoingWellGoldReserveMounts)
+            if (settings.AutoBuyMounts && Hero.MainHero != null && Hero.MainHero.Gold >= settings.MinGoldForMounts)
             {
                 CalculatePartyAnimals(party, out int infantry, out int cavalry, out int riding, out int pack, out int livestock,
                     out _, out _, out _);
@@ -161,7 +161,7 @@ namespace PartyManager
                     // Sort mounts by price ascending
                     buyableMounts = buyableMounts.OrderBy(m => m.Price).ToList();
 
-                    int budget = Hero.MainHero.Gold - settings.DoingWellGoldReserveMounts;
+                    int budget = Hero.MainHero.Gold - settings.MinGoldForMounts;
                     foreach (var m in buyableMounts)
                     {
                         if (mountsNeeded <= 0 || budget <= 0) break;
@@ -214,7 +214,7 @@ namespace PartyManager
                             foodItems = foodItems.OrderBy(f => f.Price).ToList();
 
                             int syncedDaysLimit = GetSyncedFoodDaysLimit();
-                            bool isSurvivalMode = partySize < settings.MinPartySizeForVariety || Hero.MainHero.Gold < settings.DoingWellGoldReserveFoodVariety;
+                            bool isSurvivalMode = partySize < settings.MinPartySizeForVariety || Hero.MainHero.Gold < settings.MinGoldForVariety;
 
                             var playerInventory = currentLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
 

@@ -149,13 +149,13 @@ namespace PartyManager
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 2)]
         public int MinPartySizeForVariety { get; set; } = 20;
 
-        [SettingPropertyInteger("Doing Well Gold Reserve (Mounts)", 1000, 50000, RequireRestart = false, HintText = "Minimum gold reserve required to buy mounts. Below this, mount buying is skipped.")]
+        [SettingPropertyInteger("Min Gold for Mounts", 1000, 50000, RequireRestart = false, HintText = "Minimum gold reserve required to buy mounts. Below this, mount buying is skipped.")]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 2)]
-        public int DoingWellGoldReserveMounts { get; set; } = 10000;
+        public int MinGoldForMounts { get; set; } = 10000;
 
-        [SettingPropertyInteger("Doing Well Gold Reserve (Food Variety)", 500, 20000, RequireRestart = false, HintText = "Minimum gold reserve required to buy food varieties. Below this, only survival food is bought.")]
+        [SettingPropertyInteger("Min Gold for Variety", 500, 20000, RequireRestart = false, HintText = "Minimum gold reserve required to buy food varieties. Below this, only survival food is bought.")]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 2)]
-        public int DoingWellGoldReserveFoodVariety { get; set; } = 3000;
+        public int MinGoldForVariety { get; set; } = 3000;
 
         [SettingPropertyBool("Auto-Buy Riding Mounts for Speed", RequireRestart = false, HintText = "Automatically buy mounts for foot soldiers to upgrade party speed.")]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 2)]
