@@ -452,6 +452,7 @@ namespace SettlementAutomationCore
         public override void RegisterEvents()
         {
             CampaignEvents.SettlementEntered.AddNonSerializedListener(this, OnSettlementEntered);
+            CampaignEvents.OnSettlementLeftEvent.AddNonSerializedListener(this, OnSettlementLeft);
         }
 
         private void OnSettlementEntered(MobileParty party, Settlement settlement, Hero hero)
@@ -463,6 +464,14 @@ namespace SettlementAutomationCore
                     _lastVisitedSettlementId = settlement.StringId;
                     SubModule.QueueBackgroundTrade(settlement);
                 }
+            }
+        }
+
+        private void OnSettlementLeft(MobileParty party, Settlement settlement)
+        {
+            if (party == MobileParty.MainParty && settlement != null)
+            {
+                _lastVisitedSettlementId = "";
             }
         }
 
