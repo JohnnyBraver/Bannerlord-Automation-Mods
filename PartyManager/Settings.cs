@@ -83,6 +83,22 @@ namespace PartyManager
         public override string ToString() => _name;
     }
 
+    public enum RegularRecruitPolicy
+    {
+        None,
+        MatchFilters,
+        Any,
+        AnyIgnoreTier
+    }
+
+    public class RegularRecruitPolicyOption
+    {
+        private readonly string _name;
+        public RegularRecruitPolicy Value { get; }
+        public RegularRecruitPolicyOption(string name, RegularRecruitPolicy value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
     public enum PrisonerKeepPolicy
     {
         RansomAll,
@@ -158,6 +174,14 @@ namespace PartyManager
             new NobleRecruitPolicyOption("Any Noble (Ignore Tier Limits)", NobleRecruitPolicy.AnyIgnoreTier)
         };
 
+        private static readonly IReadOnlyList<RegularRecruitPolicyOption> RegularRecruitPolicyOptions = new List<RegularRecruitPolicyOption>
+        {
+            new RegularRecruitPolicyOption("Do Not Recruit Regulars", RegularRecruitPolicy.None),
+            new RegularRecruitPolicyOption("Match Recruitment Filters", RegularRecruitPolicy.MatchFilters),
+            new RegularRecruitPolicyOption("Any Regular (Respect Tier Limits)", RegularRecruitPolicy.Any),
+            new RegularRecruitPolicyOption("Any Regular (Ignore Tier Limits)", RegularRecruitPolicy.AnyIgnoreTier)
+        };
+
         private static readonly IReadOnlyList<PrisonerKeepPolicyOption> PrisonerKeepPolicyOptions = new List<PrisonerKeepPolicyOption>
         {
             new PrisonerKeepPolicyOption("Ransom All", PrisonerKeepPolicy.RansomAll),
@@ -174,212 +198,212 @@ namespace PartyManager
         };
 
         // --- Recruitment settings ---
-        [SettingPropertyBool("Auto-Recruit Volunteers", RequireRestart = false, HintText = "Enable auto-recruitment from town/village notables.")]
+        [SettingPropertyBool("Auto-Recruit Volunteers", RequireRestart = false, HintText = "Enable auto-recruitment from town/village notables.", Order = 1)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public bool AutoRecruitVolunteers { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Regular Troops", RequireRestart = false, HintText = "Recruit regular (non-noble) volunteer troops.")]
+        [SettingPropertyDropdown("Regular Recruitment Policy", RequireRestart = false, HintText = "Control how regular troops are recruited from notables.", Order = 2)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
-        public bool RecruitRegularTroops { get; set; } = true;
+        public Dropdown<RegularRecruitPolicyOption> RegularRecruitDropdown { get; set; } = new Dropdown<RegularRecruitPolicyOption>(RegularRecruitPolicyOptions, 1); // Default: Match Recruitment Filters
 
-        [SettingPropertyDropdown("Noble Recruitment Policy", RequireRestart = false, HintText = "Control how noble troops are recruited from notables.")]
+        [SettingPropertyDropdown("Noble Recruitment Policy", RequireRestart = false, HintText = "Control how noble troops are recruited from notables.", Order = 3)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public Dropdown<NobleRecruitPolicyOption> NobleRecruitDropdown { get; set; } = new Dropdown<NobleRecruitPolicyOption>(NobleRecruitPolicyOptions, 1); // Default: Match Recruitment Filters
 
-        [SettingPropertyDropdown("Mercenary Recruitment Policy", RequireRestart = false, HintText = "Control how mercenary troops are recruited from taverns.")]
+        [SettingPropertyDropdown("Mercenary Recruitment Policy", RequireRestart = false, HintText = "Control how mercenary troops are recruited from taverns.", Order = 4)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public Dropdown<MercenaryRecruitPolicyOption> MercenaryRecruitDropdown { get; set; } = new Dropdown<MercenaryRecruitPolicyOption>(MercenaryRecruitPolicyOptions, 0); // Default: Do Not Recruit Mercenaries
 
-        [SettingPropertyInteger("Min Tier to Recruit", 1, 6, RequireRestart = false, HintText = "Minimum troop tier to buy.")]
+        [SettingPropertyInteger("Min Tier to Recruit", 1, 6, RequireRestart = false, HintText = "Minimum troop tier to buy.", Order = 5)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public int MinRecruitTier { get; set; } = 1;
 
-        [SettingPropertyInteger("Max Tier to Recruit", 1, 6, RequireRestart = false, HintText = "Maximum troop tier to buy.")]
+        [SettingPropertyInteger("Max Tier to Recruit", 1, 6, RequireRestart = false, HintText = "Maximum troop tier to buy.", Order = 6)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public int MaxRecruitTier { get; set; } = 6;
 
-        [SettingPropertyDropdown("Evaluation Target Tier", RequireRestart = false, HintText = "Evaluate filters against the troop's current purchase tier or their final upgrade tier.")]
+        [SettingPropertyDropdown("Evaluation Target Tier", RequireRestart = false, HintText = "Evaluate filters against the troop's current purchase tier or their final upgrade tier.", Order = 7)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public Dropdown<EvalTimeOption> EvalTimeDropdown { get; set; } = new Dropdown<EvalTimeOption>(EvalTimeOptions, 0);
 
         // --- Recruitment Cultures ---
-        [SettingPropertyBool("Recruit Empire", RequireRestart = false, HintText = "Recruit Empire culture troops.")]
+        [SettingPropertyBool("Recruit Empire", RequireRestart = false, HintText = "Recruit Empire culture troops.", Order = 1)]
         [SettingPropertyGroup("Recruitment Filters - Cultures", GroupOrder = 4)]
         public bool RecruitEmpire { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Vlandia", RequireRestart = false, HintText = "Recruit Vlandia culture troops.")]
+        [SettingPropertyBool("Recruit Vlandia", RequireRestart = false, HintText = "Recruit Vlandia culture troops.", Order = 2)]
         [SettingPropertyGroup("Recruitment Filters - Cultures", GroupOrder = 4)]
         public bool RecruitVlandia { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Battania", RequireRestart = false, HintText = "Recruit Battania culture troops.")]
+        [SettingPropertyBool("Recruit Battania", RequireRestart = false, HintText = "Recruit Battania culture troops.", Order = 3)]
         [SettingPropertyGroup("Recruitment Filters - Cultures", GroupOrder = 4)]
         public bool RecruitBattania { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Sturgia", RequireRestart = false, HintText = "Recruit Sturgia culture troops.")]
+        [SettingPropertyBool("Recruit Sturgia", RequireRestart = false, HintText = "Recruit Sturgia culture troops.", Order = 4)]
         [SettingPropertyGroup("Recruitment Filters - Cultures", GroupOrder = 4)]
         public bool RecruitSturgia { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Khuzait", RequireRestart = false, HintText = "Recruit Khuzait culture troops.")]
+        [SettingPropertyBool("Recruit Khuzait", RequireRestart = false, HintText = "Recruit Khuzait culture troops.", Order = 5)]
         [SettingPropertyGroup("Recruitment Filters - Cultures", GroupOrder = 4)]
         public bool RecruitKhuzait { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Aserai", RequireRestart = false, HintText = "Recruit Aserai culture troops.")]
+        [SettingPropertyBool("Recruit Aserai", RequireRestart = false, HintText = "Recruit Aserai culture troops.", Order = 6)]
         [SettingPropertyGroup("Recruitment Filters - Cultures", GroupOrder = 4)]
         public bool RecruitAserai { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Other Cultures", RequireRestart = false, HintText = "Recruit troops from other cultures (e.g. minor factions, modded cultures).")]
+        [SettingPropertyBool("Recruit Other Cultures", RequireRestart = false, HintText = "Recruit troops from other cultures (e.g. minor factions, modded cultures).", Order = 7)]
         [SettingPropertyGroup("Recruitment Filters - Cultures", GroupOrder = 4)]
         public bool RecruitOtherCultures { get; set; } = true;
 
         // --- Recruitment Roles ---
-        [SettingPropertyBool("Recruit Shield Infantry", RequireRestart = false, HintText = "Allow recruiting frontline foot soldiers with shields.")]
+        [SettingPropertyBool("Recruit Shield Infantry", RequireRestart = false, HintText = "Allow recruiting frontline foot soldiers with shields.", Order = 1)]
         [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
         public bool RecruitShieldInfantry { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Shock Infantry", RequireRestart = false, HintText = "Allow recruiting two-handed and polearm foot soldiers with no shields.")]
+        [SettingPropertyBool("Recruit Shock Infantry", RequireRestart = false, HintText = "Allow recruiting two-handed and polearm foot soldiers with no shields.", Order = 2)]
         [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
         public bool RecruitShockInfantry { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Skirmishers", RequireRestart = false, HintText = "Allow recruiting foot soldiers carrying throwing weapons.")]
+        [SettingPropertyBool("Recruit Skirmishers", RequireRestart = false, HintText = "Allow recruiting foot soldiers carrying throwing weapons.", Order = 3)]
         [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
         public bool RecruitSkirmishers { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Foot Archers", RequireRestart = false, HintText = "Allow recruiting foot archers carrying bows.")]
+        [SettingPropertyBool("Recruit Foot Archers", RequireRestart = false, HintText = "Allow recruiting foot archers carrying bows.", Order = 4)]
         [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
         public bool RecruitFootArchers { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Crossbowmen", RequireRestart = false, HintText = "Allow recruiting foot soldiers carrying crossbows.")]
+        [SettingPropertyBool("Recruit Crossbowmen", RequireRestart = false, HintText = "Allow recruiting foot soldiers carrying crossbows.", Order = 5)]
         [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
         public bool RecruitCrossbowmen { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Melee Cavalry", RequireRestart = false, HintText = "Allow recruiting mounted melee soldiers (lancers, light cavalry)..")]
+        [SettingPropertyBool("Recruit Melee Cavalry", RequireRestart = false, HintText = "Allow recruiting mounted melee soldiers (lancers, light cavalry)..", Order = 6)]
         [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
         public bool RecruitMeleeCavalry { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Horse Archers", RequireRestart = false, HintText = "Allow recruiting mounted ranged soldiers (bow/crossbow).")]
+        [SettingPropertyBool("Recruit Horse Archers", RequireRestart = false, HintText = "Allow recruiting mounted ranged soldiers (bow/crossbow).", Order = 7)]
         [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
         public bool RecruitHorseArchers { get; set; } = true;
 
         // --- Mount & Herding settings ---
-        [SettingPropertyBool("Auto-Buy Food to Restock", RequireRestart = false, HintText = "Automatically buy food to maintain supply for soldiers.")]
+        [SettingPropertyBool("Auto-Buy Food to Restock", RequireRestart = false, HintText = "Automatically buy food to maintain supply for soldiers.", Order = 1)]
         [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
         public bool AutoBuyFood { get; set; } = true;
 
-        [SettingPropertyInteger("Party Food Days to Keep", 1, 100, RequireRestart = false, HintText = "Maintain at least this many days of food supply for the party.")]
+        [SettingPropertyInteger("Party Food Days to Keep", 1, 100, RequireRestart = false, HintText = "Maintain at least this many days of food supply for the party.", Order = 2)]
         [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
         public int PartyFoodDaysToKeep { get; set; } = 10;
 
-        [SettingPropertyInteger("Min Party Size for Variety", 1, 100, RequireRestart = false, HintText = "Minimum party size before the mod starts buying a variety of foods for Steward XP. Below this size, the mod only buys the cheapest food to prevent starvation.")]
+        [SettingPropertyInteger("Min Party Size for Variety", 1, 100, RequireRestart = false, HintText = "Minimum party size before the mod starts buying a variety of foods for Steward XP. Below this size, the mod only buys the cheapest food to prevent starvation.", Order = 3)]
         [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
         public int MinPartySizeForVariety { get; set; } = 20;
 
-        [SettingPropertyInteger("Min Gold for Mounts", 1000, 50000, RequireRestart = false, HintText = "Minimum gold reserve required to buy mounts. Below this, mount buying is skipped.")]
-        [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
-        public int MinGoldForMounts { get; set; } = 10000;
-
-        [SettingPropertyInteger("Min Gold for Variety", 500, 20000, RequireRestart = false, HintText = "Minimum gold reserve required to buy food varieties. Below this, only survival food is bought.")]
+        [SettingPropertyInteger("Min Gold for Variety", 500, 20000, RequireRestart = false, HintText = "Minimum gold reserve required to buy food varieties. Below this, only survival food is bought.", Order = 4)]
         [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
         public int MinGoldForVariety { get; set; } = 3000;
 
-        [SettingPropertyBool("Auto-Buy Riding Mounts for Speed", RequireRestart = false, HintText = "Automatically buy mounts for foot soldiers to upgrade party speed.")]
+        [SettingPropertyBool("Auto-Buy Riding Mounts for Speed", RequireRestart = false, HintText = "Automatically buy mounts for foot soldiers to upgrade party speed.", Order = 5)]
         [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
         public bool AutoBuyMounts { get; set; } = true;
 
-        [SettingPropertyBool("Herding Penalty Protection", RequireRestart = false, HintText = "Automatically sell or slaughter excess animals to avoid herding speed penalty.")]
+        [SettingPropertyInteger("Min Gold for Mounts", 1000, 50000, RequireRestart = false, HintText = "Minimum gold reserve required to buy mounts. Below this, mount buying is skipped.", Order = 6)]
+        [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
+        public int MinGoldForMounts { get; set; } = 10000;
+
+        [SettingPropertyBool("Herding Penalty Protection", RequireRestart = false, HintText = "Automatically sell or slaughter excess animals to avoid herding speed penalty.", Order = 7)]
         [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
         public bool PreventHerdingPenalty { get; set; } = true;
 
-        [SettingPropertyBool("Slaughter Animals for Herding", RequireRestart = false, HintText = "Slaughter livestock and pack animals instead of selling them when herding limits are exceeded in settlements.")]
+        [SettingPropertyBool("Slaughter Animals for Herding", RequireRestart = false, HintText = "Slaughter livestock and pack animals instead of selling them when herding limits are exceeded in settlements.", Order = 8)]
         [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
         public bool SlaughterAnimalsForHerding { get; set; } = true;
 
-        [SettingPropertyDropdown("Sell/Slaughter Riding Mounts", RequireRestart = false, HintText = "Control when the mod can sell or slaughter riding mounts.")]
+        [SettingPropertyDropdown("Sell/Slaughter Riding Mounts", RequireRestart = false, HintText = "Control when the mod can sell or slaughter riding mounts.", Order = 9)]
         [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
         public Dropdown<SellRidingMountsOption> SellRidingMountsDropdown { get; set; } = new Dropdown<SellRidingMountsOption>(SellRidingMountsOptions, 1);
 
-        [SettingPropertyDropdown("Post-Battle Auto-Slaughter", RequireRestart = false, HintText = "Automatically slaughter animals after a battle to instantly clear herding penalties.")]
+        [SettingPropertyDropdown("Post-Battle Auto-Slaughter", RequireRestart = false, HintText = "Automatically slaughter animals after a battle to instantly clear herding penalties.", Order = 10)]
         [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
         public Dropdown<PostBattleSlaughterOption> PostBattleSlaughterDropdown { get; set; } = new Dropdown<PostBattleSlaughterOption>(PostBattleSlaughterOptions, 2);
 
         // --- Garrison Donation Settings ---
-        [SettingPropertyBool("Enable Garrison Donation", RequireRestart = false, HintText = "Over-recruit troops and donate them to garrison to farm influence.")]
+        [SettingPropertyBool("Enable Garrison Donation", RequireRestart = false, HintText = "Over-recruit troops and donate them to garrison to farm influence.", Order = 1)]
         [SettingPropertyGroup("Garrison Donation", GroupOrder = 1)]
         public bool EnableGarrisonDonation { get; set; } = false;
 
-        [SettingPropertyInteger("Max Garrison Roster Size", 50, 1000, RequireRestart = false, HintText = "Do not donate to garrison if it has reached or exceeded this capacity.")]
+        [SettingPropertyInteger("Max Garrison Roster Size", 50, 1000, RequireRestart = false, HintText = "Do not donate to garrison if it has reached or exceeded this capacity.", Order = 2)]
         [SettingPropertyGroup("Garrison Donation", GroupOrder = 1)]
         public int MaxGarrisonSize { get; set; } = 400;
 
-        [SettingPropertyInteger("Min Garrison Donation Tier", 1, 6, RequireRestart = false, HintText = "Minimum tier of troop to donate to garrison.")]
+        [SettingPropertyInteger("Min Garrison Donation Tier", 1, 6, RequireRestart = false, HintText = "Minimum tier of troop to donate to garrison.", Order = 3)]
         [SettingPropertyGroup("Garrison Donation", GroupOrder = 1)]
         public int MinDonationTier { get; set; } = 1;
 
         // --- Prisoner Keep Policies & Limits ---
-        [SettingPropertyBool("Keep Hero Prisoners", RequireRestart = false, HintText = "Never automatically ransom or donate hero/lord prisoners.")]
+        [SettingPropertyBool("Keep Hero Prisoners", RequireRestart = false, HintText = "Never automatically ransom or donate hero/lord prisoners.", Order = 1)]
         [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
         public bool KeepHeroPrisoners { get; set; } = true;
 
-        [SettingPropertyDropdown("Noble Prisoner Keep Policy", RequireRestart = false, HintText = "Keep policy for noble/elite prisoners.")]
+        [SettingPropertyDropdown("Noble Prisoner Keep Policy", RequireRestart = false, HintText = "Keep policy for noble/elite prisoners.", Order = 2)]
         [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
         public Dropdown<PrisonerKeepPolicyOption> NoblePrisonerKeepPolicyDropdown { get; set; } = new Dropdown<PrisonerKeepPolicyOption>(PrisonerKeepPolicyOptions, 2); // Keep Selected
 
-        [SettingPropertyDropdown("Regular Prisoner Keep Policy", RequireRestart = false, HintText = "Keep policy for standard regular prisoners.")]
+        [SettingPropertyDropdown("Regular Prisoner Keep Policy", RequireRestart = false, HintText = "Keep policy for standard regular prisoners.", Order = 3)]
         [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
         public Dropdown<PrisonerKeepPolicyOption> RegularPrisonerKeepPolicyDropdown { get; set; } = new Dropdown<PrisonerKeepPolicyOption>(PrisonerKeepPolicyOptions, 2); // Keep Selected
 
-        [SettingPropertyDropdown("Bandit Prisoner Keep Policy", RequireRestart = false, HintText = "Keep policy for bandit prisoners.")]
+        [SettingPropertyDropdown("Bandit Prisoner Keep Policy", RequireRestart = false, HintText = "Keep policy for bandit prisoners.", Order = 4)]
         [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
         public Dropdown<BanditPrisonerKeepPolicyOption> BanditPrisonerKeepPolicyDropdown { get; set; } = new Dropdown<BanditPrisonerKeepPolicyOption>(BanditPrisonerKeepPolicyOptions, 0); // Ransom All
 
-        [SettingPropertyBool("Bypass Noble Prisoner Tier Limit", RequireRestart = false, HintText = "If enabled, noble prisoners (and noble-upgrading bandits if kept) will bypass the min tier keep limit.")]
+        [SettingPropertyBool("Bypass Noble Prisoner Tier Limit", RequireRestart = false, HintText = "If enabled, noble prisoners (and noble-upgrading bandits if kept) will bypass the min tier keep limit.", Order = 5)]
         [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
         public bool BypassNoblePrisonerTierLimit { get; set; } = true;
 
-        [SettingPropertyInteger("Min Prisoner Tier to Keep", 1, 6, RequireRestart = false, HintText = "Minimum tier of regular/bandit prisoner to keep for recruitment.")]
+        [SettingPropertyInteger("Min Prisoner Tier to Keep", 1, 6, RequireRestart = false, HintText = "Minimum tier of regular/bandit prisoner to keep for recruitment.", Order = 6)]
         [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
         public int MinPrisonerTierToKeep { get; set; } = 4;
 
-        [SettingPropertyBool("Perk-Based Prisoner Keep", RequireRestart = false, HintText = "Automatically override keep tier filters based on active Level 50 Leadership perks (Stout Defender keeping T4-6, Fervent Attacker keeping T1-3).")]
+        [SettingPropertyBool("Perk-Based Prisoner Keep", RequireRestart = false, HintText = "Automatically override keep tier filters based on active Level 50 Leadership perks (Stout Defender keeping T4-6, Fervent Attacker keeping T1-3).", Order = 7)]
         [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
         public bool UsePerkBasedPrisonerKeep { get; set; } = true;
 
         // --- Prisoner Ransom Settings ---
-        [SettingPropertyBool("Auto-Ransom Prisoners", RequireRestart = false, HintText = "Automatically ransom standard prisoners for gold in taverns.")]
+        [SettingPropertyBool("Auto-Ransom Prisoners", RequireRestart = false, HintText = "Automatically ransom standard prisoners for gold in taverns.", Order = 1)]
         [SettingPropertyGroup("Prisoners", GroupOrder = 0)]
         public bool AutoRansomPrisoners { get; set; } = true;
 
         // --- Prisoner Capacity Alerts ---
-        [SettingPropertyInteger("Prisoner Capacity Alert Threshold (%)", 0, 100, RequireRestart = false, HintText = "Trigger alert if total prisoners exceed this percentage of capacity after automation. Set to 0 to disable.")]
+        [SettingPropertyInteger("Prisoner Capacity Alert Threshold (%)", 0, 100, RequireRestart = false, HintText = "Trigger alert if total prisoners exceed this percentage of capacity after automation. Set to 0 to disable.", Order = 1)]
         [SettingPropertyGroup("Prisoners/Capacity Alerts", GroupOrder = 0)]
         public int PrisonerCapacityAlertPercent { get; set; } = 33;
 
-        [SettingPropertyInteger("Prisoner Stack Alert Capacity Limit (%)", 0, 100, RequireRestart = false, HintText = "Trigger alert if any single prisoner stack exceeds this percentage of total prisoner capacity. Set to 0 to disable.")]
+        [SettingPropertyInteger("Prisoner Stack Alert Capacity Limit (%)", 0, 100, RequireRestart = false, HintText = "Trigger alert if any single prisoner stack exceeds this percentage of total prisoner capacity. Set to 0 to disable.", Order = 2)]
         [SettingPropertyGroup("Prisoners/Capacity Alerts", GroupOrder = 0)]
         public int PrisonerStackAlertPercentLimit { get; set; } = 10;
 
         // --- Prisoner Donation Settings ---
-        [SettingPropertyBool("Auto-Donate Prisoners to Dungeon", RequireRestart = false, HintText = "Automatically donate prisoners to friendly town/castle dungeons to farm influence/XP.")]
+        [SettingPropertyBool("Auto-Donate Prisoners to Dungeon", RequireRestart = false, HintText = "Automatically donate prisoners to friendly town/castle dungeons to farm influence/XP.", Order = 1)]
         [SettingPropertyGroup("Prisoners/Donation", GroupOrder = 0)]
         public bool AutoDonatePrisoners { get; set; } = false;
 
-        [SettingPropertyInteger("Min Tier to Donate", 1, 6, RequireRestart = false, HintText = "Minimum tier of prisoner to donate.")]
+        [SettingPropertyInteger("Min Tier to Donate", 1, 6, RequireRestart = false, HintText = "Minimum tier of prisoner to donate.", Order = 2)]
         [SettingPropertyGroup("Prisoners/Donation", GroupOrder = 0)]
         public int MinDonateTier { get; set; } = 3;
 
-        [SettingPropertyBool("Prioritize High Tier for Donation", RequireRestart = false, HintText = "Donate higher tier prisoners first to maximize influence return.")]
+        [SettingPropertyBool("Prioritize High Tier for Donation", RequireRestart = false, HintText = "Donate higher tier prisoners first to maximize influence return.", Order = 3)]
         [SettingPropertyGroup("Prisoners/Donation", GroupOrder = 0)]
         public bool PrioritizeHighTierDonation { get; set; } = true;
 
         // --- Prisoner Discard Settings ---
-        [SettingPropertyBool("Auto Discard Post-Battle Excess Prisoners", RequireRestart = false, HintText = "Automatically dump/discard low tier prisoners post-battle if player party is over prisoner capacity.")]
+        [SettingPropertyBool("Auto Discard Post-Battle Excess Prisoners", RequireRestart = false, HintText = "Automatically dump/discard low tier prisoners post-battle if player party is over prisoner capacity.", Order = 1)]
         [SettingPropertyGroup("Prisoners/Post-Battle Discard", GroupOrder = 0)]
         public bool AutoDiscardPrisonersPostBattle { get; set; } = false;
 
-        [SettingPropertyInteger("Discard Prisoners Up To Tier", 1, 6, RequireRestart = false, HintText = "Discard excess prisoners up to (and including) this tier.")]
+        [SettingPropertyInteger("Discard Prisoners Up To Tier", 1, 6, RequireRestart = false, HintText = "Discard excess prisoners up to (and including) this tier.", Order = 2)]
         [SettingPropertyGroup("Prisoners/Post-Battle Discard", GroupOrder = 0)]
         public int DiscardPrisonersUpToTier { get; set; } = 2;
 
-        [SettingPropertyBool("Perk-Based Prisoner Discard", RequireRestart = false, HintText = "If enabled, automatically overrides discard filters based on active Level 50 Leadership perks (Stout Defender protects T4-6, Fervent Attacker protects T1-3).")]
+        [SettingPropertyBool("Perk-Based Prisoner Discard", RequireRestart = false, HintText = "If enabled, automatically overrides discard filters based on active Level 50 Leadership perks (Stout Defender protects T4-6, Fervent Attacker protects T1-3).", Order = 3)]
         [SettingPropertyGroup("Prisoners/Post-Battle Discard", GroupOrder = 0)]
         public bool UsePerkBasedPrisonerDiscard { get; set; } = false;
 
@@ -390,6 +414,7 @@ namespace PartyManager
         public PostBattleSlaughterMode PostBattleSlaughterSetting => PostBattleSlaughterDropdown.SelectedValue.Value;
         public MercenaryRecruitPolicy MercenaryRecruitSetting => MercenaryRecruitDropdown.SelectedValue.Value;
         public NobleRecruitPolicy NobleRecruitSetting => NobleRecruitDropdown.SelectedValue.Value;
+        public RegularRecruitPolicy RegularRecruitSetting => RegularRecruitDropdown.SelectedValue.Value;
         public PrisonerKeepPolicy NoblePrisonerKeepPolicySetting => NoblePrisonerKeepPolicyDropdown.SelectedValue.Value;
         public PrisonerKeepPolicy RegularPrisonerKeepPolicySetting => RegularPrisonerKeepPolicyDropdown.SelectedValue.Value;
         public BanditPrisonerKeepPolicy BanditPrisonerKeepPolicySetting => BanditPrisonerKeepPolicyDropdown.SelectedValue.Value;

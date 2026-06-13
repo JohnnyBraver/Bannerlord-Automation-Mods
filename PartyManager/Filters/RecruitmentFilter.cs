@@ -133,11 +133,36 @@ namespace PartyManager.Filters
                         else
                         {
                             // Regular troop
-                            if (!settings.RecruitRegularTroops)
+                            var policy = settings.RegularRecruitSetting;
+                            if (policy == RegularRecruitPolicy.None)
                             {
                                 logLines.Add($"{leafInfo} failed: Regular recruitment disabled.");
                                 continue;
                             }
+                            if (policy == RegularRecruitPolicy.AnyIgnoreTier)
+                            {
+                                if (IsCultureEnabled(leaf, settings))
+                                {
+                                    logLines.Add($"{leafInfo} matched: Regular (AnyIgnoreTier) with culture enabled.");
+                                    leafMatched = true;
+                                    break;
+                                }
+                                logLines.Add($"{leafInfo} failed: Regular (AnyIgnoreTier) but culture disabled.");
+                                continue;
+                            }
+                            if (policy == RegularRecruitPolicy.Any)
+                            {
+                                if (IsCultureEnabled(leaf, settings) && leaf.Tier >= settings.MinRecruitTier && leaf.Tier <= settings.MaxRecruitTier)
+                                {
+                                    logLines.Add($"{leafInfo} matched: Regular (Any) with culture and tier enabled.");
+                                    leafMatched = true;
+                                    break;
+                                }
+                                logLines.Add($"{leafInfo} failed: Regular (Any) but culture or tier disabled.");
+                                continue;
+                            }
+
+                            // MatchFilters
                             if (IsCultureEnabled(leaf, settings) &&
                                 leaf.Tier >= settings.MinRecruitTier && leaf.Tier <= settings.MaxRecruitTier &&
                                 IsRoleEnabled(leaf, settings))
@@ -187,12 +212,23 @@ namespace PartyManager.Filters
                 else
                 {
                     // Regular troop
-                    if (!settings.RecruitRegularTroops)
+                    var policy = settings.RegularRecruitSetting;
+                    if (policy == RegularRecruitPolicy.None)
                     {
                         logLines.Add("Failed: Regular recruitment disabled.");
                         isMatch = false;
                     }
-                    else
+                    else if (policy == RegularRecruitPolicy.AnyIgnoreTier)
+                    {
+                        isMatch = IsCultureEnabled(troop, settings);
+                        logLines.Add(isMatch ? "Approved: Regular (AnyIgnoreTier) with culture enabled." : "Failed: Regular (AnyIgnoreTier) but culture disabled.");
+                    }
+                    else if (policy == RegularRecruitPolicy.Any)
+                    {
+                        isMatch = IsCultureEnabled(troop, settings) && troop.Tier >= settings.MinRecruitTier && troop.Tier <= settings.MaxRecruitTier;
+                        logLines.Add(isMatch ? "Approved: Regular (Any) matching culture and tier." : "Failed: Regular (Any) culture or tier mismatch.");
+                    }
+                    else // MatchFilters
                     {
                         isMatch = IsCultureEnabled(troop, settings) &&
                                   troop.Tier >= settings.MinRecruitTier && troop.Tier <= settings.MaxRecruitTier &&
