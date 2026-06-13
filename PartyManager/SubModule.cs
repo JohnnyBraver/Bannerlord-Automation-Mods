@@ -162,14 +162,53 @@ namespace PartyManager
                     int discardedTotal = 0;
                     var prisonRoster = party.PrisonRoster;
 
-                    // Collect all non-hero candidates matching settings.DiscardPrisonersUpToTier
+                    // Collect all non-hero candidates matching discard policy
                     var candidates = new List<TaleWorlds.CampaignSystem.Roster.TroopRosterElement>();
                     for (int i = 0; i < prisonRoster.Count; i++)
                     {
                         var el = prisonRoster.GetElementCopyAtIndex(i);
-                        if (el.Character != null && !el.Character.IsHero && el.Character.Tier <= settings.DiscardPrisonersUpToTier && el.Number > 0)
+                        if (el.Character != null && !el.Character.IsHero && el.Number > 0)
                         {
-                            candidates.Add(el);
+                            bool isCandidate = false;
+
+                            if (settings.UsePerkBasedPrisonerDiscard && Hero.MainHero != null)
+                            {
+                                bool stoutDefender = Hero.MainHero.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Leadership.StoutDefender);
+                                bool ferventAttacker = Hero.MainHero.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Leadership.FerventAttacker);
+
+                                if (stoutDefender && ferventAttacker)
+                                {
+                                    isCandidate = el.Character.Tier <= settings.DiscardPrisonersUpToTier;
+                                }
+                                else if (stoutDefender)
+                                {
+                                    // Protect T4-6, discard T1-3 (subject to standard discard limits)
+                                    isCandidate = el.Character.Tier <= settings.DiscardPrisonersUpToTier && el.Character.Tier < 4;
+                                }
+                                else if (ferventAttacker)
+                                {
+                                    // Protect T1-3, discard T4-6 (noble bypass protects noble prisoners)
+                                    bool isNoble = el.Character.Tier >= 6;
+                                    bool protectNoble = isNoble && settings.BypassNoblePrisonerTierLimit;
+                                    if (!protectNoble)
+                                    {
+                                        isCandidate = el.Character.Tier >= 4;
+                                    }
+                                }
+                                else
+                                {
+                                    isCandidate = el.Character.Tier <= settings.DiscardPrisonersUpToTier;
+                                }
+                            }
+                            else
+                            {
+                                isCandidate = el.Character.Tier <= settings.DiscardPrisonersUpToTier;
+                            }
+
+                            if (isCandidate)
+                            {
+                                candidates.Add(el);
+                            }
                         }
                     }
 

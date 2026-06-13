@@ -314,77 +314,82 @@ namespace PartyManager
         [SettingPropertyGroup("Garrison Donation", GroupOrder = 4)]
         public int MinDonationTier { get; set; } = 1;
 
-        // --- Prisoner Ransom Settings ---
-        [SettingPropertyBool("Auto-Ransom Prisoners", RequireRestart = false, HintText = "Automatically ransom standard prisoners for gold in taverns.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
-        public bool AutoRansomPrisoners { get; set; } = true;
-
-        [SettingPropertyInteger("Min Tier to Ransom", 1, 6, RequireRestart = false, HintText = "Minimum tier of prisoner to automatically ransom.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
-        public int MinRansomTier { get; set; } = 1;
-
+        // --- Prisoner Keep Policies & Limits ---
         [SettingPropertyBool("Keep Hero Prisoners", RequireRestart = false, HintText = "Never automatically ransom or donate hero/lord prisoners.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
+        [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 5)]
         public bool KeepHeroPrisoners { get; set; } = true;
 
         [SettingPropertyDropdown("Noble Prisoner Keep Policy", RequireRestart = false, HintText = "Keep policy for noble/elite prisoners.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
+        [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 5)]
         public Dropdown<PrisonerKeepPolicyOption> NoblePrisonerKeepPolicyDropdown { get; set; } = new Dropdown<PrisonerKeepPolicyOption>(PrisonerKeepPolicyOptions, 2); // Keep Selected
 
         [SettingPropertyDropdown("Regular Prisoner Keep Policy", RequireRestart = false, HintText = "Keep policy for standard regular prisoners.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
+        [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 5)]
         public Dropdown<PrisonerKeepPolicyOption> RegularPrisonerKeepPolicyDropdown { get; set; } = new Dropdown<PrisonerKeepPolicyOption>(PrisonerKeepPolicyOptions, 2); // Keep Selected
 
         [SettingPropertyDropdown("Bandit Prisoner Keep Policy", RequireRestart = false, HintText = "Keep policy for bandit prisoners.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
+        [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 5)]
         public Dropdown<BanditPrisonerKeepPolicyOption> BanditPrisonerKeepPolicyDropdown { get; set; } = new Dropdown<BanditPrisonerKeepPolicyOption>(BanditPrisonerKeepPolicyOptions, 0); // Ransom All
 
         [SettingPropertyBool("Bypass Noble Prisoner Tier Limit", RequireRestart = false, HintText = "If enabled, noble prisoners (and noble-upgrading bandits if kept) will bypass the min tier keep limit.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
+        [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 5)]
         public bool BypassNoblePrisonerTierLimit { get; set; } = true;
 
         [SettingPropertyInteger("Min Prisoner Tier to Keep", 1, 6, RequireRestart = false, HintText = "Minimum tier of regular/bandit prisoner to keep for recruitment.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
+        [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 5)]
         public int MinPrisonerTierToKeep { get; set; } = 4;
 
         [SettingPropertyBool("Perk-Based Prisoner Keep", RequireRestart = false, HintText = "Automatically override keep tier filters based on active Level 50 Leadership perks (Stout Defender keeping T4-6, Fervent Attacker keeping T1-3).")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
-        public bool UsePerkBasedPrisonerKeep { get; set; } = false;
+        [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 5)]
+        public bool UsePerkBasedPrisonerKeep { get; set; } = true;
 
+        // --- Prisoner Ransom Settings ---
+        [SettingPropertyBool("Auto-Ransom Prisoners", RequireRestart = false, HintText = "Automatically ransom standard prisoners for gold in taverns.")]
+        [SettingPropertyGroup("Prisoners/Ransom", GroupOrder = 5)]
+        public bool AutoRansomPrisoners { get; set; } = true;
+
+        [SettingPropertyInteger("Min Tier to Ransom", 1, 6, RequireRestart = false, HintText = "Minimum tier of prisoner to automatically ransom.")]
+        [SettingPropertyGroup("Prisoners/Ransom", GroupOrder = 5)]
+        public int MinRansomTier { get; set; } = 1;
+
+        // --- Prisoner Capacity Alerts ---
         [SettingPropertyInteger("Prisoner Capacity Alert Threshold (%)", 0, 100, RequireRestart = false, HintText = "Trigger alert if total prisoners exceed this percentage of capacity after automation. Set to 0 to disable.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
+        [SettingPropertyGroup("Prisoners/Capacity Alerts", GroupOrder = 5)]
         public int PrisonerCapacityAlertPercent { get; set; } = 20;
 
         [SettingPropertyInteger("Prisoner Stack Alert Flat Limit", 0, 1000, RequireRestart = false, HintText = "Trigger alert if any single prisoner stack has at least this many prisoners. Set to 0 to disable.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
+        [SettingPropertyGroup("Prisoners/Capacity Alerts", GroupOrder = 5)]
         public int PrisonerStackAlertFlatLimit { get; set; } = 5;
 
         [SettingPropertyInteger("Prisoner Stack Alert Capacity Limit (%)", 0, 100, RequireRestart = false, HintText = "Trigger alert if any single prisoner stack exceeds this percentage of total prisoner capacity. Set to 0 to disable.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
+        [SettingPropertyGroup("Prisoners/Capacity Alerts", GroupOrder = 5)]
         public int PrisonerStackAlertPercentLimit { get; set; } = 10;
-
 
         // --- Prisoner Donation Settings ---
         [SettingPropertyBool("Auto-Donate Prisoners to Dungeon", RequireRestart = false, HintText = "Automatically donate prisoners to friendly town/castle dungeons to farm influence/XP.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
+        [SettingPropertyGroup("Prisoners/Donation", GroupOrder = 5)]
         public bool AutoDonatePrisoners { get; set; } = false;
 
         [SettingPropertyInteger("Min Tier to Donate", 1, 6, RequireRestart = false, HintText = "Minimum tier of prisoner to donate.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
+        [SettingPropertyGroup("Prisoners/Donation", GroupOrder = 5)]
         public int MinDonateTier { get; set; } = 3;
 
         [SettingPropertyBool("Prioritize High Tier for Donation", RequireRestart = false, HintText = "Donate higher tier prisoners first to maximize influence return.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
+        [SettingPropertyGroup("Prisoners/Donation", GroupOrder = 5)]
         public bool PrioritizeHighTierDonation { get; set; } = true;
 
         // --- Prisoner Discard Settings ---
         [SettingPropertyBool("Auto Discard Post-Battle Excess Prisoners", RequireRestart = false, HintText = "Automatically dump/discard low tier prisoners post-battle if player party is over prisoner capacity.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
+        [SettingPropertyGroup("Prisoners/Post-Battle Discard", GroupOrder = 5)]
         public bool AutoDiscardPrisonersPostBattle { get; set; } = false;
 
         [SettingPropertyInteger("Discard Prisoners Up To Tier", 1, 6, RequireRestart = false, HintText = "Discard excess prisoners up to (and including) this tier.")]
-        [SettingPropertyGroup("Prisoners", GroupOrder = 5)]
+        [SettingPropertyGroup("Prisoners/Post-Battle Discard", GroupOrder = 5)]
         public int DiscardPrisonersUpToTier { get; set; } = 2;
+
+        [SettingPropertyBool("Perk-Based Prisoner Discard", RequireRestart = false, HintText = "If enabled, automatically overrides discard filters based on active Level 50 Leadership perks (Stout Defender protects T4-6, Fervent Attacker protects T1-3).")]
+        [SettingPropertyGroup("Prisoners/Post-Battle Discard", GroupOrder = 5)]
+        public bool UsePerkBasedPrisonerDiscard { get; set; } = false;
 
 
 
