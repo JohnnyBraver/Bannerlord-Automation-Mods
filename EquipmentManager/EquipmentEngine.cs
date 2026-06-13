@@ -530,10 +530,22 @@ namespace EquipmentManager
                 combinedTargets.AddRange(sneakingTargets);
                 combinedTargets.AddRange(civilianTargets);
             }
-            else // Combat_Civilian_Sneaking
+            else if (priority == LoadoutPriority.Combat_Civilian_Sneaking)
             {
                 combinedTargets.AddRange(combatTargets);
                 combinedTargets.AddRange(civilianTargets);
+                combinedTargets.AddRange(sneakingTargets);
+            }
+            else if (priority == LoadoutPriority.Civilian_Sneaking_Combat)
+            {
+                combinedTargets.AddRange(civilianTargets);
+                combinedTargets.AddRange(sneakingTargets);
+                combinedTargets.AddRange(combatTargets);
+            }
+            else // Civilian_Combat_Sneaking
+            {
+                combinedTargets.AddRange(civilianTargets);
+                combinedTargets.AddRange(combatTargets);
                 combinedTargets.AddRange(sneakingTargets);
             }
 

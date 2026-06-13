@@ -41,7 +41,9 @@ namespace EquipmentManager
         Sneaking_Civilian_Combat,
         Sneaking_Combat_Civilian,
         Combat_Sneaking_Civilian,
-        Combat_Civilian_Sneaking
+        Combat_Civilian_Sneaking,
+        Civilian_Sneaking_Combat,
+        Civilian_Combat_Sneaking
     }
 
     public class LoadoutPriorityOption
@@ -109,8 +111,8 @@ namespace EquipmentManager
 
         private static readonly IReadOnlyList<MainHeroCivilianModeOption> MainHeroCivilianModeOptions = new List<MainHeroCivilianModeOption>
         {
-            new MainHeroCivilianModeOption("Stealth (Sneaking)", MainHeroCivilianMode.Stealth),
-            new MainHeroCivilianModeOption("Armor (Protection)", MainHeroCivilianMode.Armor)
+            new MainHeroCivilianModeOption("Stealth (Optimize for Sneaking/Disguise)", MainHeroCivilianMode.Stealth),
+            new MainHeroCivilianModeOption("Armor (Optimize for Protection)", MainHeroCivilianMode.Armor)
         };
 
         private static readonly IReadOnlyList<LoadoutPriorityOption> LoadoutPriorityOptions = new List<LoadoutPriorityOption>
@@ -118,7 +120,9 @@ namespace EquipmentManager
             new LoadoutPriorityOption("Sneaking > Civilian > Combat (Default)", LoadoutPriority.Sneaking_Civilian_Combat),
             new LoadoutPriorityOption("Sneaking > Combat > Civilian", LoadoutPriority.Sneaking_Combat_Civilian),
             new LoadoutPriorityOption("Combat > Sneaking > Civilian", LoadoutPriority.Combat_Sneaking_Civilian),
-            new LoadoutPriorityOption("Combat > Civilian > Sneaking", LoadoutPriority.Combat_Civilian_Sneaking)
+            new LoadoutPriorityOption("Combat > Civilian > Sneaking", LoadoutPriority.Combat_Civilian_Sneaking),
+            new LoadoutPriorityOption("Civilian > Sneaking > Combat", LoadoutPriority.Civilian_Sneaking_Combat),
+            new LoadoutPriorityOption("Civilian > Combat > Sneaking", LoadoutPriority.Civilian_Combat_Sneaking)
         };
 
         private static readonly IReadOnlyList<BuyEquipmentTargetOption> BuyEquipmentTargetOptions = new List<BuyEquipmentTargetOption>
@@ -146,8 +150,8 @@ namespace EquipmentManager
         public Dropdown<AutoEquipCategoryOption> AutoEquipCategoryDropdown { get; set; } =
             new Dropdown<AutoEquipCategoryOption>(AutoEquipCategoryOptions, 3); // Default: Weapons & Armor
 
-        [SettingPropertyDropdown("Main Hero Civilian Mode", RequireRestart = false,
-            HintText = "Stealth: Optimize for stealth/sneaking. Armor: Optimize for protection.")]
+        [SettingPropertyDropdown("Civilian Outfit Mode", RequireRestart = false,
+            HintText = "Select optimization goal for the civilian outfit (used in towns and sneaking/disguised scenarios). Stealth: Optimize for sneaking. Armor: Optimize for protection.")]
         [SettingPropertyGroup("Civilian & Sneaking", GroupOrder = 1)]
         public Dropdown<MainHeroCivilianModeOption> MainHeroCivilianModeDropdown { get; set; } =
             new Dropdown<MainHeroCivilianModeOption>(MainHeroCivilianModeOptions, 0); // Default: Stealth (index 0)
@@ -215,12 +219,12 @@ namespace EquipmentManager
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public bool BuyTopArmor { get; set; } = false;
 
-        [SettingPropertyInteger("Min Gold to Buy Top Armor", 100000, 5000000, "1000000", RequireRestart = false,
+        [SettingPropertyInteger("Min Gold to Buy Top Armor", 100000, 5000000, "0", RequireRestart = false,
             HintText = "Only buy premium armor upgrades if your current gold balance is at or above this amount. Default: 1M.")]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public int BuyTopArmorGoldThreshold { get; set; } = 1000000;
 
-        [SettingPropertyInteger("Min Tier to Buy Top Armor", 1, 6, "5", RequireRestart = false,
+        [SettingPropertyInteger("Min Tier to Buy Top Armor", 1, 6, "0", RequireRestart = false,
             HintText = "Only buy premium armor upgrades if the item tier is at or above this level (e.g. Tier 5 or 6). Default: 5.")]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public int MinTierToBuyTopArmor { get; set; } = 5;
@@ -231,7 +235,7 @@ namespace EquipmentManager
         public Dropdown<BuyEquipmentTargetOption> BuyEquipmentTargetDropdown { get; set; } =
             new Dropdown<BuyEquipmentTargetOption>(BuyEquipmentTargetOptions, 0); // Default: Player Only (index 0)
 
-        [SettingPropertyInteger("Minimum Gold Reserve", 1000, 100000, "10000", RequireRestart = false,
+        [SettingPropertyInteger("Minimum Gold Reserve", 1000, 100000, "0", RequireRestart = false,
             HintText = "Never let your gold drop below this amount when buying stealth gear. Default: 10,000 denars.")]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public int MinimumGoldReserve { get; set; } = 10000;
