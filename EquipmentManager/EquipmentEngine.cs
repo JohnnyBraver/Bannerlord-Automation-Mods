@@ -661,11 +661,10 @@ namespace EquipmentManager
                         var currentWeapon = equipment[slot];
                         if (currentWeapon.IsEmpty || currentWeapon.Item == null || currentWeapon.Item.PrimaryWeapon == null) continue;
 
-                        // Ignore special stone throwing weapons in stealth loadout
+                        // Ignore special stealth stone throwing weapons in stealth loadout
                         if (targetSide == InventoryLogic.InventorySide.StealthEquipment && 
                             currentWeapon.Item.ItemType == ItemObject.ItemTypeEnum.Thrown && 
-                            (currentWeapon.Item.StringId.IndexOf("stone", StringComparison.OrdinalIgnoreCase) >= 0 || 
-                             (currentWeapon.Item.Name != null && currentWeapon.Item.Name.ToString().IndexOf("stone", StringComparison.OrdinalIgnoreCase) >= 0)))
+                            currentWeapon.Item.StringId == "stealth_throwing_stone")
                         {
                             continue;
                         }
