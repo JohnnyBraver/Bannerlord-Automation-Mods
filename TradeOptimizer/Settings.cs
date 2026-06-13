@@ -4,7 +4,7 @@ using MCM.Abstractions.Attributes.v2;
 using MCM.Abstractions.Base.Global;
 using MCM.Common;
 
-namespace TradingOptimizer
+namespace TradeOptimizer
 {
     public enum PricingReferenceMode
     {
@@ -68,9 +68,9 @@ namespace TradingOptimizer
 
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "TradingOptimizer_v1";
+        public override string Id => "TradeOptimizer_v1";
         public override string DisplayName => "Trade Optimizer";
-        public override string FolderName => "TradingOptimizer";
+        public override string FolderName => "TradeOptimizer";
         public override string FormatType => "json";
 
         private static readonly IReadOnlyList<PricingReferenceModeOption> PricingReferenceModeOptions = new List<PricingReferenceModeOption>

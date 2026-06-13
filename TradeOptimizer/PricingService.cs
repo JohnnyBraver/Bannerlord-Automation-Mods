@@ -7,7 +7,7 @@ using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 
-namespace TradingOptimizer
+namespace TradeOptimizer
 {
     public static class PricingService
     {

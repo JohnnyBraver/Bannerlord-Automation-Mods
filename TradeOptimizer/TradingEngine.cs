@@ -12,7 +12,7 @@ using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 
-namespace TradingOptimizer
+namespace TradeOptimizer
 {
     public static class InventoryVMExtensions
     {
@@ -47,7 +47,7 @@ namespace TradingOptimizer
         // TODO: Re-implement slaughter arbitrage for livestock purchases (buy and slaughter for profit)
         public static void WriteLog(string message)
         {
-            SettlementAutomationCore.Helpers.Logger.WriteLog("TradingOptimizer", message);
+            SettlementAutomationCore.Helpers.Logger.WriteLog("TradeOptimizer", message);
         }
 
         public static TradeTransactionReport RunOptimization(SPInventoryVM vm, bool isSellPhase, bool isBuyPhase, HashSet<string>? excludedItems = null)

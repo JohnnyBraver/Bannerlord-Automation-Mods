@@ -2,7 +2,7 @@ using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using Bannerlord.UIExtenderEx.Attributes;
 using Bannerlord.UIExtenderEx.ViewModels;
 
-namespace TradingOptimizer
+namespace TradeOptimizer
 {
     [ViewModelMixin("RefreshValues")]
     public class SPInventoryVMMixin : BaseViewModelMixin<SPInventoryVM>

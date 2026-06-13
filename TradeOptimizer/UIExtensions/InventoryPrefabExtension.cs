@@ -1,7 +1,7 @@
 using Bannerlord.UIExtenderEx.Attributes;
 using Bannerlord.UIExtenderEx.Prefabs2;
 
-namespace TradingOptimizer
+namespace TradeOptimizer
 {
     [PrefabExtension("Inventory", "descendant::ButtonWidget[@Command.Click='ExecuteBuyAllItems']")]
     public class InventoryAutoTradePrefabExtension : PrefabExtensionInsertPatch
@@ -9,6 +9,6 @@ namespace TradingOptimizer
         public override InsertType Type => InsertType.Append;
 
         [PrefabExtensionFileName(true)]
-        public string MyXmlFile => "TradingOptimizerAutoTrade";
+        public string MyXmlFile => "TradeOptimizerAutoTrade";
     }
 }

@@ -15,7 +15,7 @@ using TaleWorlds.CampaignSystem.Inventory;
 using Bannerlord.UIExtenderEx;
 using SettlementAutomationCore;
 
-namespace TradingOptimizer
+namespace TradeOptimizer
 {
     public class SubModule : MBSubModuleBase
     {
@@ -54,7 +54,7 @@ namespace TradingOptimizer
                         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                         "Mount and Blade II Bannerlord",
                         "Configs",
-                        "TradingOptimizer_Error.txt"
+                        "TradeOptimizer_Error.txt"
                     );
                     System.IO.File.WriteAllText(path, ex.ToString());
                 }
@@ -71,19 +71,19 @@ namespace TradingOptimizer
             if (!_uiExtenderInitialized)
             {
                 _uiExtenderInitialized = true;
-                _uiExtender = UIExtender.Create("TradingOptimizer");
+                _uiExtender = UIExtender.Create("TradeOptimizer");
                 _uiExtender.Register(typeof(SubModule).Assembly);
                 _uiExtender.Enable();
             }
         }
-        private static TradingOptimizerProvider? _provider;
+        private static TradeOptimizerProvider? _provider;
 
         protected override void OnGameStart(Game game, IGameStarter gameStarter)
         {
             base.OnGameStart(game, gameStarter);
             if (game.GameType is Campaign)
             {
-                _provider = new TradingOptimizerProvider();
+                _provider = new TradeOptimizerProvider();
                 AutomationRegistry.RegisterTradeProvider(_provider);
             }
         }

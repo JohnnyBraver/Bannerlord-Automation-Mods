@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Module>
   <Name value="Trade Optimizer" />
-  <Id value="TradingOptimizer" />
+  <Id value="TradeOptimizer" />
   <Version value="v1.0.0" />
   <SingleplayerModule value="true" />
   <DependedModules>
@@ -20,9 +20,9 @@
   </DependedModuleMetadatas>
   <SubModules>
     <SubModule>
-      <Name value="TradingOptimizer" />
-      <DLLName value="TradingOptimizer.dll" />
-      <SubModuleClassType value="TradingOptimizer.SubModule" />
+      <Name value="TradeOptimizer" />
+      <DLLName value="TradeOptimizer.dll" />
+      <SubModuleClassType value="TradeOptimizer.SubModule" />
       <Tags>
         <Tag key="DedicatedServerType" value="none" />
       </Tags>

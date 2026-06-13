@@ -10,7 +10,7 @@ using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 
-namespace TradingOptimizer
+namespace TradeOptimizer
 {
     public static class TradingPatches
     {

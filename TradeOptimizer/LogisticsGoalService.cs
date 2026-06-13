@@ -10,7 +10,7 @@ using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 
-namespace TradingOptimizer
+namespace TradeOptimizer
 {
     public static class LogisticsGoalService
     {

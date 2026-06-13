@@ -326,9 +326,9 @@ namespace PartyManager.Helpers
             {
                 foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
                 {
-                    if (assembly.GetName().Name == "TradingOptimizer")
+                    if (assembly.GetName().Name == "TradingOptimizer" || assembly.GetName().Name == "TradeOptimizer")
                     {
-                        var settingsType = assembly.GetType("TradingOptimizer.Settings");
+                        var settingsType = assembly.GetType("TradeOptimizer.Settings") ?? assembly.GetType("TradingOptimizer.Settings");
                         if (settingsType != null)
                         {
                             var instanceProp = settingsType.GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);

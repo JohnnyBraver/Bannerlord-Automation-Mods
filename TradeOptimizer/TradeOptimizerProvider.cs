@@ -9,17 +9,17 @@ using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using TaleWorlds.Core;
 using SettlementAutomationCore;
 
-namespace TradingOptimizer
+namespace TradeOptimizer
 {
-    public class TradingOptimizerProvider : ITradeOrderProvider
+    public class TradeOptimizerProvider : ITradeOrderProvider
     {
-        public string ProviderName => "TradingOptimizer";
+        public string ProviderName => "TradeOptimizer";
 
         private static Settlement? _currentTradeSettlement = null;
         private static int _initialGold = 0;
         private static TradeTransactionReport? _accumulatedReport = null;
 
-        public TradingOptimizerProvider()
+        public TradeOptimizerProvider()
         {
             SettlementAutomationCore.SubModule.OnAutomationCycleCompleted += OnAutomationCycleCompleted;
         }
