@@ -345,7 +345,7 @@ namespace PartyManager
 
         // --- Prisoner Ransom Settings ---
         [SettingPropertyBool("Auto-Ransom Prisoners", RequireRestart = false, HintText = "Automatically ransom standard prisoners for gold in taverns.")]
-        [SettingPropertyGroup("Prisoners/Ransom", GroupOrder = 0)]
+        [SettingPropertyGroup("Prisoners", GroupOrder = 0)]
         public bool AutoRansomPrisoners { get; set; } = true;
 
         // --- Prisoner Capacity Alerts ---
