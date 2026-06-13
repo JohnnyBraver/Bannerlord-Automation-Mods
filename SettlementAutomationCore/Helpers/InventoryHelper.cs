@@ -64,7 +64,7 @@ namespace SettlementAutomationCore.Helpers
             return null;
         }
 
-        public static InventoryLogic? CreateAndInitInventoryLogic(MobileParty party, Settlement settlement)
+        public static InventoryLogic? CreateAndInitInventoryLogic(MobileParty party, Settlement settlement, bool useClones = false)
         {
             if (settlement == null || party == null || Hero.MainHero == null) return null;
             try
@@ -97,9 +97,12 @@ namespace SettlementAutomationCore.Helpers
                 var categoryTypeAll = Enum.Parse(categoryTypeEnum, "All");
                 var modeTrade = Enum.Parse(modeEnum, "Trade");
 
+                var leftRoster = useClones ? new TaleWorlds.CampaignSystem.Roster.ItemRoster(settlement.ItemRoster) : settlement.ItemRoster;
+                var rightRoster = useClones ? new TaleWorlds.CampaignSystem.Roster.ItemRoster(party.ItemRoster) : party.ItemRoster;
+
                 initMethod.Invoke(logic, new object[] {
-                    settlement.ItemRoster,
-                    party.ItemRoster,
+                    leftRoster,
+                    rightRoster,
                     party.MemberRoster,
                     true, // isTrading
                     false, // isSpecialActionsPermitted
