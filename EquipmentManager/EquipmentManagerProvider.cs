@@ -26,40 +26,157 @@ namespace EquipmentManager
 
         public List<TradeOrder> GetPreSellOrders(MobileParty party, Settlement settlement)
         {
+            var orders = new List<TradeOrder>();
+            if (party == null || settlement == null) return orders;
+
             try
             {
-                if (party != null)
-                {
-                    SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"[Pre-Transaction] Securing existing equipment upgrades in {settlement.Name} before trade phase starts.");
-                    EquipmentEngine.AutoEquipHeadless(party, "Pre-Transaction");
-                }
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"[Pre-Transaction] Securing existing equipment upgrades in {settlement.Name} before trade phase starts.");
+                EquipmentEngine.AutoEquipHeadless(party, "Pre-Transaction");
             }
             catch (Exception ex)
             {
                 SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error in GetPreSellOrders AutoEquipHeadless: {ex}");
             }
-            return new List<TradeOrder>();
+
+            var settings = Settings.Instance;
+            if (settings == null || !settings.SellUnlockedEquipment) return orders;
+            if (settings.PreventEquipmentSaleInVillages && settlement.IsVillage) return orders;
+
+            var currentLogic = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(party, settlement, true);
+            if (currentLogic == null) return orders;
+
+            try
+            {
+                var tracker = Campaign.Current?.GetCampaignBehavior<IViewDataTracker>();
+                var locks = new HashSet<string>(tracker?.GetInventoryLocks() ?? Enumerable.Empty<string>());
+
+                bool hasWeaponPerk = Hero.MainHero?.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Steward.PaidInPromise) ?? false;
+                bool hasArmorPerk = Hero.MainHero?.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Steward.GivingHands) ?? false;
+
+                if (!Enum.TryParse<ItemQuality>(settings.MinQualityToKeep, true, out var minQuality))
+                {
+                    minQuality = ItemQuality.Fine;
+                }
+
+                var targets = new List<Hero>();
+                if (Hero.MainHero != null)
+                {
+                    targets.Add(Hero.MainHero);
+                }
+                if (settings.BuyEquipmentTargetSetting == BuyEquipmentTarget.PlayerAndCompanions && party != null)
+                {
+                    foreach (var member in party.MemberRoster.GetTroopRoster())
+                    {
+                        if (member.Character.IsHero && member.Character.HeroObject != null && member.Character.HeroObject != Hero.MainHero)
+                        {
+                            targets.Add(member.Character.HeroObject);
+                        }
+                    }
+                }
+
+                var playerElements = currentLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+                for (int i = 0; i < playerElements.Count; i++)
+                {
+                    var rosterElement = playerElements[i];
+                    if (rosterElement.IsEmpty || rosterElement.Amount <= 0) continue;
+
+                    var eqEl = rosterElement.EquipmentElement;
+                    var item = eqEl.Item;
+                    if (item == null) continue;
+
+                    bool isEquipment = item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null;
+                    if (!isEquipment) continue;
+
+                    string key = item.StringId + (eqEl.ItemModifier != null ? eqEl.ItemModifier.StringId : "");
+                    if (locks.Contains(key)) continue;
+
+                    bool shouldLock = false;
+
+                    if ((int)item.Tier >= settings.MinTierToKeep)
+                    {
+                        shouldLock = true;
+                    }
+
+                    var modifier = eqEl.ItemModifier;
+                    if (modifier != null)
+                    {
+                        if (modifier.ItemQuality == ItemQuality.Legendary)
+                        {
+                            shouldLock = true;
+                        }
+                        else if (modifier.ItemQuality >= minQuality)
+                        {
+                            shouldLock = true;
+                        }
+                        else if (settings.KeepPositiveModifiers && modifier.PriceMultiplier > 1.0f)
+                        {
+                            shouldLock = true;
+                        }
+                    }
+
+                    if (!shouldLock)
+                    {
+                        float sellPrice = currentLogic.GetItemPrice(eqEl, false);
+                        float baseValue = item.Value;
+                        float costPerXp = baseValue > 0 ? (sellPrice / baseValue) : 9999f;
+
+                        if (costPerXp <= settings.MaxCostPerXp)
+                        {
+                            if (item.HasArmorComponent && hasArmorPerk && 
+                                (settings.LockDonationCategorySetting == LockDonationCategory.ArmorOnly || 
+                                 settings.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
+                            {
+                                shouldLock = true;
+                            }
+                            else if ((item.WeaponComponent != null || item.PrimaryWeapon != null) && hasWeaponPerk && 
+                                     (settings.LockDonationCategorySetting == LockDonationCategory.WeaponsOnly || 
+                                      settings.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
+                            {
+                                shouldLock = true;
+                            }
+                        }
+                    }
+
+                    if (!shouldLock && item.HasArmorComponent)
+                    {
+                        if (IsUpgradeForAnyTarget(eqEl, targets, settings))
+                        {
+                            shouldLock = true;
+                            SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"[Lock Rules] Preserving unequipped upgrade/side-grade in inventory: {item.Name} (Tier {item.Tier}, Armor Score: {GetArmorScore(eqEl):F1})");
+                        }
+                    }
+
+                    if (!shouldLock)
+                    {
+                        orders.Add(new TradeOrder(eqEl, rosterElement.Amount, false));
+                    }
+                }
+
+                if (settings.PrioritizeHeavyTrash)
+                {
+                    orders = orders.OrderByDescending(o =>
+                    {
+                        var item = o.EquipmentElement.Item;
+                        float price = currentLogic.GetItemPrice(o.EquipmentElement, false);
+                        return (float)(item?.Weight ?? 0f) / (price > 0f ? price : 1f);
+                    }).ToList();
+                }
+            }
+            catch (Exception ex)
+            {
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error constructing pre-sell orders: {ex}");
+            }
+
+            return orders;
         }
 
         public List<TradeOrder> GetMainOrders(MobileParty party, Settlement settlement, InventoryLogic currentLogic)
         {
             var orders = new List<TradeOrder>();
             var settings = Settings.Instance;
-            if (settings == null || !settings.SellUnlockedEquipment) return orders;
-            if (settings.PreventEquipmentSaleInVillages && settlement.IsVillage) return orders;
+            if (settings == null) return orders;
 
-            var tracker = Campaign.Current?.GetCampaignBehavior<IViewDataTracker>();
-            var locks = new HashSet<string>(tracker?.GetInventoryLocks() ?? Enumerable.Empty<string>());
-
-            bool hasWeaponPerk = Hero.MainHero?.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Steward.PaidInPromise) ?? false;
-            bool hasArmorPerk = Hero.MainHero?.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Steward.GivingHands) ?? false;
-
-            if (!Enum.TryParse<ItemQuality>(settings.MinQualityToKeep, true, out var minQuality))
-            {
-                minQuality = ItemQuality.Fine;
-            }
-
-            // Gather targets for upgrade check
             var targets = new List<Hero>();
             if (Hero.MainHero != null)
             {
@@ -74,103 +191,6 @@ namespace EquipmentManager
                         targets.Add(member.Character.HeroObject);
                     }
                 }
-            }
-
-            // Loop through player's inventory to find equipment to sell
-            var playerElements = currentLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-            for (int i = 0; i < playerElements.Count; i++)
-            {
-                var rosterElement = playerElements[i];
-                if (rosterElement.IsEmpty || rosterElement.Amount <= 0) continue;
-
-                var eqEl = rosterElement.EquipmentElement;
-                var item = eqEl.Item;
-                if (item == null) continue;
-
-                bool isEquipment = item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null;
-                if (!isEquipment) continue;
-
-                // Build lock key just like the VM does
-                string key = item.StringId + (eqEl.ItemModifier != null ? eqEl.ItemModifier.StringId : "");
-                if (locks.Contains(key)) continue;
-
-                // Check optimization retention rules
-                bool shouldLock = false;
-
-                // A. Min Tier
-                if ((int)item.Tier >= settings.MinTierToKeep)
-                {
-                    shouldLock = true;
-                }
-
-                // B. Quality Modifiers
-                var modifier = eqEl.ItemModifier;
-                if (modifier != null)
-                {
-                    if (modifier.ItemQuality == ItemQuality.Legendary)
-                    {
-                        shouldLock = true;
-                    }
-                    else if (modifier.ItemQuality >= minQuality)
-                    {
-                        shouldLock = true;
-                    }
-                    else if (settings.KeepPositiveModifiers && modifier.PriceMultiplier > 1.0f)
-                    {
-                        shouldLock = true;
-                    }
-                }
-
-                // C. Donation Efficiency
-                if (!shouldLock)
-                {
-                    float sellPrice = currentLogic.GetItemPrice(eqEl, false);
-                    float baseValue = item.Value;
-                    float costPerXp = baseValue > 0 ? (sellPrice / baseValue) : 9999f;
-
-                    if (costPerXp <= settings.MaxCostPerXp)
-                    {
-                        if (item.HasArmorComponent && hasArmorPerk && 
-                            (settings.LockDonationCategorySetting == LockDonationCategory.ArmorOnly || 
-                             settings.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
-                        {
-                            shouldLock = true;
-                        }
-                        else if ((item.WeaponComponent != null || item.PrimaryWeapon != null) && hasWeaponPerk && 
-                                 (settings.LockDonationCategorySetting == LockDonationCategory.WeaponsOnly || 
-                                  settings.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
-                        {
-                            shouldLock = true;
-                        }
-                    }
-                }
-
-                // D. Prevent selling unequipped upgrades!
-                if (!shouldLock && item.HasArmorComponent)
-                {
-                    if (IsUpgradeForAnyTarget(eqEl, targets, settings))
-                    {
-                        shouldLock = true;
-                        SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"[Lock Rules] Preserving unequipped upgrade/side-grade in inventory: {item.Name} (Tier {item.Tier}, Armor Score: {GetArmorScore(eqEl):F1})");
-                    }
-                }
-
-                if (!shouldLock)
-                {
-                    // Sell this equipment!
-                    orders.Add(new TradeOrder(eqEl, rosterElement.Amount, false));
-                }
-            }
-
-
-            if (settings.PrioritizeHeavyTrash)
-            {
-                orders = orders.OrderByDescending(o =>
-                {
-                    var item = o.EquipmentElement.Item;
-                    float price = currentLogic.GetItemPrice(o.EquipmentElement, false);
-                    return (float)(item?.Weight ?? 0f) / (price > 0f ? price : 1f);
-                }).ToList();
             }
 
             // E. Auto-Buy Upgrades
