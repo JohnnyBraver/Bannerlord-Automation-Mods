@@ -338,7 +338,9 @@ namespace SettlementAutomationCore
                             order.Notable.VolunteerTypes[order.SlotIndex] = null;
                             MobileParty.MainParty.MemberRoster.AddToCounts(troop, 1);
                             GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, order.Notable, cost, false);
-                            CampaignEventDispatcher.Instance.OnUnitRecruited(troop, 1);
+                            // OnTroopRecruited handles Leadership XP, FamousCommander troop XP, and bandit Roguery XP.
+                            // Do NOT also fire OnUnitRecruited — it duplicates SkillLevelingManager.OnTroopRecruited,
+                            // which would award Leadership XP twice per recruit.
                             CampaignEventDispatcher.Instance.OnTroopRecruited(Hero.MainHero, settlement, order.Notable, troop, 1);
                             
                             if (recruitedMap.ContainsKey(troop))
@@ -588,7 +590,10 @@ namespace SettlementAutomationCore
                     catch {}
                 }
             }
-            catch {}
+            catch (Exception ex)
+            {
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"EXCEPTION in ExecuteBackgroundAutomation: {ex}");
+            }
 
             try
             {
