@@ -8,7 +8,15 @@ namespace PartyManager.Filters
 {
     public static class RecruitmentFilter
     {
-        public static bool MatchTroopFilter(CharacterObject troop, Settings settings)
+        private enum UnifiedPolicy
+        {
+            None,
+            MatchFilters,
+            Any,
+            AnyIgnoreTier
+        }
+
+        public static bool MatchTroopFilter(CharacterObject troop, Settings settings, bool ignoreRecruitPolicy = false)
         {
             var leafTroops = new List<CharacterObject>();
             SettlementAutomationCore.Helpers.TroopHelper.GetLeafTroops(troop, leafTroops);
@@ -16,8 +24,8 @@ namespace PartyManager.Filters
             string logPrefix = $"[Recruit Filter: {troop.Name} (Tier {troop.Tier})]";
             var logLines = new List<string>();
 
-            // 1. Mercenary check at purchase time
-            if (troop.Occupation == Occupation.Mercenary)
+            // 1. Mercenary check at purchase time (early exit if disabled and not bypassed)
+            if (troop.Occupation == Occupation.Mercenary && !ignoreRecruitPolicy)
             {
                 var policy = settings.MercenaryRecruitSetting;
                 if (policy == MercenaryRecruitPolicy.None)
@@ -26,20 +34,6 @@ namespace PartyManager.Filters
                     WriteLog(logPrefix, false, logLines);
                     return false;
                 }
-                if (policy == MercenaryRecruitPolicy.AnyIgnoreTier)
-                {
-                    logLines.Add("Approved: Mercenary (AnyIgnoreTier).");
-                    WriteLog(logPrefix, true, logLines);
-                    return true;
-                }
-                if (policy == MercenaryRecruitPolicy.Any)
-                {
-                    bool tierOk = troop.Tier >= settings.MinRecruitTier && troop.Tier <= settings.MaxRecruitTier;
-                    logLines.Add(tierOk ? "Approved: Mercenary matching tier limits." : $"Rejected: Mercenary tier {troop.Tier} not in range [{settings.MinRecruitTier}-{settings.MaxRecruitTier}].");
-                    WriteLog(logPrefix, tierOk, logLines);
-                    return tierOk;
-                }
-                // MatchFilters continues down to standard checks
             }
 
             bool isMatch = false;
@@ -57,121 +51,11 @@ namespace PartyManager.Filters
                     foreach (var leaf in leafTroops)
                     {
                         string leafInfo = $"Leaf {leaf.Name} (Tier {leaf.Tier})";
-
-                        // Check leaf mercenary
-                        if (leaf.Occupation == Occupation.Mercenary)
-                        {
-                            var policy = settings.MercenaryRecruitSetting;
-                            if (policy == MercenaryRecruitPolicy.None)
-                            {
-                                logLines.Add($"{leafInfo} failed: Mercenary recruitment disabled.");
-                                continue;
-                            }
-                            if (policy == MercenaryRecruitPolicy.AnyIgnoreTier)
-                            {
-                                logLines.Add($"{leafInfo} matched: Mercenary (AnyIgnoreTier).");
-                                leafMatched = true;
-                                break;
-                            }
-                            if (policy == MercenaryRecruitPolicy.Any)
-                            {
-                                if (leaf.Tier >= settings.MinRecruitTier && leaf.Tier <= settings.MaxRecruitTier)
-                                {
-                                    logLines.Add($"{leafInfo} matched: Mercenary matching tier limits.");
-                                    leafMatched = true;
-                                    break;
-                                }
-                                logLines.Add($"{leafInfo} failed: Mercenary tier {leaf.Tier} not in range.");
-                                continue;
-                            }
-                        }
-
-                        // Check leaf noble
                         bool leafIsNoble = leaf.Tier >= 6;
-                        if (leafIsNoble)
+                        if (EvaluateTroop(leaf, settings, logLines, leafInfo, ignoreRecruitPolicy, leafIsNoble))
                         {
-                            var policy = settings.NobleRecruitSetting;
-                            if (policy == NobleRecruitPolicy.None)
-                            {
-                                logLines.Add($"{leafInfo} failed: Noble recruitment disabled.");
-                                continue;
-                            }
-                            if (policy == NobleRecruitPolicy.AnyIgnoreTier)
-                            {
-                                if (IsCultureEnabled(leaf, settings))
-                                {
-                                    logLines.Add($"{leafInfo} matched: Noble (AnyIgnoreTier) with culture enabled.");
-                                    leafMatched = true;
-                                    break;
-                                }
-                                logLines.Add($"{leafInfo} failed: Noble (AnyIgnoreTier) but culture disabled.");
-                                continue;
-                            }
-                            if (policy == NobleRecruitPolicy.Any)
-                            {
-                                if (IsCultureEnabled(leaf, settings) && leaf.Tier >= settings.MinRecruitTier && leaf.Tier <= settings.MaxRecruitTier)
-                                {
-                                    logLines.Add($"{leafInfo} matched: Noble (Any) with culture and tier enabled.");
-                                    leafMatched = true;
-                                    break;
-                                }
-                                logLines.Add($"{leafInfo} failed: Noble (Any) but culture or tier disabled.");
-                                continue;
-                            }
-
-                            // MatchFilters
-                            if (IsCultureEnabled(leaf, settings) &&
-                                leaf.Tier >= settings.MinRecruitTier && leaf.Tier <= settings.MaxRecruitTier &&
-                                IsRoleEnabled(leaf, settings))
-                            {
-                                logLines.Add($"{leafInfo} matched: Noble (MatchFilters) matches culture, tier, and role.");
-                                leafMatched = true;
-                                break;
-                            }
-                            logLines.Add($"{leafInfo} failed: Noble (MatchFilters) role/culture/tier mismatch.");
-                        }
-                        else
-                        {
-                            // Regular troop
-                            var policy = settings.RegularRecruitSetting;
-                            if (policy == RegularRecruitPolicy.None)
-                            {
-                                logLines.Add($"{leafInfo} failed: Regular recruitment disabled.");
-                                continue;
-                            }
-                            if (policy == RegularRecruitPolicy.AnyIgnoreTier)
-                            {
-                                if (IsCultureEnabled(leaf, settings))
-                                {
-                                    logLines.Add($"{leafInfo} matched: Regular (AnyIgnoreTier) with culture enabled.");
-                                    leafMatched = true;
-                                    break;
-                                }
-                                logLines.Add($"{leafInfo} failed: Regular (AnyIgnoreTier) but culture disabled.");
-                                continue;
-                            }
-                            if (policy == RegularRecruitPolicy.Any)
-                            {
-                                if (IsCultureEnabled(leaf, settings) && leaf.Tier >= settings.MinRecruitTier && leaf.Tier <= settings.MaxRecruitTier)
-                                {
-                                    logLines.Add($"{leafInfo} matched: Regular (Any) with culture and tier enabled.");
-                                    leafMatched = true;
-                                    break;
-                                }
-                                logLines.Add($"{leafInfo} failed: Regular (Any) but culture or tier disabled.");
-                                continue;
-                            }
-
-                            // MatchFilters
-                            if (IsCultureEnabled(leaf, settings) &&
-                                leaf.Tier >= settings.MinRecruitTier && leaf.Tier <= settings.MaxRecruitTier &&
-                                IsRoleEnabled(leaf, settings))
-                            {
-                                logLines.Add($"{leafInfo} matched: Regular matches culture, tier, and role.");
-                                leafMatched = true;
-                                break;
-                            }
-                            logLines.Add($"{leafInfo} failed: Regular role/culture/tier mismatch.");
+                            leafMatched = true;
+                            break;
                         }
                     }
                     isMatch = leafMatched;
@@ -182,64 +66,84 @@ namespace PartyManager.Filters
                 // Purchase time evaluation
                 int maxLeafTier = leafTroops.Count > 0 ? leafTroops.Max(l => l.Tier) : troop.Tier;
                 bool isNoble = maxLeafTier >= 6;
-
-                if (isNoble)
-                {
-                    var policy = settings.NobleRecruitSetting;
-                    if (policy == NobleRecruitPolicy.None)
-                    {
-                        logLines.Add("Failed: Noble recruitment disabled.");
-                        isMatch = false;
-                    }
-                    else if (policy == NobleRecruitPolicy.AnyIgnoreTier)
-                    {
-                        isMatch = IsCultureEnabled(troop, settings);
-                        logLines.Add(isMatch ? "Approved: Noble (AnyIgnoreTier) with culture enabled." : "Failed: Noble (AnyIgnoreTier) but culture disabled.");
-                    }
-                    else if (policy == NobleRecruitPolicy.Any)
-                    {
-                        isMatch = IsCultureEnabled(troop, settings) && troop.Tier >= settings.MinRecruitTier && troop.Tier <= settings.MaxRecruitTier;
-                        logLines.Add(isMatch ? "Approved: Noble (Any) matching culture and tier." : "Failed: Noble (Any) culture or tier mismatch.");
-                    }
-                    else // MatchFilters
-                    {
-                        isMatch = IsCultureEnabled(troop, settings) &&
-                                  troop.Tier >= settings.MinRecruitTier && troop.Tier <= settings.MaxRecruitTier &&
-                                  IsRoleEnabled(troop, settings);
-                        logLines.Add(isMatch ? "Approved: Noble (MatchFilters) matches all." : "Failed: Noble (MatchFilters) role/culture/tier mismatch.");
-                    }
-                }
-                else
-                {
-                    // Regular troop
-                    var policy = settings.RegularRecruitSetting;
-                    if (policy == RegularRecruitPolicy.None)
-                    {
-                        logLines.Add("Failed: Regular recruitment disabled.");
-                        isMatch = false;
-                    }
-                    else if (policy == RegularRecruitPolicy.AnyIgnoreTier)
-                    {
-                        isMatch = IsCultureEnabled(troop, settings);
-                        logLines.Add(isMatch ? "Approved: Regular (AnyIgnoreTier) with culture enabled." : "Failed: Regular (AnyIgnoreTier) but culture disabled.");
-                    }
-                    else if (policy == RegularRecruitPolicy.Any)
-                    {
-                        isMatch = IsCultureEnabled(troop, settings) && troop.Tier >= settings.MinRecruitTier && troop.Tier <= settings.MaxRecruitTier;
-                        logLines.Add(isMatch ? "Approved: Regular (Any) matching culture and tier." : "Failed: Regular (Any) culture or tier mismatch.");
-                    }
-                    else // MatchFilters
-                    {
-                        isMatch = IsCultureEnabled(troop, settings) &&
-                                  troop.Tier >= settings.MinRecruitTier && troop.Tier <= settings.MaxRecruitTier &&
-                                  IsRoleEnabled(troop, settings);
-                        logLines.Add(isMatch ? "Approved: Regular matches all." : "Failed: Regular role/culture/tier mismatch.");
-                    }
-                }
+                isMatch = EvaluateTroop(troop, settings, logLines, "Purchase-time Troop", ignoreRecruitPolicy, isNoble);
             }
 
             WriteLog(logPrefix, isMatch, logLines);
             return isMatch;
+        }
+
+        private static bool EvaluateTroop(CharacterObject troop, Settings settings, List<string> logLines, string label, bool ignoreRecruitPolicy, bool isNoble)
+        {
+            UnifiedPolicy policy;
+            string typeLabel;
+
+            if (troop.Occupation == Occupation.Mercenary)
+            {
+                typeLabel = "Mercenary";
+                if (ignoreRecruitPolicy && settings.BypassMercenaryRecruitPolicy && settings.MercenaryRecruitSetting == MercenaryRecruitPolicy.None)
+                {
+                    policy = UnifiedPolicy.MatchFilters;
+                }
+                else
+                {
+                    policy = (UnifiedPolicy)settings.MercenaryRecruitSetting;
+                }
+            }
+            else if (isNoble)
+            {
+                typeLabel = "Noble";
+                if (ignoreRecruitPolicy && settings.BypassNobleRecruitPolicy && settings.NobleRecruitSetting == NobleRecruitPolicy.None)
+                {
+                    policy = UnifiedPolicy.MatchFilters;
+                }
+                else
+                {
+                    policy = (UnifiedPolicy)settings.NobleRecruitSetting;
+                }
+            }
+            else
+            {
+                typeLabel = "Regular";
+                if (ignoreRecruitPolicy && settings.BypassRegularRecruitPolicy && settings.RegularRecruitSetting == RegularRecruitPolicy.None)
+                {
+                    policy = UnifiedPolicy.MatchFilters;
+                }
+                else
+                {
+                    policy = (UnifiedPolicy)settings.RegularRecruitSetting;
+                }
+            }
+
+            string fullLabel = $"{label} ({typeLabel})";
+
+            if (policy == UnifiedPolicy.None)
+            {
+                logLines.Add($"{fullLabel} failed: recruitment disabled.");
+                return false;
+            }
+
+            if (policy == UnifiedPolicy.AnyIgnoreTier)
+            {
+                bool cultureOk = IsCultureEnabled(troop, settings);
+                logLines.Add(cultureOk ? $"{fullLabel} matched: culture enabled." : $"{fullLabel} failed: culture disabled.");
+                return cultureOk;
+            }
+
+            bool cultureAndTierOk = IsCultureEnabled(troop, settings) &&
+                                    troop.Tier >= settings.MinRecruitTier &&
+                                    troop.Tier <= settings.MaxRecruitTier;
+
+            if (policy == UnifiedPolicy.Any)
+            {
+                logLines.Add(cultureAndTierOk ? $"{fullLabel} matched: culture and tier limits met." : $"{fullLabel} failed: tier/culture mismatch.");
+                return cultureAndTierOk;
+            }
+
+            // UnifiedPolicy.MatchFilters
+            bool allOk = cultureAndTierOk && IsRoleEnabled(troop, settings);
+            logLines.Add(allOk ? $"{fullLabel} matched: all filters met." : $"{fullLabel} failed: role/tier/culture mismatch.");
+            return allOk;
         }
 
         private static bool IsCultureEnabled(CharacterObject troop, Settings settings)

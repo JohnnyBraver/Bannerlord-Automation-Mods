@@ -5,6 +5,14 @@ namespace PartyManager.Filters
 {
     public static class PrisonerFilter
     {
+        private enum UnifiedKeepPolicy
+        {
+            RansomAll,
+            KeepAll,
+            KeepNobleOnly,
+            KeepSelected
+        }
+
         public static bool MatchKeepFilter(CharacterObject prisoner, Settings settings)
         {
             var evalTroops = new List<CharacterObject>();
@@ -23,65 +31,70 @@ namespace PartyManager.Filters
             }
 
             bool isBandit = prisoner.Culture != null && prisoner.Culture.IsBandit;
+            bool isMinorFaction = !isBandit && prisoner.Culture != null && !IsMajorCulture(prisoner.Culture);
 
             foreach (var evalTroop in evalTroops)
             {
                 bool evalTroopIsNoble = evalTroop.Tier >= 6;
-                bool needsRecruitFilterCheck = false;
+                UnifiedKeepPolicy policy;
 
-                // Check keeping policies by category
+                // Determine policy based on troop classification
                 if (isBandit)
                 {
-                    var policy = settings.BanditPrisonerKeepPolicySetting;
-                    if (policy == BanditPrisonerKeepPolicy.RansomAll) continue;
-                    if (policy == BanditPrisonerKeepPolicy.KeepNobleOnly && !evalTroopIsNoble) continue;
-                    if (policy == BanditPrisonerKeepPolicy.KeepAll)
-                    {
-                        // Proceed to tier checks
-                    }
-                    else if (policy == BanditPrisonerKeepPolicy.KeepSelected)
-                    {
-                        needsRecruitFilterCheck = true;
-                    }
+                    policy = (UnifiedKeepPolicy)settings.BanditPrisonerKeepPolicySetting;
+                }
+                else if (evalTroopIsNoble)
+                {
+                    policy = (UnifiedKeepPolicy)settings.NoblePrisonerKeepPolicySetting;
+                }
+                else if (isMinorFaction)
+                {
+                    policy = (UnifiedKeepPolicy)settings.OtherPrisonerKeepPolicySetting;
                 }
                 else
                 {
-                    if (evalTroopIsNoble)
+                    policy = (UnifiedKeepPolicy)settings.RegularPrisonerKeepPolicySetting;
+                }
+
+                if (policy == UnifiedKeepPolicy.RansomAll) continue;
+                if (policy == UnifiedKeepPolicy.KeepNobleOnly && !evalTroopIsNoble) continue;
+
+                // Check recruitment filter if policy is KeepSelected
+                if (policy == UnifiedKeepPolicy.KeepSelected)
+                {
+                    // Pass ignoreRecruitPolicy = true if the respective bypass check is enabled in settings
+                    bool ignoreRecruitPolicy = false;
+                    if (evalTroop.Occupation == Occupation.Mercenary)
                     {
-                        var policy = settings.NoblePrisonerKeepPolicySetting;
-                        if (policy == PrisonerKeepPolicy.RansomAll) continue;
-                        if (policy == PrisonerKeepPolicy.KeepAll)
-                        {
-                            // Proceed to tier checks
-                        }
-                        else if (policy == PrisonerKeepPolicy.KeepSelected)
-                        {
-                            needsRecruitFilterCheck = true;
-                        }
+                        ignoreRecruitPolicy = settings.BypassMercenaryRecruitPolicy;
+                    }
+                    else if (evalTroopIsNoble)
+                    {
+                        ignoreRecruitPolicy = settings.BypassNobleRecruitPolicy;
                     }
                     else
                     {
-                        var policy = settings.RegularPrisonerKeepPolicySetting;
-                        if (policy == PrisonerKeepPolicy.RansomAll) continue;
-                        if (policy == PrisonerKeepPolicy.KeepAll)
-                        {
-                            // Proceed to tier checks
-                        }
-                        else if (policy == PrisonerKeepPolicy.KeepSelected)
-                        {
-                            needsRecruitFilterCheck = true;
-                        }
+                        ignoreRecruitPolicy = settings.BypassRegularRecruitPolicy;
+                    }
+
+                    if (!RecruitmentFilter.MatchTroopFilter(evalTroop, settings, ignoreRecruitPolicy))
+                    {
+                        continue;
                     }
                 }
 
-                // Check recruitment filter if policy is KeepSelected
-                if (needsRecruitFilterCheck)
+                // Check tier limits
+                bool bypassTierLimit = false;
+                if (evalTroopIsNoble && settings.BypassNoblePrisonerTierLimit)
                 {
-                    if (!RecruitmentFilter.MatchTroopFilter(evalTroop, settings)) continue;
+                    bypassTierLimit = true;
+                }
+                else if (isMinorFaction && settings.BypassOtherPrisonerTierLimit)
+                {
+                    bypassTierLimit = true;
                 }
 
-                // Check tier limits
-                if (!(evalTroopIsNoble && settings.BypassNoblePrisonerTierLimit))
+                if (!bypassTierLimit)
                 {
                     if (settings.UsePerkBasedPrisonerKeep && Hero.MainHero != null)
                     {
@@ -116,6 +129,13 @@ namespace PartyManager.Filters
             }
 
             return false;
+        }
+
+        private static bool IsMajorCulture(CultureObject culture)
+        {
+            if (culture == null) return false;
+            string cid = culture.StringId?.ToLowerInvariant() ?? "";
+            return cid == "empire" || cid == "vlandia" || cid == "battania" || cid == "sturgia" || cid == "khuzait" || cid == "aserai";
         }
     }
 }

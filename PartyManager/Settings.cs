@@ -355,17 +355,37 @@ namespace PartyManager
         [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
         public Dropdown<BanditPrisonerKeepPolicyOption> BanditPrisonerKeepPolicyDropdown { get; set; } = new Dropdown<BanditPrisonerKeepPolicyOption>(BanditPrisonerKeepPolicyOptions, 0); // Ransom All
 
-        [SettingPropertyBool("Bypass Noble Prisoner Tier Limit", RequireRestart = false, HintText = "If enabled, noble prisoners (and noble-upgrading bandits if kept) will bypass the min tier keep limit.", Order = 5)]
+        [SettingPropertyDropdown("Other / Minor Faction Prisoner Keep Policy", RequireRestart = false, HintText = "Keep policy for minor faction and other modded culture prisoners.", Order = 5)]
+        [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
+        public Dropdown<PrisonerKeepPolicyOption> OtherPrisonerKeepPolicyDropdown { get; set; } = new Dropdown<PrisonerKeepPolicyOption>(PrisonerKeepPolicyOptions, 2); // Keep Selected
+
+        [SettingPropertyBool("Bypass Noble Prisoner Tier Limit", RequireRestart = false, HintText = "If enabled, noble prisoners will bypass the min tier keep limit.", Order = 6)]
         [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
         public bool BypassNoblePrisonerTierLimit { get; set; } = true;
 
-        [SettingPropertyInteger("Min Prisoner Tier to Keep", 1, 6, RequireRestart = false, HintText = "Minimum tier of regular/bandit prisoner to keep for recruitment.", Order = 6)]
+        [SettingPropertyBool("Bypass Minor Faction/Other Tier Limit", RequireRestart = false, HintText = "If enabled, minor faction/other culture prisoners will bypass the min tier keep limit.", Order = 7)]
+        [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
+        public bool BypassOtherPrisonerTierLimit { get; set; } = true;
+
+        [SettingPropertyInteger("Min Prisoner Tier to Keep", 1, 6, RequireRestart = false, HintText = "Minimum tier of regular/bandit prisoner to keep for recruitment.", Order = 8)]
         [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
         public int MinPrisonerTierToKeep { get; set; } = 4;
 
-        [SettingPropertyBool("Perk-Based Prisoner Keep", RequireRestart = false, HintText = "Automatically override keep tier filters based on active Level 50 Leadership perks (Stout Defender keeping T4-6, Fervent Attacker keeping T1-3).", Order = 7)]
+        [SettingPropertyBool("Perk-Based Prisoner Keep", RequireRestart = false, HintText = "Automatically override keep tier filters based on active Level 50 Leadership perks.", Order = 9)]
         [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
         public bool UsePerkBasedPrisonerKeep { get; set; } = true;
+
+        [SettingPropertyBool("Bypass Noble Recruit Policy when Keeping", RequireRestart = false, HintText = "If enabled, keep selected noble prisoners matching role/culture filters even if noble recruitment from notables is disabled.", Order = 10)]
+        [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
+        public bool BypassNobleRecruitPolicy { get; set; } = false;
+
+        [SettingPropertyBool("Bypass Regular Recruit Policy when Keeping", RequireRestart = false, HintText = "If enabled, keep selected regular prisoners matching role/culture filters even if regular recruitment from notables is disabled.", Order = 11)]
+        [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
+        public bool BypassRegularRecruitPolicy { get; set; } = false;
+
+        [SettingPropertyBool("Bypass Mercenary Recruit Policy when Keeping", RequireRestart = false, HintText = "If enabled, keep selected mercenary prisoners matching role/culture filters even if tavern recruitment is disabled.", Order = 12)]
+        [SettingPropertyGroup("Prisoners/Keep Policies & Limits", GroupOrder = 0)]
+        public bool BypassMercenaryRecruitPolicy { get; set; } = false;
 
         // --- Prisoner Ransom Settings ---
         [SettingPropertyBool("Auto-Ransom Prisoners", RequireRestart = false, HintText = "Automatically ransom standard prisoners for gold in taverns.", Order = 1)]
@@ -418,5 +438,6 @@ namespace PartyManager
         public PrisonerKeepPolicy NoblePrisonerKeepPolicySetting => NoblePrisonerKeepPolicyDropdown.SelectedValue.Value;
         public PrisonerKeepPolicy RegularPrisonerKeepPolicySetting => RegularPrisonerKeepPolicyDropdown.SelectedValue.Value;
         public BanditPrisonerKeepPolicy BanditPrisonerKeepPolicySetting => BanditPrisonerKeepPolicyDropdown.SelectedValue.Value;
+        public PrisonerKeepPolicy OtherPrisonerKeepPolicySetting => OtherPrisonerKeepPolicyDropdown.SelectedValue.Value;
     }
 }
