@@ -188,7 +188,7 @@ namespace PartyManager
 
         [SettingPropertyDropdown("Mercenary Recruitment Policy", RequireRestart = false, HintText = "Control how mercenary troops are recruited from taverns.")]
         [SettingPropertyGroup("Recruitment", GroupOrder = 0)]
-        public Dropdown<MercenaryRecruitPolicyOption> MercenaryRecruitDropdown { get; set; } = new Dropdown<MercenaryRecruitPolicyOption>(MercenaryRecruitPolicyOptions, 2); // Default: Any Mercenary (Respect Tier Limits)
+        public Dropdown<MercenaryRecruitPolicyOption> MercenaryRecruitDropdown { get; set; } = new Dropdown<MercenaryRecruitPolicyOption>(MercenaryRecruitPolicyOptions, 0); // Default: Do Not Recruit Mercenaries
 
         [SettingPropertyInteger("Min Tier to Recruit", 1, 6, RequireRestart = false, HintText = "Minimum troop tier to buy.")]
         [SettingPropertyGroup("Recruitment", GroupOrder = 0)]
