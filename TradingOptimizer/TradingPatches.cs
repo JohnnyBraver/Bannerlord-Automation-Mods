@@ -15,7 +15,7 @@ namespace TradingOptimizer
     {
         public static SPInventoryVM? ActiveInventoryVM { get; private set; }
 
-        public static void SPInventoryVMConstructorPostfix(SPInventoryVM __instance)
+        public static void OnSPInventoryVMConstructed(SPInventoryVM __instance)
         {
             ActiveInventoryVM = __instance;
         }
@@ -68,9 +68,9 @@ namespace TradingOptimizer
 
             if (report.SoldItems.Count == 0 && report.BoughtItems.Count == 0)
             {
-                InformationManager.DisplayMessage(new InformationMessage(
-                    $"{simPrefix}Trading Optimizer: Visited {traderName} - No profitable trades found."
-                ));
+                string noTradeMsg = $"{simPrefix}Trading Optimizer: Visited {traderName} - No profitable trades found.";
+                InformationManager.DisplayMessage(new InformationMessage(noTradeMsg));
+                TradingEngine.WriteLog(noTradeMsg);
                 return;
             }
 
@@ -78,17 +78,21 @@ namespace TradingOptimizer
             uint msgColor = netProfit >= 0 ? 0x40FF40FF : 0xFF4040FF; // Green or Red
             string tradeVerb = isSim ? "WOULD trade with" : "Auto-traded with";
 
+            string headerMsg = $"{simPrefix}Trading Optimizer: {tradeVerb} {traderName}! Profit: {profitText}";
             InformationManager.DisplayMessage(new InformationMessage(
-                $"{simPrefix}Trading Optimizer: {tradeVerb} {traderName}! Profit: {profitText}",
+                headerMsg,
                 Color.FromUint(msgColor)
             ));
+            TradingEngine.WriteLog(headerMsg);
 
             if (report.SoldItems.Count > 0)
             {
                 string wouldSell = isSim ? "Would sell: " : "  Sold: ";
                 var sb = new StringBuilder(wouldSell);
                 sb.Append(string.Join(", ", report.SoldItems.Select(s => $"{s.Count} {s.Name} (+{s.Gold}d)")));
-                InformationManager.DisplayMessage(new InformationMessage(sb.ToString()));
+                string msg = sb.ToString();
+                InformationManager.DisplayMessage(new InformationMessage(msg));
+                TradingEngine.WriteLog("  " + msg.Trim());
             }
 
             if (report.BoughtItems.Count > 0)
@@ -96,7 +100,9 @@ namespace TradingOptimizer
                 string wouldBuy = isSim ? "Would buy:  " : "  Bought: ";
                 var sb = new StringBuilder(wouldBuy);
                 sb.Append(string.Join(", ", report.BoughtItems.Select(b => $"{b.Count} {b.Name} (-{b.Gold}d)")));
-                InformationManager.DisplayMessage(new InformationMessage(sb.ToString()));
+                string msg = sb.ToString();
+                InformationManager.DisplayMessage(new InformationMessage(msg));
+                TradingEngine.WriteLog("  " + msg.Trim());
             }
 
             if (TaleWorlds.CampaignSystem.Party.MobileParty.MainParty != null)
@@ -105,9 +111,9 @@ namespace TradingOptimizer
                 float capacity = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty.InventoryCapacity;
                 int pct = (int)Math.Round((curWeight / capacity) * 100);
                 string cargoLabel = isSim ? "  Current cargo" : "  Cargo";
-                InformationManager.DisplayMessage(new InformationMessage(
-                    $"{cargoLabel}: {(int)curWeight} / {(int)capacity} capacity ({pct}%)"
-                ));
+                string cargoMsg = $"{cargoLabel}: {(int)curWeight} / {(int)capacity} capacity ({pct}%)";
+                InformationManager.DisplayMessage(new InformationMessage(cargoMsg));
+                TradingEngine.WriteLog("  " + cargoMsg.Trim());
             }
         }
 

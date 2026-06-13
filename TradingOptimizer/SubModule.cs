@@ -36,7 +36,7 @@ namespace TradingOptimizer
                 var targetConstructor = typeof(SPInventoryVM).GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).FirstOrDefault();
                 if (targetConstructor != null)
                 {
-                    var postfixMethod = typeof(TradingPatches).GetMethod("SPInventoryVMConstructorPostfix", BindingFlags.Public | BindingFlags.Static);
+                    var postfixMethod = typeof(TradingPatches).GetMethod("OnSPInventoryVMConstructed", BindingFlags.Public | BindingFlags.Static);
                     if (postfixMethod != null)
                     {
                         HarmonyInstance.Patch(targetConstructor, postfix: new HarmonyMethod(postfixMethod));

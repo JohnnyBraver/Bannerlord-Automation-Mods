@@ -7,6 +7,8 @@ using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using Bannerlord.UIExtenderEx;
 using SettlementAutomationCore;
+using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.Core;
 
 namespace EquipmentManager
 {
@@ -28,7 +30,7 @@ namespace EquipmentManager
                 var targetConstructor = typeof(SPInventoryVM).GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).FirstOrDefault();
                 if (targetConstructor != null)
                 {
-                    var postfixMethod = typeof(EquipmentPatches).GetMethod("SPInventoryVMConstructorPostfix", BindingFlags.Public | BindingFlags.Static);
+                    var postfixMethod = typeof(EquipmentPatches).GetMethod("OnSPInventoryVMConstructed", BindingFlags.Public | BindingFlags.Static);
                     if (postfixMethod != null)
                     {
                         HarmonyInstance.Patch(targetConstructor, postfix: new HarmonyMethod(postfixMethod));
@@ -77,6 +79,12 @@ namespace EquipmentManager
             {
                 _provider = new EquipmentManagerProvider();
                 AutomationRegistry.RegisterTradeProvider(_provider);
+
+                var campaignStarter = gameStarter as CampaignGameStarter;
+                if (campaignStarter != null)
+                {
+                    campaignStarter.AddBehavior(new EquipmentManagerCampaignBehavior());
+                }
             }
         }
 
@@ -89,5 +97,34 @@ namespace EquipmentManager
                 _provider = null;
             }
         }
+    }
+
+    public class EquipmentManagerCampaignBehavior : CampaignBehaviorBase
+    {
+        public override void RegisterEvents()
+        {
+            CampaignEvents.MapEventEnded.AddNonSerializedListener(this, OnMapEventEnded);
+        }
+
+        private void OnMapEventEnded(MapEvent mapEvent)
+        {
+            if (mapEvent == null) return;
+            try
+            {
+                if (mapEvent.PlayerSide == BattleSideEnum.None) return;
+                if (mapEvent.WinningSide != mapEvent.PlayerSide) return;
+
+                if (TaleWorlds.CampaignSystem.Party.MobileParty.MainParty != null)
+                {
+                    EquipmentEngine.AutoEquipHeadless(TaleWorlds.CampaignSystem.Party.MobileParty.MainParty);
+                }
+            }
+            catch (Exception ex)
+            {
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error in EquipmentManagerCampaignBehavior.OnMapEventEnded: {ex}");
+            }
+        }
+
+        public override void SyncData(IDataStore dataStore) { }
     }
 }

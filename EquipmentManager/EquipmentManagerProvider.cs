@@ -12,18 +12,41 @@ namespace EquipmentManager
 {
     public class EquipmentManagerProvider : ITradeOrderProvider
     {
+        private struct PotentialBuyOrder
+        {
+            public EquipmentElement Candidate;
+            public int Price;
+            public float ScoreIncrease;
+            public bool PrioritizeStealth;
+            public Hero Hero;
+            public EquipmentIndex Slot;
+        }
+
         public string ProviderName => "EquipmentManager";
 
         public List<TradeOrder> GetPreSellOrders(MobileParty party, Settlement settlement)
         {
+            try
+            {
+                if (party != null)
+                {
+                    SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"[Pre-Transaction] Securing existing equipment upgrades in {settlement.Name} before trade phase starts.");
+                    EquipmentEngine.AutoEquipHeadless(party, "Pre-Transaction");
+                }
+            }
+            catch (Exception ex)
+            {
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error in GetPreSellOrders AutoEquipHeadless: {ex}");
+            }
             return new List<TradeOrder>();
         }
 
         public List<TradeOrder> GetMainOrders(MobileParty party, Settlement settlement, InventoryLogic currentLogic)
         {
             var orders = new List<TradeOrder>();
-            if (!Settings.Instance.SellUnlockedEquipment) return orders;
-            if (Settings.Instance.PreventEquipmentSaleInVillages && settlement.IsVillage) return orders;
+            var settings = Settings.Instance;
+            if (settings == null || !settings.SellUnlockedEquipment) return orders;
+            if (settings.PreventEquipmentSaleInVillages && settlement.IsVillage) return orders;
 
             var tracker = Campaign.Current?.GetCampaignBehavior<IViewDataTracker>();
             var locks = new HashSet<string>(tracker?.GetInventoryLocks() ?? Enumerable.Empty<string>());
@@ -31,9 +54,26 @@ namespace EquipmentManager
             bool hasWeaponPerk = Hero.MainHero?.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Steward.PaidInPromise) ?? false;
             bool hasArmorPerk = Hero.MainHero?.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Steward.GivingHands) ?? false;
 
-            if (!Enum.TryParse<ItemQuality>(Settings.Instance.MinQualityToKeep, true, out var minQuality))
+            if (!Enum.TryParse<ItemQuality>(settings.MinQualityToKeep, true, out var minQuality))
             {
                 minQuality = ItemQuality.Fine;
+            }
+
+            // Gather targets for upgrade check
+            var targets = new List<Hero>();
+            if (Hero.MainHero != null)
+            {
+                targets.Add(Hero.MainHero);
+            }
+            if (settings.BuyEquipmentTargetSetting == BuyEquipmentTarget.PlayerAndCompanions && party != null)
+            {
+                foreach (var member in party.MemberRoster.GetTroopRoster())
+                {
+                    if (member.Character.IsHero && member.Character.HeroObject != null && member.Character.HeroObject != Hero.MainHero)
+                    {
+                        targets.Add(member.Character.HeroObject);
+                    }
+                }
             }
 
             // Loop through player's inventory to find equipment to sell
@@ -58,7 +98,7 @@ namespace EquipmentManager
                 bool shouldLock = false;
 
                 // A. Min Tier
-                if ((int)item.Tier >= Settings.Instance.MinTierToKeep)
+                if ((int)item.Tier >= settings.MinTierToKeep)
                 {
                     shouldLock = true;
                 }
@@ -75,7 +115,7 @@ namespace EquipmentManager
                     {
                         shouldLock = true;
                     }
-                    else if (Settings.Instance.KeepPositiveModifiers && modifier.PriceMultiplier > 1.0f)
+                    else if (settings.KeepPositiveModifiers && modifier.PriceMultiplier > 1.0f)
                     {
                         shouldLock = true;
                     }
@@ -88,20 +128,30 @@ namespace EquipmentManager
                     float baseValue = item.Value;
                     float costPerXp = baseValue > 0 ? (sellPrice / baseValue) : 9999f;
 
-                    if (costPerXp <= Settings.Instance.MaxCostPerXp)
+                    if (costPerXp <= settings.MaxCostPerXp)
                     {
                         if (item.HasArmorComponent && hasArmorPerk && 
-                            (Settings.Instance.LockDonationCategorySetting == LockDonationCategory.ArmorOnly || 
-                             Settings.Instance.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
+                            (settings.LockDonationCategorySetting == LockDonationCategory.ArmorOnly || 
+                             settings.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
                         {
                             shouldLock = true;
                         }
                         else if ((item.WeaponComponent != null || item.PrimaryWeapon != null) && hasWeaponPerk && 
-                                 (Settings.Instance.LockDonationCategorySetting == LockDonationCategory.WeaponsOnly || 
-                                  Settings.Instance.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
+                                 (settings.LockDonationCategorySetting == LockDonationCategory.WeaponsOnly || 
+                                  settings.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
                         {
                             shouldLock = true;
                         }
+                    }
+                }
+
+                // D. Prevent selling unequipped upgrades!
+                if (!shouldLock && item.HasArmorComponent)
+                {
+                    if (IsUpgradeForAnyTarget(eqEl, targets, settings))
+                    {
+                        shouldLock = true;
+                        SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"[Lock Rules] Preserving unequipped upgrade/side-grade in inventory: {item.Name} (Tier {item.Tier}, Armor Score: {GetArmorScore(eqEl):F1})");
                     }
                 }
 
@@ -112,7 +162,8 @@ namespace EquipmentManager
                 }
             }
 
-            if (Settings.Instance.PrioritizeHeavyTrash)
+
+            if (settings.PrioritizeHeavyTrash)
             {
                 orders = orders.OrderByDescending(o =>
                 {
@@ -122,7 +173,215 @@ namespace EquipmentManager
                 }).ToList();
             }
 
+            // E. Auto-Buy Upgrades
+            if (settings.BuyStealthGear || settings.BuyTopArmor)
+            {
+                int playerGold = Hero.MainHero?.Gold ?? 0;
+                bool canBuyStealth = settings.BuyStealthGear;
+                bool canBuyTopArmor = settings.BuyTopArmor && playerGold >= settings.BuyTopArmorGoldThreshold;
+
+                if (canBuyStealth || canBuyTopArmor)
+                {
+                    var armorSlots = new EquipmentIndex[] { EquipmentIndex.Head, EquipmentIndex.Body, EquipmentIndex.Leg, EquipmentIndex.Gloves, EquipmentIndex.Cape };
+                    var merchantElements = currentLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
+                    
+                    var potentialOrders = new List<PotentialBuyOrder>();
+
+                    foreach (var hero in targets)
+                    {
+                        if (hero.CharacterObject == null) continue;
+
+                        for (int setIndex = 0; setIndex < 2; setIndex++)
+                        {
+                            bool isCivilian = (setIndex == 1);
+                            var equipment = isCivilian ? hero.CivilianEquipment : hero.BattleEquipment;
+                            bool prioritizeStealth = (hero == Hero.MainHero && isCivilian && settings.MainHeroCivilianModeSetting == MainHeroCivilianMode.Stealth);
+
+                            foreach (var slot in armorSlots)
+                            {
+                                var currentArmor = equipment[slot];
+
+                                // Find best candidate in merchant roster that beats current
+                                ItemRosterElement bestCandidate = default;
+                                float currentEquippedScore = prioritizeStealth ? GetStealthScore(currentArmor) : GetArmorScore(currentArmor);
+                                float currentInventoryScore = GetBestScoreInInventory(currentLogic, slot, prioritizeStealth);
+                                float bestScore = Math.Max(currentEquippedScore, currentInventoryScore);
+                                bool foundUpgrade = false;
+
+                                for (int i = 0; i < merchantElements.Count; i++)
+                                {
+                                    var rosterElement = merchantElements[i];
+                                    if (rosterElement.IsEmpty || rosterElement.Amount <= 0) continue;
+
+                                    var candidate = rosterElement.EquipmentElement;
+                                    var item = candidate.Item;
+                                    if (item == null || !item.HasArmorComponent) continue;
+
+                                    if (isCivilian && !item.IsCivilian) continue;
+                                    if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
+
+                                    if (prioritizeStealth)
+                                    {
+                                        bool isStealthItem = (item.Name != null && item.Name.ToString().IndexOf("blackened", StringComparison.OrdinalIgnoreCase) >= 0);
+                                        if (!isStealthItem) continue;
+
+                                        float score = GetStealthScore(candidate);
+                                        if (score > bestScore)
+                                        {
+                                            bestScore = score;
+                                            bestCandidate = rosterElement;
+                                            foundUpgrade = true;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (!canBuyTopArmor) continue;
+                                        if ((int)item.Tier < settings.MinTierToBuyTopArmor) continue;
+
+                                        float score = GetArmorScore(candidate);
+                                        if (score > bestScore)
+                                        {
+                                            bestScore = score;
+                                            bestCandidate = rosterElement;
+                                            foundUpgrade = true;
+                                        }
+                                    }
+                                }
+
+                                if (foundUpgrade && !bestCandidate.IsEmpty)
+                                {
+                                    int price = currentLogic.GetItemPrice(bestCandidate.EquipmentElement, true);
+                                    int requiredReserve = prioritizeStealth ? settings.MinimumGoldReserve : settings.BuyTopArmorGoldThreshold;
+
+                                    if (playerGold - price >= requiredReserve)
+                                    {
+                                        float currentScore = prioritizeStealth ? GetStealthScore(currentArmor) : GetArmorScore(currentArmor);
+                                        float scoreIncrease = bestScore - currentScore;
+
+                                        potentialOrders.Add(new PotentialBuyOrder
+                                        {
+                                            Candidate = bestCandidate.EquipmentElement,
+                                            Price = price,
+                                            ScoreIncrease = scoreIncrease,
+                                            PrioritizeStealth = prioritizeStealth,
+                                            Hero = hero,
+                                            Slot = slot
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Select and buy only the single best upgrade across all slots/heroes (Limit 1 per town)
+                    if (potentialOrders.Count > 0)
+                    {
+                        var bestOrder = potentialOrders.OrderByDescending(o => o.ScoreIncrease).First();
+                        orders.Add(new TradeOrder(bestOrder.Candidate, 1, true));
+                        SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Suggested Auto-Buy (Limit 1 per town): {bestOrder.Candidate.Item.Name} as upgrade for {bestOrder.Hero.Name} ({bestOrder.Slot} slot). Price: {bestOrder.Price} denars. Score Increase: {bestOrder.ScoreIncrease:F1}");
+                    }
+                }
+            }
+
             return orders;
+        }
+
+        private static float GetBestScoreInInventory(InventoryLogic currentLogic, EquipmentIndex slot, bool prioritizeStealth)
+        {
+            float bestScore = -9999f;
+            var playerElements = currentLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+            for (int i = 0; i < playerElements.Count; i++)
+            {
+                var rosterElement = playerElements[i];
+                if (rosterElement.IsEmpty || rosterElement.Amount <= 0) continue;
+
+                var eqEl = rosterElement.EquipmentElement;
+                var item = eqEl.Item;
+                if (item == null || !item.HasArmorComponent) continue;
+
+                if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
+
+                if (prioritizeStealth)
+                {
+                    bool isStealthItem = (item.Name != null && item.Name.ToString().IndexOf("blackened", StringComparison.OrdinalIgnoreCase) >= 0);
+                    if (!isStealthItem) continue;
+
+                    float score = GetStealthScore(eqEl);
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                    }
+                }
+                else
+                {
+                    float score = GetArmorScore(eqEl);
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                    }
+                }
+            }
+            return bestScore;
+        }
+
+        private static bool IsUpgradeForAnyTarget(EquipmentElement eqEl, List<Hero> targets, Settings settings)
+        {
+            var item = eqEl.Item;
+            if (item == null || !item.HasArmorComponent) return false;
+
+            var armorSlots = new EquipmentIndex[] { EquipmentIndex.Head, EquipmentIndex.Body, EquipmentIndex.Leg, EquipmentIndex.Gloves, EquipmentIndex.Cape };
+            
+            foreach (var hero in targets)
+            {
+                if (hero.CharacterObject == null) continue;
+
+                for (int setIndex = 0; setIndex < 2; setIndex++)
+                {
+                    bool isCivilian = (setIndex == 1);
+                    if (isCivilian && !item.IsCivilian) continue;
+
+                    var equipment = isCivilian ? hero.CivilianEquipment : hero.BattleEquipment;
+                    bool prioritizeStealth = (hero == Hero.MainHero && isCivilian && settings.MainHeroCivilianModeSetting == MainHeroCivilianMode.Stealth);
+
+                    foreach (var slot in armorSlots)
+                    {
+                        if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
+
+                        var currentArmor = equipment[slot];
+                        float currentScore = prioritizeStealth ? GetStealthScore(currentArmor) : GetArmorScore(currentArmor);
+                        
+                        if (prioritizeStealth)
+                        {
+                            bool isStealthItem = (item.Name != null && item.Name.ToString().IndexOf("blackened", StringComparison.OrdinalIgnoreCase) >= 0);
+                            if (isStealthItem)
+                            {
+                                float candidateScore = GetStealthScore(eqEl);
+                                if (candidateScore > currentScore) return true;
+                            }
+                        }
+                        else
+                        {
+                            float candidateScore = GetArmorScore(eqEl);
+                            if (candidateScore > currentScore) return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static float GetArmorScore(EquipmentElement eqEl)
+        {
+            if (eqEl.IsEmpty) return 0f;
+            return eqEl.GetModifiedHeadArmor() + eqEl.GetModifiedBodyArmor() + eqEl.GetModifiedLegArmor() + eqEl.GetModifiedArmArmor();
+        }
+
+        private static float GetStealthScore(EquipmentElement eqEl)
+        {
+            if (eqEl.IsEmpty) return 0f;
+            int stealthFactor = (eqEl.Item != null && eqEl.Item.ArmorComponent != null) ? eqEl.Item.ArmorComponent.StealthFactor : 0;
+            return stealthFactor * 1000f + GetArmorScore(eqEl);
         }
     }
 }

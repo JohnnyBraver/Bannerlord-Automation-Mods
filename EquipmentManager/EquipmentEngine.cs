@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.Inventory;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
@@ -13,6 +14,13 @@ namespace EquipmentManager
 {
     public static class EquipmentEngine
     {
+        private struct EquipTarget
+        {
+            public Hero Hero;
+            public bool IsCivilian;
+            public bool PrioritizeStealth;
+        }
+
         private static readonly FieldInfo? InventoryLogicField = typeof(SPInventoryVM)
             .GetField("_inventoryLogic", BindingFlags.Instance | BindingFlags.NonPublic);
 
@@ -26,12 +34,18 @@ namespace EquipmentManager
         {
             if (vm == null) return;
 
+            var settings = Settings.Instance;
+            if (settings == null) return;
+
             var inventoryLogic = GetInventoryLogic(vm);
             if (inventoryLogic == null) return;
 
+            int equippedCount = 0;
+            int totalSold = 0;
+
             // 1. Gather all heroes to process
             var heroesToProcess = new List<Hero>();
-            if (Settings.Instance.AutoEquipCompanions)
+            if (settings.AutoEquipCompanions)
             {
                 try
                 {
@@ -65,180 +79,12 @@ namespace EquipmentManager
                 }
             }
 
+            SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"=== Equipment Optimization Run started for: {string.Join(", ", heroesToProcess.Select(h => h.Name.ToString()))} ===");
+
             var notifications = new List<string>();
 
             // 2. Auto-Equip Phase
-            var armorSlots = new EquipmentIndex[] { EquipmentIndex.Head, EquipmentIndex.Body, EquipmentIndex.Leg, EquipmentIndex.Gloves, EquipmentIndex.Cape };
-            var weaponSlots = new EquipmentIndex[] { EquipmentIndex.Weapon0, EquipmentIndex.Weapon1, EquipmentIndex.Weapon2, EquipmentIndex.Weapon3 };
-
-            foreach (var hero in heroesToProcess)
-            {
-                if (hero.CharacterObject == null) continue;
-
-                // Process both Combat and Civilian sets
-                for (int setIndex = 0; setIndex < 2; setIndex++)
-                {
-                    bool isCivilian = setIndex == 1;
-                    var equipment = isCivilian ? hero.CivilianEquipment : hero.BattleEquipment;
-                    var targetSide = isCivilian ? InventoryLogic.InventorySide.CivilianEquipment : InventoryLogic.InventorySide.BattleEquipment;
-
-                    // A. Armor Slots
-                    if (Settings.Instance.AutoEquipCategorySetting == AutoEquipCategory.ArmorOnly || Settings.Instance.AutoEquipCategorySetting == AutoEquipCategory.WeaponsAndArmor)
-                    {
-                        foreach (var slot in armorSlots)
-                        {
-                            var currentArmor = equipment[slot];
-
-                            // Find best strict upgrade and best drawback candidate
-                            ItemRosterElement? bestStrictUpgrade = null;
-                            float bestStrictScore = -9999f;
-
-                            ItemRosterElement? bestDrawback = null;
-                            float bestDrawbackScore = -9999f;
-
-                            var playerItems = inventoryLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-                            foreach (var element in playerItems)
-                            {
-                                if (element.IsEmpty || element.Amount <= 0) continue;
-
-                                var candidate = element.EquipmentElement;
-                                var item = candidate.Item;
-                                if (item == null || !item.HasArmorComponent) continue;
-
-                                if (isCivilian && !item.IsCivilian) continue;
-                                if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
-
-                                bool checkWeight = isCivilian && Settings.Instance.OptimizeCivilianForSneaking;
-                                float penalty = Settings.Instance.SneakingWeightPenaltyFactor;
-
-                                bool strictlyBeats = StrictlyBeatsArmor(candidate, currentArmor, checkWeight, penalty);
-                                float score = GetArmorScore(candidate, checkWeight, penalty);
-
-                                if (strictlyBeats)
-                                {
-                                    if (score > bestStrictScore)
-                                    {
-                                        bestStrictScore = score;
-                                        bestStrictUpgrade = element;
-                                    }
-                                }
-                                else
-                                {
-                                    float currentScore = GetArmorScore(currentArmor, checkWeight, penalty);
-                                    if (score > currentScore && score > bestDrawbackScore)
-                                    {
-                                        bestDrawbackScore = score;
-                                        bestDrawback = element;
-                                    }
-                                }
-                            }
-
-                            // Equip strict upgrade if found
-                            if (bestStrictUpgrade.HasValue)
-                            {
-                                var upgradeElement = bestStrictUpgrade.Value;
-                                var equipElement = new ItemRosterElement(upgradeElement.EquipmentElement, 1);
-                                var command = TransferCommand.Transfer(1, InventoryLogic.InventorySide.PlayerInventory, targetSide, equipElement, EquipmentIndex.None, slot, hero.CharacterObject);
-                                inventoryLogic.AddTransferCommand(command);
-
-                                string slotName = GetSlotName(slot);
-                                string setName = isCivilian ? "Civilian" : "Combat";
-                                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Equipped {upgradeElement.EquipmentElement.Item.Name} on {hero.Name} in {slotName} slot ({setName} set).");
-
-                                // If we successfully upgraded, update currentArmor for drawback comparison
-                                currentArmor = upgradeElement.EquipmentElement;
-                            }
-
-                            // Check if a drawback candidate is still better than the newly equipped armor
-                            if (bestDrawback.HasValue)
-                            {
-                                float currentScore = GetArmorScore(currentArmor, isCivilian && Settings.Instance.OptimizeCivilianForSneaking, Settings.Instance.SneakingWeightPenaltyFactor);
-                                if (bestDrawbackScore > currentScore)
-                                {
-                                    string slotName = GetSlotName(slot);
-                                    string setName = isCivilian ? "Civilian" : "Combat";
-                                    notifications.Add($"{hero.Name} ({setName}): {bestDrawback.Value.EquipmentElement.Item.Name} in {slotName} slot is better but has drawbacks compared to {(currentArmor.IsEmpty ? "None" : currentArmor.Item.Name)}.");
-                                }
-                            }
-                        }
-                    }
-
-                    // B. Weapon Slots (Only evaluate if slot is not empty)
-                    if (Settings.Instance.AutoEquipCategorySetting == AutoEquipCategory.WeaponsOnly || Settings.Instance.AutoEquipCategorySetting == AutoEquipCategory.WeaponsAndArmor)
-                    {
-                        foreach (var slot in weaponSlots)
-                        {
-                            var currentWeapon = equipment[slot];
-                            if (currentWeapon.IsEmpty || currentWeapon.Item == null || currentWeapon.Item.PrimaryWeapon == null) continue;
-
-                            ItemRosterElement? bestStrictUpgrade = null;
-                            float bestStrictScore = -9999f;
-
-                            ItemRosterElement? bestDrawback = null;
-                            float bestDrawbackScore = -9999f;
-
-                            var playerItems = inventoryLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-                            foreach (var element in playerItems)
-                            {
-                                if (element.IsEmpty || element.Amount <= 0) continue;
-
-                                var candidate = element.EquipmentElement;
-                                var item = candidate.Item;
-                                if (item == null || item.PrimaryWeapon == null) continue;
-
-                                if (isCivilian && !item.IsCivilian) continue;
-                                if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
-
-                                bool strictlyBeats = StrictlyBeatsWeapon(candidate, currentWeapon);
-                                float score = GetWeaponScore(candidate);
-
-                                if (strictlyBeats)
-                                {
-                                    if (score > bestStrictScore)
-                                    {
-                                        bestStrictScore = score;
-                                        bestStrictUpgrade = element;
-                                    }
-                                }
-                                else
-                                {
-                                    float currentScore = GetWeaponScore(currentWeapon);
-                                    if (score > currentScore && score > bestDrawbackScore)
-                                    {
-                                        bestDrawbackScore = score;
-                                        bestDrawback = element;
-                                    }
-                                }
-                            }
-
-                            // Equip strict upgrade if found
-                            if (bestStrictUpgrade.HasValue)
-                            {
-                                var upgradeElement = bestStrictUpgrade.Value;
-                                var equipElement = new ItemRosterElement(upgradeElement.EquipmentElement, 1);
-                                var command = TransferCommand.Transfer(1, InventoryLogic.InventorySide.PlayerInventory, targetSide, equipElement, EquipmentIndex.None, slot, hero.CharacterObject);
-                                inventoryLogic.AddTransferCommand(command);
-
-                                string setName = isCivilian ? "Civilian" : "Combat";
-                                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Equipped {upgradeElement.EquipmentElement.Item.Name} on {hero.Name} in Weapon slot {slot} ({setName} set).");
-
-                                currentWeapon = upgradeElement.EquipmentElement;
-                            }
-
-                            // Check if drawback candidate is still better
-                            if (bestDrawback.HasValue)
-                            {
-                                float currentScore = GetWeaponScore(currentWeapon);
-                                if (bestDrawbackScore > currentScore)
-                                {
-                                    string setName = isCivilian ? "Civilian" : "Combat";
-                                    notifications.Add($"{hero.Name} ({setName}): {bestDrawback.Value.EquipmentElement.Item.Name} in {slot} slot is better but has drawbacks compared to {currentWeapon.Item.Name}.");
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            equippedCount = EvaluateAndEquip(inventoryLogic, heroesToProcess, settings, notifications);
 
             // 3. Display drawback notifications
             foreach (var note in notifications)
@@ -252,7 +98,7 @@ namespace EquipmentManager
                 bool hasWeaponPerk = Hero.MainHero.GetPerkValue(DefaultPerks.Steward.PaidInPromise);
                 bool hasArmorPerk = Hero.MainHero.GetPerkValue(DefaultPerks.Steward.GivingHands);
 
-                if (!Enum.TryParse<ItemQuality>(Settings.Instance.MinQualityToKeep, true, out var minQuality))
+                if (!Enum.TryParse<ItemQuality>(settings.MinQualityToKeep, true, out var minQuality))
                 {
                     minQuality = ItemQuality.Fine;
                 }
@@ -271,7 +117,7 @@ namespace EquipmentManager
                     bool shouldLock = false;
 
                     // A. Min Tier
-                    if ((int)item.Tier >= Settings.Instance.MinTierToKeep)
+                    if ((int)item.Tier >= settings.MinTierToKeep)
                     {
                         shouldLock = true;
                     }
@@ -288,7 +134,7 @@ namespace EquipmentManager
                         {
                             shouldLock = true;
                         }
-                        else if (Settings.Instance.KeepPositiveModifiers && modifier.PriceMultiplier > 1.0f)
+                        else if (settings.KeepPositiveModifiers && modifier.PriceMultiplier > 1.0f)
                         {
                             shouldLock = true;
                         }
@@ -301,17 +147,17 @@ namespace EquipmentManager
                         float baseValue = item.Value;
                         float costPerXp = baseValue > 0 ? (sellPrice / baseValue) : 9999f;
 
-                        if (costPerXp <= Settings.Instance.MaxCostPerXp)
+                        if (costPerXp <= settings.MaxCostPerXp)
                         {
                             if (item.HasArmorComponent && hasArmorPerk && 
-                                (Settings.Instance.LockDonationCategorySetting == LockDonationCategory.ArmorOnly || 
-                                 Settings.Instance.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
+                                (settings.LockDonationCategorySetting == LockDonationCategory.ArmorOnly || 
+                                 settings.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
                             {
                                 shouldLock = true;
                             }
                             else if ((item.WeaponComponent != null || item.PrimaryWeapon != null) && hasWeaponPerk && 
-                                     (Settings.Instance.LockDonationCategorySetting == LockDonationCategory.WeaponsOnly || 
-                                      Settings.Instance.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
+                                     (settings.LockDonationCategorySetting == LockDonationCategory.WeaponsOnly || 
+                                      settings.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
                             {
                                 shouldLock = true;
                             }
@@ -328,9 +174,9 @@ namespace EquipmentManager
 
             // 5. Sell Phase
             var settlement = inventoryLogic.CurrentSettlementComponent?.Settlement;
-            bool skipSell = settlement != null && Settings.Instance.PreventEquipmentSaleInVillages && settlement.IsVillage;
+            bool skipSell = settlement != null && settings.PreventEquipmentSaleInVillages && settlement.IsVillage;
 
-            if (Settings.Instance.SellUnlockedEquipment && vm.RightItemListVM != null && !skipSell)
+            if (settings.SellUnlockedEquipment && vm.RightItemListVM != null && !skipSell)
             {
                 var itemsToSell = new List<SPItemVM>();
                 foreach (var itemVM in vm.RightItemListVM)
@@ -349,7 +195,7 @@ namespace EquipmentManager
                 }
 
                 // Prioritize heavy items if enabled (using weight/price ratio descending)
-                if (Settings.Instance.PrioritizeHeavyTrash)
+                if (settings.PrioritizeHeavyTrash)
                 {
                     itemsToSell = itemsToSell.OrderByDescending(itemVM =>
                     {
@@ -414,6 +260,7 @@ namespace EquipmentManager
                             Hero.MainHero.CharacterObject
                         );
                         inventoryLogic.AddTransferCommand(command);
+                        totalSold += count;
                         soldLogs.Add($"{count}x {item.Name}");
                     }
                     catch (Exception ex)
@@ -429,9 +276,10 @@ namespace EquipmentManager
 
             // 6. Refresh UI
             vm.RefreshValues();
+            SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"=== Equipment Optimization Run completed (Total equipped: {equippedCount}, Total sold: {totalSold}) ===");
         }
 
-        private static bool StrictlyBeatsArmor(EquipmentElement candidate, EquipmentElement current, bool checkWeight, float penaltyFactor)
+        private static bool StrictlyBeatsArmor(EquipmentElement candidate, EquipmentElement current, bool prioritizeStealth)
         {
             if (current.IsEmpty) return true;
 
@@ -448,15 +296,15 @@ namespace EquipmentManager
             bool protectionEqualOrBetter = headC >= headE && bodyC >= bodyE && legC >= legE && armC >= armE;
             bool protectionStrictlyBetter = headC > headE || bodyC > bodyE || legC > legE || armC > armE;
 
-            if (checkWeight)
+            if (prioritizeStealth)
             {
-                float weightC = candidate.GetEquipmentElementWeight();
-                float weightE = current.GetEquipmentElementWeight();
+                int stealthC = (candidate.Item != null && candidate.Item.ArmorComponent != null) ? candidate.Item.ArmorComponent.StealthFactor : 0;
+                int stealthE = (current.Item != null && current.Item.ArmorComponent != null) ? current.Item.ArmorComponent.StealthFactor : 0;
 
-                bool weightEqualOrBetter = weightC <= weightE;
-                bool weightStrictlyBetter = weightC < weightE;
+                if (stealthC > stealthE) return true;
+                if (stealthC < stealthE) return false;
 
-                return protectionEqualOrBetter && weightEqualOrBetter && (protectionStrictlyBetter || weightStrictlyBetter);
+                return protectionEqualOrBetter && protectionStrictlyBetter;
             }
             else
             {
@@ -464,13 +312,14 @@ namespace EquipmentManager
             }
         }
 
-        private static float GetArmorScore(EquipmentElement eqEl, bool checkWeight, float penaltyFactor)
+        private static float GetArmorScore(EquipmentElement eqEl, bool prioritizeStealth)
         {
             if (eqEl.IsEmpty) return -9999f;
             float armorSum = eqEl.GetModifiedHeadArmor() + eqEl.GetModifiedBodyArmor() + eqEl.GetModifiedLegArmor() + eqEl.GetModifiedArmArmor();
-            if (checkWeight)
+            if (prioritizeStealth)
             {
-                return armorSum - eqEl.GetEquipmentElementWeight() * penaltyFactor;
+                int stealthFactor = (eqEl.Item != null && eqEl.Item.ArmorComponent != null) ? eqEl.Item.ArmorComponent.StealthFactor : 0;
+                return stealthFactor * 1000f + armorSum;
             }
             return armorSum;
         }
@@ -544,6 +393,316 @@ namespace EquipmentManager
                 case EquipmentIndex.Cape: return "Cape/Shoulders";
                 default: return slot.ToString();
             }
+        }
+
+        public static InventoryLogic? CreateHeadlessInventoryLogic(MobileParty party)
+        {
+            if (party == null || Hero.MainHero == null) return null;
+            try
+            {
+                var logic = new InventoryLogic(party, Hero.MainHero.CharacterObject, null);
+
+                var initMethod = typeof(InventoryLogic).GetMethods()
+                    .FirstOrDefault(m => m.Name == "Initialize" && m.GetParameters().Length == 13);
+
+                if (initMethod == null) return null;
+
+                var categoryTypeEnum = typeof(InventoryLogic).Assembly.GetType("Helpers.InventoryScreenHelper+InventoryCategoryType");
+                var modeEnum = typeof(InventoryLogic).Assembly.GetType("Helpers.InventoryScreenHelper+InventoryMode");
+                if (categoryTypeEnum == null || modeEnum == null) return null;
+
+                var categoryTypeAll = Enum.Parse(categoryTypeEnum, "All");
+                var modeDefault = Enum.Parse(modeEnum, "Default");
+
+                initMethod.Invoke(logic, new object[] {
+                    null!, // leftItemRoster
+                    party.ItemRoster,
+                    party.MemberRoster,
+                    false, // isTrading
+                    false, // isSpecialActionsPermitted
+                    Hero.MainHero.CharacterObject,
+                    categoryTypeAll,
+                    null!, // marketData
+                    true, // useBasePrices
+                    modeDefault,
+                    new TaleWorlds.Localization.TextObject("Inventory"), // title
+                    null!, // leftMemberRoster
+                    null! // otherSideCapacityData
+                });
+
+                return logic;
+            }
+            catch (Exception ex)
+            {
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error creating headless InventoryLogic: {ex}");
+                return null;
+            }
+        }
+
+        public static void AutoEquipHeadless(MobileParty party, string context = "Post-Battle")
+        {
+            if (party == null || Hero.MainHero == null) return;
+            try
+            {
+                var settings = Settings.Instance;
+                if (settings == null) return;
+
+                var inventoryLogic = CreateHeadlessInventoryLogic(party);
+                if (inventoryLogic == null) return;
+
+                var heroesToProcess = new List<Hero>();
+                heroesToProcess.Add(Hero.MainHero);
+                if (settings.AutoEquipCompanions)
+                {
+                    foreach (var member in party.MemberRoster.GetTroopRoster())
+                    {
+                        if (member.Character.IsHero && member.Character.HeroObject != null && member.Character.HeroObject != Hero.MainHero)
+                        {
+                            heroesToProcess.Add(member.Character.HeroObject);
+                        }
+                    }
+                }
+
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"=== Headless {context} Equipment Optimization started for: {string.Join(", ", heroesToProcess.Select(h => h.Name.ToString()))} ===");
+
+                int equippedCount = EvaluateAndEquip(inventoryLogic, heroesToProcess, settings, null);
+
+                if (equippedCount > 0 && inventoryLogic.IsThereAnyChanges())
+                {
+                    inventoryLogic.DoneLogic();
+                }
+
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"=== Headless {context} Equipment Optimization completed (Total equipped: {equippedCount}) ===");
+            }
+            catch (Exception ex)
+            {
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error in AutoEquipHeadless: {ex}");
+            }
+        }
+
+
+        private static int EvaluateAndEquip(InventoryLogic inventoryLogic, List<Hero> heroesToProcess, Settings settings, List<string>? notifications)
+        {
+            int equippedCount = 0;
+            var armorSlots = new EquipmentIndex[] { EquipmentIndex.Head, EquipmentIndex.Body, EquipmentIndex.Leg, EquipmentIndex.Gloves, EquipmentIndex.Cape };
+            var weaponSlots = new EquipmentIndex[] { EquipmentIndex.Weapon0, EquipmentIndex.Weapon1, EquipmentIndex.Weapon2, EquipmentIndex.Weapon3 };
+
+            var sneakingTargets = new List<EquipTarget>();
+            var civilianTargets = new List<EquipTarget>();
+            var combatTargets = new List<EquipTarget>();
+
+            foreach (var hero in heroesToProcess)
+            {
+                if (hero.CharacterObject == null) continue;
+
+                // 1. Sneaking (Main Hero Civilian if Stealth Mode)
+                if (hero == Hero.MainHero && settings.MainHeroCivilianModeSetting == MainHeroCivilianMode.Stealth)
+                {
+                    sneakingTargets.Add(new EquipTarget { Hero = hero, IsCivilian = true, PrioritizeStealth = true });
+                }
+                else
+                {
+                    // 2. Civilian (Companions Civilian, or Main Hero Civilian if Armor Mode)
+                    civilianTargets.Add(new EquipTarget { Hero = hero, IsCivilian = true, PrioritizeStealth = false });
+                }
+
+                // 3. Combat (All)
+                combatTargets.Add(new EquipTarget { Hero = hero, IsCivilian = false, PrioritizeStealth = false });
+            }
+
+            var combinedTargets = new List<EquipTarget>();
+            var priority = settings.LoadoutPrioritySetting;
+            if (priority == LoadoutPriority.Sneaking_Civilian_Combat)
+            {
+                combinedTargets.AddRange(sneakingTargets);
+                combinedTargets.AddRange(civilianTargets);
+                combinedTargets.AddRange(combatTargets);
+            }
+            else if (priority == LoadoutPriority.Sneaking_Combat_Civilian)
+            {
+                combinedTargets.AddRange(sneakingTargets);
+                combinedTargets.AddRange(combatTargets);
+                combinedTargets.AddRange(civilianTargets);
+            }
+            else if (priority == LoadoutPriority.Combat_Sneaking_Civilian)
+            {
+                combinedTargets.AddRange(combatTargets);
+                combinedTargets.AddRange(sneakingTargets);
+                combinedTargets.AddRange(civilianTargets);
+            }
+            else // Combat_Civilian_Sneaking
+            {
+                combinedTargets.AddRange(combatTargets);
+                combinedTargets.AddRange(civilianTargets);
+                combinedTargets.AddRange(sneakingTargets);
+            }
+
+            foreach (var target in combinedTargets)
+            {
+                var hero = target.Hero;
+                bool isCivilian = target.IsCivilian;
+                bool prioritizeStealth = target.PrioritizeStealth;
+
+                var targetSide = isCivilian ? InventoryLogic.InventorySide.CivilianEquipment : InventoryLogic.InventorySide.BattleEquipment;
+                var equipment = isCivilian ? hero.CivilianEquipment : hero.BattleEquipment;
+
+                // A. Armor Slots
+                if (settings.AutoEquipCategorySetting == AutoEquipCategory.ArmorOnly || settings.AutoEquipCategorySetting == AutoEquipCategory.WeaponsAndArmor)
+                {
+                    foreach (var slot in armorSlots)
+                    {
+                        var currentArmor = equipment[slot];
+
+                        // Find best strict upgrade and best drawback candidate
+                        ItemRosterElement? bestStrictUpgrade = null;
+                        float bestStrictScore = -9999f;
+
+                        ItemRosterElement? bestDrawback = null;
+                        float bestDrawbackScore = -9999f;
+
+                        var playerItems = inventoryLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+                        foreach (var element in playerItems)
+                        {
+                            if (element.IsEmpty || element.Amount <= 0) continue;
+
+                            var candidate = element.EquipmentElement;
+                            var item = candidate.Item;
+                            if (item == null || !item.HasArmorComponent) continue;
+
+                            if (isCivilian && !item.IsCivilian) continue;
+                            if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
+
+                            bool strictlyBeats = StrictlyBeatsArmor(candidate, currentArmor, prioritizeStealth);
+                            float score = GetArmorScore(candidate, prioritizeStealth);
+
+                            if (strictlyBeats)
+                            {
+                                if (score > bestStrictScore)
+                                {
+                                    bestStrictScore = score;
+                                    bestStrictUpgrade = element;
+                                }
+                            }
+                            else
+                            {
+                                float currentScore = GetArmorScore(currentArmor, prioritizeStealth);
+                                if (score > currentScore && score > bestDrawbackScore)
+                                {
+                                    bestDrawbackScore = score;
+                                    bestDrawback = element;
+                                }
+                            }
+                        }
+
+                        // Equip strict upgrade if found
+                        if (bestStrictUpgrade.HasValue)
+                        {
+                            var upgradeElement = bestStrictUpgrade.Value;
+                            var equipElement = new ItemRosterElement(upgradeElement.EquipmentElement, 1);
+                            var command = TransferCommand.Transfer(1, InventoryLogic.InventorySide.PlayerInventory, targetSide, equipElement, EquipmentIndex.None, slot, hero.CharacterObject);
+                            inventoryLogic.AddTransferCommand(command);
+                            equippedCount++;
+
+                            string slotName = GetSlotName(slot);
+                            string setName = isCivilian ? (prioritizeStealth ? "Sneaking" : "Civilian") : "Combat";
+                            SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Equipped {upgradeElement.EquipmentElement.Item.Name} on {hero.Name} in {slotName} slot ({setName} set).");
+
+                            // If we successfully upgraded, update currentArmor for drawback comparison
+                            currentArmor = upgradeElement.EquipmentElement;
+                        }
+
+                        // Check if a drawback candidate is still better than the newly equipped armor
+                        if (notifications != null && bestDrawback.HasValue)
+                        {
+                            float currentScore = GetArmorScore(currentArmor, prioritizeStealth);
+                            if (bestDrawbackScore > currentScore)
+                            {
+                                string slotName = GetSlotName(slot);
+                                string setName = isCivilian ? (prioritizeStealth ? "Sneaking" : "Civilian") : "Combat";
+                                notifications.Add($"{hero.Name} ({setName}): {bestDrawback.Value.EquipmentElement.Item.Name} in {slotName} slot is better but has drawbacks compared to {(currentArmor.IsEmpty ? "None" : currentArmor.Item.Name)}.");
+                            }
+                        }
+                    }
+                }
+
+                // B. Weapon Slots (Only evaluate if slot is not empty)
+                if (settings.AutoEquipCategorySetting == AutoEquipCategory.WeaponsOnly || settings.AutoEquipCategorySetting == AutoEquipCategory.WeaponsAndArmor)
+                {
+                    foreach (var slot in weaponSlots)
+                    {
+                        var currentWeapon = equipment[slot];
+                        if (currentWeapon.IsEmpty || currentWeapon.Item == null || currentWeapon.Item.PrimaryWeapon == null) continue;
+
+                        ItemRosterElement? bestStrictUpgrade = null;
+                        float bestStrictScore = -9999f;
+
+                        ItemRosterElement? bestDrawback = null;
+                        float bestDrawbackScore = -9999f;
+
+                        var playerItems = inventoryLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+                        foreach (var element in playerItems)
+                        {
+                            if (element.IsEmpty || element.Amount <= 0) continue;
+
+                            var candidate = element.EquipmentElement;
+                            var item = candidate.Item;
+                            if (item == null || item.PrimaryWeapon == null) continue;
+
+                            if (isCivilian && !item.IsCivilian) continue;
+                            if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
+
+                            bool strictlyBeats = StrictlyBeatsWeapon(candidate, currentWeapon);
+                            float score = GetWeaponScore(candidate);
+
+                            if (strictlyBeats)
+                            {
+                                if (score > bestStrictScore)
+                                {
+                                    bestStrictScore = score;
+                                    bestStrictUpgrade = element;
+                                }
+                            }
+                            else
+                            {
+                                float currentScore = GetWeaponScore(currentWeapon);
+                                if (score > currentScore && score > bestDrawbackScore)
+                                {
+                                    bestDrawbackScore = score;
+                                    bestDrawback = element;
+                                }
+                            }
+                        }
+
+                        // Equip strict upgrade if found
+                        if (bestStrictUpgrade.HasValue)
+                        {
+                            var upgradeElement = bestStrictUpgrade.Value;
+                            var equipElement = new ItemRosterElement(upgradeElement.EquipmentElement, 1);
+                            var command = TransferCommand.Transfer(1, InventoryLogic.InventorySide.PlayerInventory, targetSide, equipElement, EquipmentIndex.None, slot, hero.CharacterObject);
+                            inventoryLogic.AddTransferCommand(command);
+                            equippedCount++;
+
+                            string setName = isCivilian ? "Civilian" : "Combat";
+                            SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Equipped {upgradeElement.EquipmentElement.Item.Name} on {hero.Name} in Weapon slot {slot} ({setName} set).");
+
+                            currentWeapon = upgradeElement.EquipmentElement;
+                        }
+
+                        // Check if drawback candidate is still better
+                        if (notifications != null && bestDrawback.HasValue)
+                        {
+                            float currentScore = GetWeaponScore(currentWeapon);
+                            if (bestDrawbackScore > currentScore)
+                            {
+                                string setName = isCivilian ? "Civilian" : "Combat";
+                                notifications.Add($"{hero.Name} ({setName}): {bestDrawback.Value.EquipmentElement.Item.Name} in {slot} slot is better but has drawbacks compared to {currentWeapon.Item.Name}.");
+                            }
+                        }
+                    }
+                }
+            }
+
+            return equippedCount;
         }
     }
 }

@@ -36,33 +36,7 @@ namespace TradingOptimizer
 
     public static class TradingEngine
     {
-        private static bool IsSlaughterArbitrageProfitable(InventoryLogic? logic, EquipmentElement eq, out int yieldValue, out int meatCount, out int hideCount)
-        {
-            yieldValue = 0;
-            meatCount = 0;
-            hideCount = 0;
-            var item = eq.Item;
-            if (item == null || item.HorseComponent == null) return false;
-
-            // Never slaughter riding mounts during town entry automation
-            bool isRidingMount = item.IsMountable && !item.HorseComponent.IsPackAnimal;
-            if (isRidingMount) return false;
-
-            meatCount = item.HorseComponent.MeatCount;
-            hideCount = item.HorseComponent.HideCount;
-            if (meatCount <= 0 && hideCount <= 0) return false;
-
-            var meatItem = DefaultItems.Meat;
-            var hidesItem = DefaultItems.Hides;
-
-            int meatPrice = logic != null ? logic.GetItemPrice(new EquipmentElement(meatItem), false) : meatItem.Value;
-            int hidesPrice = logic != null ? logic.GetItemPrice(new EquipmentElement(hidesItem), false) : hidesItem.Value;
-
-            yieldValue = (meatCount * meatPrice) + (hideCount * hidesPrice);
-            int buyPrice = logic != null ? logic.GetItemPrice(eq, true) : item.Value;
-
-            return buyPrice < yieldValue;
-        }
+        // TODO: Re-implement slaughter arbitrage for livestock purchases (buy and slaughter for profit)
         public static void WriteLog(string message)
         {
             SettlementAutomationCore.Helpers.Logger.WriteLog("TradingOptimizer", message);
@@ -158,7 +132,7 @@ namespace TradingOptimizer
                         if (mode == TradingMode.None || mode == TradingMode.BuyOnly) continue;
                     }
 
-                    int minToKeep = GetMinToKeepForLogistics(itemObj, logic);
+                    int minToKeep = LogisticsGoalService.GetMinToKeepForLogistics(itemObj, logic);
 
                     int maxSellable = item.ItemCount - minToKeep;
                     if (maxSellable <= 0) continue;
@@ -187,11 +161,11 @@ namespace TradingOptimizer
 
                             if (refMode == PricingReferenceMode.AlwaysGlobal)
                             {
-                                baseReferencePrice = GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
+                                baseReferencePrice = PricingService.GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
                             }
                             else if (refMode == PricingReferenceMode.AlwaysLocal)
                             {
-                                baseReferencePrice = GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
+                                baseReferencePrice = PricingService.GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
                             }
                             else // PerkBased
                             {
@@ -201,18 +175,18 @@ namespace TradingOptimizer
                                 }
                                 else if (hasTier1Perks)
                                 {
-                                    baseReferencePrice = GetTrackedAveragePrice(item.ItemRosterElement);
+                                    baseReferencePrice = PricingService.GetTrackedAveragePrice(item.ItemRosterElement);
                                 }
 
                                 if (baseReferencePrice <= 0f)
                                 {
                                     if (hasTier1Perks && hasTier2Perks)
                                     {
-                                        baseReferencePrice = GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
+                                        baseReferencePrice = PricingService.GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
                                     }
                                     else
                                     {
-                                        baseReferencePrice = GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
+                                        baseReferencePrice = PricingService.GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
                                     }
                                 }
                             }
@@ -245,21 +219,21 @@ namespace TradingOptimizer
 
                             if (refMode == PricingReferenceMode.AlwaysGlobal)
                             {
-                                avgPriceForBuy = GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
+                                avgPriceForBuy = PricingService.GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
                             }
                             else if (refMode == PricingReferenceMode.AlwaysLocal)
                             {
-                                avgPriceForBuy = GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
+                                avgPriceForBuy = PricingService.GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
                             }
                             else // PerkBased
                             {
                                 if (hasTier1Perks && hasTier2Perks)
                                 {
-                                    avgPriceForBuy = GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
+                                    avgPriceForBuy = PricingService.GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
                                 }
                                 else
                                 {
-                                    avgPriceForBuy = GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
+                                    avgPriceForBuy = PricingService.GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
                                 }
                             }
 
@@ -276,7 +250,7 @@ namespace TradingOptimizer
                                 else // Balanced
                                 {
                                     float capacity = MobileParty.MainParty?.InventoryCapacity ?? 0f;
-                                    float currentWeight = GetRosterWeight(MobileParty.MainParty?.ItemRoster) + netWeightAdded;
+                                    float currentWeight = LogisticsGoalService.GetRosterWeight(MobileParty.MainParty?.ItemRoster) + netWeightAdded;
                                     bool isCargoFull = capacity > 0f && (currentWeight / capacity) >= 0.80f;
                                     if (!isCargoFull)
                                     {
@@ -348,70 +322,10 @@ namespace TradingOptimizer
                     }
                 }
 
-                // 2a. Slaughter Arbitrage Sub-Phase
-                foreach (var item in merchantItems)
-                {
-                    if (item == null || item.ItemRosterElement.EquipmentElement.Item == null) continue;
-
-                    var eq = item.ItemRosterElement.EquipmentElement;
-                    if (IsSlaughterArbitrageProfitable(logic, eq, out int yieldValue, out int meatCount, out int hideCount))
-                    {
-                        int buyPrice = logic != null ? logic.GetItemPrice(eq, true) : eq.Item.Value;
-                        int available = item.ItemCount;
-                        if (available <= 0) continue;
-
-                        int toArbitrage = 0;
-                        int dailyWage = MobileParty.MainParty?.TotalWage ?? 0;
-                        int expenseReserve = dailyWage * settings.MinDaysExpensesToKeep;
-                        int minRequiredBalance = Math.Max(settings.MinimumGoldReserve, expenseReserve);
-                        int budget = currentBalance - minRequiredBalance;
-
-                        for (int i = 0; i < available; i++)
-                        {
-                            if (budget < buyPrice) break;
-
-                            // Simulating buy
-                            if (logic != null && Hero.MainHero != null)
-                            {
-                                var buyCommand = TransferCommand.Transfer(
-                                    1,
-                                    InventoryLogic.InventorySide.OtherInventory,
-                                    InventoryLogic.InventorySide.PlayerInventory,
-                                    new ItemRosterElement(eq, 1),
-                                    EquipmentIndex.None,
-                                    EquipmentIndex.None,
-                                    Hero.MainHero.CharacterObject
-                                );
-                                logic.AddTransferCommand(buyCommand);
-
-                                // Simulating slaughter
-                                var playerRosterEl = new ItemRosterElement(eq, 1);
-                                if (logic.CanSlaughterItem(playerRosterEl, InventoryLogic.InventorySide.PlayerInventory))
-                                {
-                                    logic.SlaughterItem(playerRosterEl);
-                                    toArbitrage++;
-                                    budget -= buyPrice;
-                                    currentBalance -= buyPrice;
-                                }
-                                else
-                                {
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (toArbitrage > 0)
-                        {
-                            report.ArbitrageSlaughters.Add((eq, toArbitrage));
-                            report.BoughtItems.Add((eq.Item.Name.ToString(), toArbitrage, buyPrice * toArbitrage));
-                            WriteLog($"[Slaughter Arbitrage] Bought and slaughtered {toArbitrage}x {eq.Item.Name} (Buy Price: {buyPrice}, Yield Value: {yieldValue})");
-                            InformationManager.DisplayMessage(new InformationMessage($"[TradingOptimizer] Slaughter arbitrage: Bought & Slaughtered {toArbitrage}x {eq.Item.Name}"));
-                        }
-                    }
-                }
+                // (Slaughter Arbitrage Sub-Phase removed to simplify purchase loop)
 
                 // Satisfy logistics goals (e.g. food restocking, speed mounts) before starting standard trade arbitrage
-                SatisfyLogisticsGoals(vm, logic, boughtQuantities, ref currentBalance, ref netWeightAdded, report, localExcludedItems);
+                LogisticsGoalService.SatisfyLogisticsGoals(vm, logic, boughtQuantities, ref currentBalance, ref netWeightAdded, report, localExcludedItems);
 
                 while (true)
                 {
@@ -424,8 +338,11 @@ namespace TradingOptimizer
 
                         var itemObj = item.ItemRosterElement.EquipmentElement.Item;
 
-                        // Only buy trade goods
-                        if (!itemObj.IsTradeGood) continue;
+                        bool isBlackenedStealthItem = settings.BuyBlackenedStealthGear && 
+                            (itemObj.Name != null && itemObj.Name.ToString().IndexOf("blackened", StringComparison.OrdinalIgnoreCase) >= 0);
+
+                        // Only buy trade goods unless it's a blackened stealth item we want to buy
+                        if (!itemObj.IsTradeGood && !isBlackenedStealthItem) continue;
 
                         if (itemObj.IsFood)
                         {
@@ -446,9 +363,7 @@ namespace TradingOptimizer
                         int boughtSoFar = boughtQuantities[item];
                         int initialMerchantCount = item.ItemCount;
 
-                        // Exclude items that were fully bought in slaughter arbitrage
-                        int arbitrageCount = report.ArbitrageSlaughters.Where(s => s.EqElement.Item.StringId == itemObj.StringId).Sum(s => s.Amount);
-                        if (boughtSoFar + arbitrageCount >= initialMerchantCount) continue;
+                        if (boughtSoFar >= initialMerchantCount) continue;
 
                         float itemWeight = itemObj.Weight;
                         var playerItem = vm.RightItemListVM?.FirstOrDefault(r => r.ItemRosterElement.EquipmentElement.Item == itemObj);
@@ -471,18 +386,18 @@ namespace TradingOptimizer
 
                         if (skipReason == "" && settings.LimitToInventoryCapacity && MobileParty.MainParty != null)
                         {
-                            float currentWeight = GetRosterWeight(MobileParty.MainParty.ItemRoster);
+                            float currentWeight = LogisticsGoalService.GetRosterWeight(MobileParty.MainParty.ItemRoster);
                             float projectedWeight = currentWeight + netWeightAdded;
                             if (projectedWeight + itemWeight >= MobileParty.MainParty.InventoryCapacity)
                             {
                                 skipReason = "Overburdened";
                             }
                         }
-                        if (skipReason == "" && currentlyOwned >= settings.MaxStackSizeToBuy)
+                        if (skipReason == "" && !isBlackenedStealthItem && currentlyOwned >= settings.MaxStackSizeToBuy)
                         {
                             skipReason = $"StackLimitExceeded (owned={currentlyOwned}, max={settings.MaxStackSizeToBuy})";
                         }
-                        if (skipReason == "" && currentlyOwned * currentPrice >= settings.MaxStackValueToBuy)
+                        if (skipReason == "" && !isBlackenedStealthItem && currentlyOwned * currentPrice >= settings.MaxStackValueToBuy)
                         {
                             skipReason = $"StackValueLimitExceeded (value={currentlyOwned * currentPrice}, max={settings.MaxStackValueToBuy})";
                         }
@@ -493,61 +408,73 @@ namespace TradingOptimizer
                         {
                             skipReason = $"BudgetProtectionActive (projectedBalance={currentBalance - currentPrice}, required={minRequiredBalance})";
                         }
-                        if (skipReason == "" && localExcludedItems.Contains(itemObj.Name.ToString()))
+                        if (skipReason == "" && itemObj.Name != null && localExcludedItems.Contains(itemObj.Name.ToString()))
                         {
                             skipReason = "SoldInSameStop";
                         }
 
                         float avgPrice = 0f;
-                        if (skipReason == "")
+                        if (skipReason == "" && !isBlackenedStealthItem)
                         {
                             var refMode = settings.PricingReference;
                             if (refMode == PricingReferenceMode.AlwaysGlobal)
                             {
-                                avgPrice = GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
+                                avgPrice = PricingService.GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
                             }
                             else if (refMode == PricingReferenceMode.AlwaysLocal)
                             {
-                                avgPrice = GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
+                                avgPrice = PricingService.GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
                             }
                             else // PerkBased
                             {
                                 if (hasTier1Perks && hasTier2Perks)
                                 {
-                                    avgPrice = GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
+                                    avgPrice = PricingService.GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
                                 }
                                 else
                                 {
-                                    avgPrice = GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
+                                    avgPrice = PricingService.GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
                                 }
                             }
                         }
 
-                        if (skipReason == "" && avgPrice <= 0f)
+                        if (skipReason == "" && !isBlackenedStealthItem && avgPrice <= 0f)
                         {
                             skipReason = "AveragePriceUndetermined";
                         }
-                        if (skipReason == "" && currentPrice > avgPrice * settings.BuyPriceThresholdFactor)
+                        if (skipReason == "" && !isBlackenedStealthItem && currentPrice > avgPrice * settings.BuyPriceThresholdFactor)
                         {
                             skipReason = $"PriceCheckFailed (price={currentPrice}, limit={avgPrice * settings.BuyPriceThresholdFactor:F1}, ratio={(float)currentPrice/avgPrice:P1}, threshold={settings.BuyPriceThresholdFactor:P1})";
                         }
-                        if (skipReason == "" && avgPrice - currentPrice <= 0f)
+                        if (skipReason == "" && !isBlackenedStealthItem && avgPrice - currentPrice <= 0f)
                         {
                             skipReason = "NoProfitExpected";
                         }
 
                         if (skipReason != "")
                         {
-                            if (currentPrice < avgPrice)
+                            if (!isBlackenedStealthItem && currentPrice < avgPrice)
                             {
                                 WriteLog($"[Buy Skip Diagnostic] {itemObj.Name}: {skipReason}");
+                            }
+                            else if (isBlackenedStealthItem)
+                            {
+                                WriteLog($"[Buy Skip Diagnostic] Blackened Stealth Item {itemObj.Name}: {skipReason}");
                             }
                             continue;
                         }
 
-                        float unitProfit = avgPrice - currentPrice;
-                        float itemWeightDivisor = itemWeight > 0.01f ? itemWeight : 0.01f;
-                        float profitDensity = unitProfit / itemWeightDivisor;
+                        float profitDensity = 0f;
+                        if (isBlackenedStealthItem)
+                        {
+                            profitDensity = 100000f - currentPrice; // Cheaper blackened items first
+                        }
+                        else
+                        {
+                            float unitProfit = avgPrice - currentPrice;
+                            float itemWeightDivisor = itemWeight > 0.01f ? itemWeight : 0.01f;
+                            profitDensity = unitProfit / itemWeightDivisor;
+                        }
 
                         if (profitDensity > bestProfitDensity)
                         {
@@ -589,30 +516,42 @@ namespace TradingOptimizer
                     netWeightAdded += itemWeightVal;
 
                     float dbgAvg = 0f;
-                    var refModeForDbg = settings.PricingReference;
-                    if (refModeForDbg == PricingReferenceMode.AlwaysGlobal)
+                    bool isBestItemBlackened = settings.BuyBlackenedStealthGear && 
+                        (bestItemObj.Name != null && bestItemObj.Name.ToString().IndexOf("blackened", StringComparison.OrdinalIgnoreCase) >= 0);
+                    if (!isBestItemBlackened)
                     {
-                        dbgAvg = GetWorldAveragePrice(bestItem.ItemRosterElement.EquipmentElement);
-                    }
-                    else if (refModeForDbg == PricingReferenceMode.AlwaysLocal)
-                    {
-                        dbgAvg = GetLocalCategoryAveragePrice(logic, bestItem.ItemRosterElement.EquipmentElement);
-                    }
-                    else // PerkBased
-                    {
-                        if (hasTier1Perks && hasTier2Perks)
+                        var refModeForDbg = settings.PricingReference;
+                        if (refModeForDbg == PricingReferenceMode.AlwaysGlobal)
                         {
-                            dbgAvg = GetWorldAveragePrice(bestItem.ItemRosterElement.EquipmentElement);
+                            dbgAvg = PricingService.GetWorldAveragePrice(bestItem.ItemRosterElement.EquipmentElement);
                         }
-                        else
+                        else if (refModeForDbg == PricingReferenceMode.AlwaysLocal)
                         {
-                            dbgAvg = GetLocalCategoryAveragePrice(logic, bestItem.ItemRosterElement.EquipmentElement);
+                            dbgAvg = PricingService.GetLocalCategoryAveragePrice(logic, bestItem.ItemRosterElement.EquipmentElement);
+                        }
+                        else // PerkBased
+                        {
+                            if (hasTier1Perks && hasTier2Perks)
+                            {
+                                dbgAvg = PricingService.GetWorldAveragePrice(bestItem.ItemRosterElement.EquipmentElement);
+                            }
+                            else
+                            {
+                                dbgAvg = PricingService.GetLocalCategoryAveragePrice(logic, bestItem.ItemRosterElement.EquipmentElement);
+                            }
                         }
                     }
                     if (dbgAvg <= 0f) dbgAvg = bestItemObj.Value;
 
                     float dbgRatio = dbgAvg > 0 ? (float)price / dbgAvg : 1f;
-                    WriteLog($"[Buy Action] {bestItemObj.Name}: Price={price}, ReferenceAvg={dbgAvg:F1} (Ratio={dbgRatio:P1}, Thresh={settings.BuyPriceThresholdFactor:P1}), Density={bestProfitDensity:F2} -> BOUGHT 1");
+                    if (isBestItemBlackened)
+                    {
+                        WriteLog($"[Buy Action] Blackened Stealth Item {bestItemObj.Name}: Price={price} -> BOUGHT 1");
+                    }
+                    else
+                    {
+                        WriteLog($"[Buy Action] {bestItemObj.Name}: Price={price}, ReferenceAvg={dbgAvg:F1} (Ratio={dbgRatio:P1}, Thresh={settings.BuyPriceThresholdFactor:P1}), Density={bestProfitDensity:F2} -> BOUGHT 1");
+                    }
                 }
 
                 foreach (var pair in boughtQuantities)
@@ -627,429 +566,6 @@ namespace TradingOptimizer
             return report;
         }
 
-        public static float GetWorldAveragePrice(EquipmentElement equipmentElement)
-        {
-            var towns = Town.AllTowns;
-            if (towns == null || towns.Count == 0)
-            {
-                return equipmentElement.Item.Value;
-            }
 
-            float sumPrices = 0f;
-            int count = 0;
-            foreach (var town in towns)
-            {
-                if (town != null)
-                {
-                    sumPrices += town.GetItemPrice(equipmentElement, null, false);
-                    count++;
-                }
-            }
-            return count > 0 ? (sumPrices / count) : equipmentElement.Item.Value;
-        }
-
-        private static float GetLocalCategoryAveragePrice(InventoryLogic? logic, EquipmentElement eqElement)
-        {
-            var town = logic?.CurrentSettlementComponent as Town;
-            if (town == null)
-            {
-                var village = logic?.CurrentSettlementComponent as Village;
-                if (village != null && village.TradeBound != null)
-                {
-                    town = village.TradeBound.Town;
-                }
-            }
-            if (town == null && MobileParty.MainParty != null)
-            {
-                var mainParty = MobileParty.MainParty;
-                var nearestTownSettlement = Settlement.All
-                    .Where(s => s.IsTown)
-                    .OrderBy(s => s.GetPosition2D.DistanceSquared(mainParty.GetPosition2D))
-                    .FirstOrDefault();
-                town = nearestTownSettlement?.Town;
-            }
-
-            if (town != null)
-            {
-                float deviationRatio = Helpers.TownHelpers.CalculatePriceDeviationRatio(town, eqElement);
-                int currentItemPrice = logic != null ? logic.GetItemPrice(eqElement, false) : 0;
-                if (currentItemPrice > 0 && Math.Abs(1f + deviationRatio) > 0.01f)
-                {
-                    return currentItemPrice / (1f + deviationRatio);
-                }
-            }
-            return eqElement.Item.Value;
-        }
-
-        private static float GetTrackedAveragePrice(ItemRosterElement rosterElement)
-        {
-            try
-            {
-                var behavior = Campaign.Current?.CampaignBehaviorManager?.GetBehaviors<CampaignBehaviorBase>()
-                    ?.FirstOrDefault(b => b.GetType().FullName == "TaleWorlds.CampaignSystem.CampaignBehaviors.TradeSkillCampaignBehavior");
-                if (behavior != null)
-                {
-                    var method = behavior.GetType().GetMethod("GetAveragePriceForItem", BindingFlags.Public | BindingFlags.Instance);
-                    if (method != null)
-                    {
-                        return (int)method.Invoke(behavior, new object[] { rosterElement });
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                WriteLog($"[Average Price Check Error] {ex.Message}");
-            }
-            return 0f;
-        }
-
-        private static int GetSyncedFoodDaysLimit()
-        {
-            var settings = Settings.Instance;
-            int limit = settings?.PartyFoodDaysToKeep ?? 10;
-            try
-            {
-                foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    if (assembly.GetName().Name == "PartyManager")
-                    {
-                        var settingsType = assembly.GetType("PartyManager.Settings");
-                        if (settingsType != null)
-                        {
-                            var instanceProp = settingsType.GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-                            var settingsInstance = instanceProp?.GetValue(null);
-                            if (settingsInstance != null)
-                            {
-                                var limitProp = settingsType.GetProperty("PartyFoodDaysToKeep", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-                                if (limitProp != null)
-                                {
-                                    int pmLimit = (int)limitProp.GetValue(settingsInstance);
-                                    return Math.Max(limit, pmLimit);
-                                }
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
-            catch {}
-            return limit;
-        }
-
-        private static float GetRosterWeight(ItemRoster? roster)
-        {
-            if (roster == null) return 0f;
-            float weight = 0f;
-            for (int i = 0; i < roster.Count; i++)
-            {
-                var element = roster.GetElementCopyAtIndex(i);
-                if (element.EquipmentElement.Item != null)
-                {
-                    var item = element.EquipmentElement.Item;
-                    if (item.IsAnimal || item.IsMountable)
-                    {
-                        continue;
-                    }
-                    weight += item.Weight * element.Amount;
-                }
-            }
-            return weight;
-        }
-
-        private static int GetMinToKeepForLogistics(ItemObject itemObj, InventoryLogic? logic)
-        {
-            var goals = SettlementAutomationCore.AutomationRegistry.ActiveLogisticsGoals;
-            if (goals == null || goals.Count == 0)
-            {
-                // Standalone fallback: maintain standard food minToKeep if it's food
-                if (itemObj.IsFood)
-                {
-                    int partySize = MobileParty.MainParty?.MemberRoster?.TotalManCount ?? 1;
-                    int syncedDaysLimit = GetSyncedFoodDaysLimit();
-                    return (int)Math.Ceiling(partySize * syncedDaysLimit / 200.0f);
-                }
-                return 0;
-            }
-
-            int minToKeep = 0;
-
-            if (itemObj.IsFood)
-            {
-                var foodGoal = goals.FirstOrDefault(g => g.GoalType == SettlementAutomationCore.LogisticsGoalType.FoodRestock);
-                if (foodGoal != null)
-                {
-                    if (foodGoal.IsSurvivalMode)
-                    {
-                        // In survival mode, we protect a total number of food items in inventory.
-                        int totalFoodInInventory = 0;
-                        if (logic != null)
-                        {
-                            var playerItems = logic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-                            foreach (var el in playerItems)
-                            {
-                                if (el.EquipmentElement.Item != null && el.EquipmentElement.Item.IsFood)
-                                {
-                                    totalFoodInInventory += el.Amount;
-                                }
-                            }
-                        }
-                        if (totalFoodInInventory <= foodGoal.TargetQuantity)
-                        {
-                            return 99999; // Keep all
-                        }
-                    }
-                    else
-                    {
-                        // In variety mode, target quantity is divided by 10 (food types) to get minToKeep per type
-                        minToKeep = (int)Math.Ceiling(foodGoal.TargetQuantity / 10.0f);
-                    }
-                }
-            }
-            else if (itemObj.IsMountable && !itemObj.HorseComponent.IsPackAnimal)
-            {
-                var mountGoal = goals.FirstOrDefault(g => g.GoalType == SettlementAutomationCore.LogisticsGoalType.SpeedMounts);
-                if (mountGoal != null)
-                {
-                    // For speed mounts, we protect up to TargetQuantity riding horses.
-                    int totalMountsInInventory = 0;
-                    if (logic != null)
-                    {
-                        var playerItems = logic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-                        foreach (var el in playerItems)
-                        {
-                            var item = el.EquipmentElement.Item;
-                            if (item != null && item.IsMountable && !item.HorseComponent.IsPackAnimal)
-                            {
-                                totalMountsInInventory += el.Amount;
-                            }
-                        }
-                    }
-                    if (totalMountsInInventory <= mountGoal.TargetQuantity)
-                    {
-                        return 99999; // Keep all
-                    }
-                }
-            }
-
-            return minToKeep;
-        }
-
-        private static void SatisfyLogisticsGoals(SPInventoryVM vm, InventoryLogic? logic, Dictionary<SPItemVM, int> boughtQuantities, ref int currentBalance, ref float netWeightAdded, TradeTransactionReport report, HashSet<string> localExcludedItems)
-        {
-            var goals = SettlementAutomationCore.AutomationRegistry.ActiveLogisticsGoals;
-            if (goals == null || goals.Count == 0) return;
-
-            var settings = Settings.Instance;
-            if (settings == null) return;
-
-            int dailyWage = MobileParty.MainParty?.TotalWage ?? 0;
-            int expenseReserve = dailyWage * settings.MinDaysExpensesToKeep;
-            int defaultMinRequiredBalance = Math.Max(settings.MinimumGoldReserve, expenseReserve);
-
-            var merchantItems = vm.LeftItemListVM?.ToList() ?? new List<SPItemVM>();
-
-            foreach (var goal in goals)
-            {
-                int minRequiredBalance = Math.Max(defaultMinRequiredBalance, goal.MinGoldReserve);
-
-                if (goal.GoalType == SettlementAutomationCore.LogisticsGoalType.FoodRestock)
-                {
-                    // Calculate how much food we currently own
-                    int totalFoodOwned = 0;
-                    if (vm.RightItemListVM != null)
-                    {
-                        totalFoodOwned = vm.RightItemListVM
-                            .Where(r => r.ItemRosterElement.EquipmentElement.Item != null && r.ItemRosterElement.EquipmentElement.Item.IsFood)
-                            .Sum(r => r.ItemCount);
-                    }
-                    totalFoodOwned += boughtQuantities.Where(q => q.Key.ItemRosterElement.EquipmentElement.Item.IsFood).Sum(q => q.Value);
-
-                    int needed = goal.TargetQuantity - totalFoodOwned;
-                    if (needed <= 0) continue;
-
-                    // Gather all food items in merchant stock
-                    var buyableFood = new List<SPItemVM>();
-                    foreach (var item in merchantItems)
-                    {
-                        if (item == null || item.ItemRosterElement.EquipmentElement.Item == null) continue;
-                        var itemObj = item.ItemRosterElement.EquipmentElement.Item;
-                        if (itemObj.IsFood && !localExcludedItems.Contains(itemObj.Name.ToString()))
-                        {
-                            buyableFood.Add(item);
-                        }
-                    }
-
-                    // Sort food by local price ascending
-                    buyableFood = buyableFood.OrderBy(f => logic != null ? logic.GetItemPrice(f.ItemRosterElement.EquipmentElement, true) : f.ItemRosterElement.EquipmentElement.Item.Value).ToList();
-
-                    if (goal.IsSurvivalMode)
-                    {
-                        // Survival mode: buy cheapest food to fill total gap
-                        foreach (var food in buyableFood)
-                        {
-                            if (needed <= 0) break;
-                            var itemObj = food.ItemRosterElement.EquipmentElement.Item;
-                            
-                            int bCount = boughtQuantities.TryGetValue(food, out int bVal) ? bVal : 0;
-                            int merchantCount = food.ItemCount - bCount;
-                            int price = logic != null ? logic.GetItemPrice(food.ItemRosterElement.EquipmentElement, true) : itemObj.Value;
-
-                            for (int i = 0; i < merchantCount; i++)
-                            {
-                                if (needed <= 0) break;
-                                if (currentBalance - price < minRequiredBalance) break;
-                                if (settings.LimitToInventoryCapacity && MobileParty.MainParty != null)
-                                {
-                                    float projectedWeight = GetRosterWeight(MobileParty.MainParty.ItemRoster) + netWeightAdded;
-                                    if (projectedWeight + itemObj.Weight >= MobileParty.MainParty.InventoryCapacity) break;
-                                }
-
-                                if (logic != null && Hero.MainHero != null)
-                                {
-                                    var command = TransferCommand.Transfer(1, InventoryLogic.InventorySide.OtherInventory, InventoryLogic.InventorySide.PlayerInventory, new ItemRosterElement(food.ItemRosterElement.EquipmentElement, 1), EquipmentIndex.None, EquipmentIndex.None, Hero.MainHero.CharacterObject);
-                                    logic.AddTransferCommand(command);
-                                }
-
-                                boughtQuantities[food] = (boughtQuantities.TryGetValue(food, out int currentBVal) ? currentBVal : 0) + 1;
-                                currentBalance -= price;
-                                netWeightAdded += itemObj.Weight;
-                                report.BoughtItems.Add((itemObj.Name.ToString(), 1, price));
-                                needed--;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        // Variety mode: buy up to targetQuantity / 10 of each food type
-                        int targetPerType = (int)Math.Ceiling(goal.TargetQuantity / 10.0f);
-                        foreach (var food in buyableFood)
-                        {
-                            var itemObj = food.ItemRosterElement.EquipmentElement.Item;
-                            var playerItem = vm.RightItemListVM?.FirstOrDefault(r => r.ItemRosterElement.EquipmentElement.Item == itemObj);
-                            
-                            int bCount = boughtQuantities.TryGetValue(food, out int bVal) ? bVal : 0;
-                            int ownedOfThis = (playerItem != null ? playerItem.ItemCount : 0) + bCount;
-
-                            int typeNeeded = targetPerType - ownedOfThis;
-                            if (typeNeeded <= 0) continue;
-
-                            int merchantCount = food.ItemCount - bCount;
-                            int price = logic != null ? logic.GetItemPrice(food.ItemRosterElement.EquipmentElement, true) : itemObj.Value;
-
-                            int criticalMin = (int)Math.Ceiling(targetPerType / 10.0f);
-                            float referencePrice = GetWorldAveragePrice(food.ItemRosterElement.EquipmentElement);
-                            if (referencePrice <= 0f) referencePrice = itemObj.Value;
-
-                            for (int i = 0; i < Math.Min(typeNeeded, merchantCount); i++)
-                            {
-                                int currentlyOwnedDuringLoop = ownedOfThis + i;
-                                bool isCritical = settings.ForceBuyMinVarietyFood && (currentlyOwnedDuringLoop < criticalMin);
-
-                                if (!isCritical && price > referencePrice * settings.FoodLogisticsPriceThrottleFactor)
-                                {
-                                    WriteLog($"[Logistics] Skipping food variety purchase of {itemObj.Name}: price {price} is above threshold ({referencePrice * settings.FoodLogisticsPriceThrottleFactor:F1})");
-                                    break;
-                                }
-
-                                if (currentBalance - price < minRequiredBalance) break;
-                                if (settings.LimitToInventoryCapacity && MobileParty.MainParty != null)
-                                {
-                                    float projectedWeight = GetRosterWeight(MobileParty.MainParty.ItemRoster) + netWeightAdded;
-                                    if (projectedWeight + itemObj.Weight >= MobileParty.MainParty.InventoryCapacity) break;
-                                }
-
-                                if (logic != null && Hero.MainHero != null)
-                                {
-                                    var command = TransferCommand.Transfer(1, InventoryLogic.InventorySide.OtherInventory, InventoryLogic.InventorySide.PlayerInventory, new ItemRosterElement(food.ItemRosterElement.EquipmentElement, 1), EquipmentIndex.None, EquipmentIndex.None, Hero.MainHero.CharacterObject);
-                                    logic.AddTransferCommand(command);
-                                }
-
-                                boughtQuantities[food] = (boughtQuantities.TryGetValue(food, out int currentBVal) ? currentBVal : 0) + 1;
-                                currentBalance -= price;
-                                netWeightAdded += itemObj.Weight;
-                                report.BoughtItems.Add((itemObj.Name.ToString(), 1, price));
-                            }
-                        }
-                    }
-                }
-                else if (goal.GoalType == SettlementAutomationCore.LogisticsGoalType.SpeedMounts)
-                {
-                    // Speed mounts: buy riding mounts up to target quantity
-                    int totalMountsOwned = 0;
-                    if (vm.RightItemListVM != null)
-                    {
-                        totalMountsOwned = vm.RightItemListVM
-                            .Where(r => r.ItemRosterElement.EquipmentElement.Item != null && r.ItemRosterElement.EquipmentElement.Item.IsMountable && !r.ItemRosterElement.EquipmentElement.Item.HorseComponent.IsPackAnimal)
-                            .Sum(r => r.ItemCount);
-                    }
-                    totalMountsOwned += boughtQuantities.Where(q => q.Key.ItemRosterElement.EquipmentElement.Item.IsMountable && !q.Key.ItemRosterElement.EquipmentElement.Item.HorseComponent.IsPackAnimal).Sum(q => q.Value);
-
-                    int needed = goal.TargetQuantity - totalMountsOwned;
-                    if (needed <= 0) continue;
-
-                    var buyableMounts = new List<SPItemVM>();
-                    foreach (var item in merchantItems)
-                    {
-                        if (item == null || item.ItemRosterElement.EquipmentElement.Item == null) continue;
-                        var itemObj = item.ItemRosterElement.EquipmentElement.Item;
-                        if (itemObj.IsMountable && !itemObj.HorseComponent.IsPackAnimal && !localExcludedItems.Contains(itemObj.Name.ToString()))
-                        {
-                            buyableMounts.Add(item);
-                        }
-                    }
-
-                    buyableMounts = buyableMounts.OrderBy(m => logic != null ? logic.GetItemPrice(m.ItemRosterElement.EquipmentElement, true) : m.ItemRosterElement.EquipmentElement.Item.Value).ToList();
-
-                    foreach (var mount in buyableMounts)
-                    {
-                        if (needed <= 0) break;
-                        var itemObj = mount.ItemRosterElement.EquipmentElement.Item;
-                        
-                        int bCount = boughtQuantities.TryGetValue(mount, out int bVal) ? bVal : 0;
-                        int merchantCount = mount.ItemCount - bCount;
-                        int price = logic != null ? logic.GetItemPrice(mount.ItemRosterElement.EquipmentElement, true) : itemObj.Value;
-
-                        float referencePrice = GetWorldAveragePrice(mount.ItemRosterElement.EquipmentElement);
-                        if (referencePrice <= 0f) referencePrice = itemObj.Value;
-                        if (price > referencePrice * settings.MountsLogisticsPriceThrottleFactor)
-                        {
-                            WriteLog($"[Logistics] Skipping mount purchase of {itemObj.Name}: price {price} is above threshold ({referencePrice * settings.MountsLogisticsPriceThrottleFactor:F1})");
-                            continue;
-                        }
-
-                        for (int i = 0; i < merchantCount; i++)
-                        {
-                            if (needed <= 0) break;
-                            if (currentBalance - price < minRequiredBalance) break;
-
-                            if (MobileParty.MainParty != null)
-                            {
-                                int totalAnimalsBoughtInSim = boughtQuantities.Where(p => p.Key.ItemRosterElement.EquipmentElement.Item.IsAnimal || (p.Key.ItemRosterElement.EquipmentElement.Item.IsMountable && p.Key.ItemRosterElement.EquipmentElement.Item.HorseComponent != null)).Sum(p => p.Value);
-                                int remainingSlots = SettlementAutomationCore.HerdingCalculator.GetRemainingAnimalSlots(MobileParty.MainParty);
-                                if (totalAnimalsBoughtInSim >= remainingSlots) break;
-                            }
-
-                            if (settings.LimitToInventoryCapacity && MobileParty.MainParty != null)
-                            {
-                                float projectedWeight = GetRosterWeight(MobileParty.MainParty.ItemRoster) + netWeightAdded;
-                                if (projectedWeight + itemObj.Weight >= MobileParty.MainParty.InventoryCapacity) break;
-                            }
-
-                            if (logic != null && Hero.MainHero != null)
-                            {
-                                var command = TransferCommand.Transfer(1, InventoryLogic.InventorySide.OtherInventory, InventoryLogic.InventorySide.PlayerInventory, new ItemRosterElement(mount.ItemRosterElement.EquipmentElement, 1), EquipmentIndex.None, EquipmentIndex.None, Hero.MainHero.CharacterObject);
-                                logic.AddTransferCommand(command);
-                            }
-
-                            boughtQuantities[mount] = (boughtQuantities.TryGetValue(mount, out int currentBVal) ? currentBVal : 0) + 1;
-                            currentBalance -= price;
-                            netWeightAdded += itemObj.Weight;
-                            report.BoughtItems.Add((itemObj.Name.ToString(), 1, price));
-                            needed--;
-                        }
-                    }
-                }
-            }
-        }
     }
 }

@@ -48,28 +48,29 @@ namespace FiefManager
 
         [SettingPropertyBool("Auto Deposit Project Boost Gold", RequireRestart = false,
             HintText = "Automatically deposit denars into town/castle reserves to speed up construction.")]
-        [SettingPropertyGroup("General", GroupOrder = 0)]
+        [SettingPropertyGroup("Reserves & Deposit Rules", GroupOrder = 1)]
         public bool AutoDepositProjectBoost { get; set; } = true;
 
         [SettingPropertyInteger("Days of Funding", 1, 100, "0", RequireRestart = false,
             HintText = "Number of days of boost process to fund (Castle = 250/day, Town = 500/day).")]
-        [SettingPropertyGroup("General", GroupOrder = 0)]
+        [SettingPropertyGroup("Reserves & Deposit Rules", GroupOrder = 1)]
         public int DaysOfFunding { get; set; } = 10;
 
         [SettingPropertyInteger("Max Reserve Limit (Town)", 10000, 500000, "0", RequireRestart = false,
             HintText = "Maximum gold reserve a town fief is allowed to have. Deposits will top up to this limit.")]
-        [SettingPropertyGroup("General", GroupOrder = 0)]
+        [SettingPropertyGroup("Reserves & Deposit Rules", GroupOrder = 1)]
         public int MaxReserveLimitTown { get; set; } = 100000;
 
         [SettingPropertyInteger("Max Reserve Limit (Castle)", 5000, 200000, "0", RequireRestart = false,
             HintText = "Maximum gold reserve a castle fief is allowed to have. Deposits will top up to this limit.")]
-        [SettingPropertyGroup("General", GroupOrder = 0)]
+        [SettingPropertyGroup("Reserves & Deposit Rules", GroupOrder = 1)]
         public int MaxReserveLimitCastle { get; set; } = 50000;
 
         [SettingPropertyInteger("Min Player Gold Reserve", 1000, 500000, "0", RequireRestart = false,
             HintText = "Do not deposit gold to fiefs if player's gold is below this threshold.")]
-        [SettingPropertyGroup("General", GroupOrder = 0)]
+        [SettingPropertyGroup("Reserves & Deposit Rules", GroupOrder = 1)]
         public int MinPlayerGoldReserve { get; set; } = 100000;
+
 
         public BuildingPriorityCategory Priority => PriorityDropdown.SelectedValue.Value;
     }
