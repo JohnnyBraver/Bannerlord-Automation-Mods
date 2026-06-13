@@ -1,0 +1,22 @@
+[size=4][b]Description[/b][/size]
+[size=3][color=#D4D4D8]Equipment Manager is an automated gear optimization and acquisition tool. It handles companion hand-me-downs, civilian loadout priorities, and auto-buys high-tier or stealth equipment from merchants based on your customizable budget parameters.[/color][/size]
+
+[size=4][b]Installation instructions[/b][/size]
+[size=3][color=#D4D4D8]1. Extract the downloaded archive into your Mount & Blade II Bannerlord game directory (specifically inside the Modules folder).
+2. Ensure the "EquipmentManager" folder is present under Modules.
+3. Enable "Equipment Manager" in the game launcher.[/color][/size]
+
+[size=4][b]Main features[/b][/size]
+[size=3][color=#D4D4D8]- Multi-Pass Headless Auto-Equip: Automatically optimizes gear for you and your companions after battle and before trading.
+- Gear Cascades (Hand-Me-Downs): Unequipped upgrades are passed down to companions in party list order.
+- Priority Loadouts: Choose custom priority layouts between Sneaking, Civilian, and Combat gear.
+- Auto-Buy Upgrades: Safely buys premium armor upgrades or sneaking items from merchants when your gold is above customizable thresholds.
+- Anti-Sell Safety Lock: Keeps unequipped items locked from being sold if they represent an upgrade/sidegrade for any companion.[/color][/size]
+
+[size=4][b]Requirements[/b][/size]
+[size=3][color=#D4D4D8]- Settlement Automation Core
+- Harmony
+- MCM[/color][/size]
+
+[size=4][b]Shout outs[/b][/size]
+[size=3][color=#D4D4D8]Special thanks to the Mount & Blade II modding community and everyone using the Settlement Automation suite.[/color][/size]
