@@ -77,18 +77,48 @@ namespace SettlementAutomationCore
         public static int GetCurrentAnimalsCount(MobileParty party)
         {
             if (party == null) return 0;
-            int count = 0;
+
+            int infantry = 0;
+            var memberRoster = party.MemberRoster;
+            for (int i = 0; i < memberRoster.Count; i++)
+            {
+                var el = memberRoster.GetElementCopyAtIndex(i);
+                if (el.Character != null && !el.Character.IsMounted)
+                {
+                    infantry += el.Number;
+                }
+            }
+
+            int riding = 0;
+            int pack = 0;
+            int livestock = 0;
+
             var itemRoster = party.ItemRoster;
             for (int i = 0; i < itemRoster.Count; i++)
             {
                 var el = itemRoster.GetElementCopyAtIndex(i);
                 var item = el.EquipmentElement.Item;
-                if (item != null && (item.IsAnimal || (item.IsMountable && item.HorseComponent != null)))
+                if (item != null)
                 {
-                    count += el.Amount;
+                    if (item.IsAnimal && !item.IsMountable)
+                    {
+                        livestock += el.Amount;
+                    }
+                    else if (item.IsMountable && item.HorseComponent != null)
+                    {
+                        if (item.HorseComponent.IsPackAnimal)
+                        {
+                            pack += el.Amount;
+                        }
+                        else
+                        {
+                            riding += el.Amount;
+                        }
+                    }
                 }
             }
-            return count;
+
+            return pack + livestock + Math.Max(0, riding - infantry);
         }
 
         public static int GetRemainingAnimalSlots(MobileParty party)
