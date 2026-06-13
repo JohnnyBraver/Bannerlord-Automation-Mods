@@ -191,11 +191,28 @@ namespace EquipmentManager
                     {
                         if (hero.CharacterObject == null) continue;
 
-                        for (int setIndex = 0; setIndex < 2; setIndex++)
+                        for (int setIndex = 0; setIndex < 3; setIndex++)
                         {
-                            bool isCivilian = (setIndex == 1);
-                            var equipment = isCivilian ? hero.CivilianEquipment : hero.BattleEquipment;
-                            bool prioritizeStealth = (hero == Hero.MainHero && isCivilian && settings.MainHeroCivilianModeSetting == MainHeroCivilianMode.Stealth);
+                            Equipment equipment;
+                            bool prioritizeStealth = false;
+                            InventoryLogic.InventorySide side;
+
+                            if (setIndex == 0)
+                            {
+                                equipment = hero.BattleEquipment;
+                                side = InventoryLogic.InventorySide.BattleEquipment;
+                            }
+                            else if (setIndex == 1)
+                            {
+                                equipment = hero.CivilianEquipment;
+                                side = InventoryLogic.InventorySide.CivilianEquipment;
+                            }
+                            else
+                            {
+                                equipment = hero.StealthEquipment;
+                                prioritizeStealth = true;
+                                side = InventoryLogic.InventorySide.StealthEquipment;
+                            }
 
                             foreach (var slot in armorSlots)
                             {
@@ -217,13 +234,13 @@ namespace EquipmentManager
                                     var item = candidate.Item;
                                     if (item == null || !item.HasArmorComponent) continue;
 
-                                    if (isCivilian && !item.IsCivilian) continue;
+                                    if (side == InventoryLogic.InventorySide.CivilianEquipment && !item.IsCivilian) continue;
+                                    if (side == InventoryLogic.InventorySide.StealthEquipment && !item.IsStealthItem) continue;
                                     if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
 
                                     if (prioritizeStealth)
                                     {
-                                        bool isStealthItem = (item.Name != null && item.Name.ToString().IndexOf("blackened", StringComparison.OrdinalIgnoreCase) >= 0);
-                                        if (!isStealthItem) continue;
+                                        if (!item.IsStealthItem) continue;
 
                                         float score = GetStealthScore(candidate);
                                         if (score > bestScore)
@@ -303,8 +320,7 @@ namespace EquipmentManager
 
                 if (prioritizeStealth)
                 {
-                    bool isStealthItem = (item.Name != null && item.Name.ToString().IndexOf("blackened", StringComparison.OrdinalIgnoreCase) >= 0);
-                    if (!isStealthItem) continue;
+                    if (!item.IsStealthItem) continue;
 
                     float score = GetStealthScore(eqEl);
                     if (score > bestScore)
@@ -335,13 +351,26 @@ namespace EquipmentManager
             {
                 if (hero.CharacterObject == null) continue;
 
-                for (int setIndex = 0; setIndex < 2; setIndex++)
+                for (int setIndex = 0; setIndex < 3; setIndex++)
                 {
-                    bool isCivilian = (setIndex == 1);
-                    if (isCivilian && !item.IsCivilian) continue;
+                    Equipment equipment;
+                    bool prioritizeStealth = false;
 
-                    var equipment = isCivilian ? hero.CivilianEquipment : hero.BattleEquipment;
-                    bool prioritizeStealth = (hero == Hero.MainHero && isCivilian && settings.MainHeroCivilianModeSetting == MainHeroCivilianMode.Stealth);
+                    if (setIndex == 0)
+                    {
+                        equipment = hero.BattleEquipment;
+                    }
+                    else if (setIndex == 1)
+                    {
+                        if (!item.IsCivilian) continue;
+                        equipment = hero.CivilianEquipment;
+                    }
+                    else
+                    {
+                        if (!item.IsStealthItem) continue;
+                        equipment = hero.StealthEquipment;
+                        prioritizeStealth = true;
+                    }
 
                     foreach (var slot in armorSlots)
                     {
@@ -352,12 +381,8 @@ namespace EquipmentManager
                         
                         if (prioritizeStealth)
                         {
-                            bool isStealthItem = (item.Name != null && item.Name.ToString().IndexOf("blackened", StringComparison.OrdinalIgnoreCase) >= 0);
-                            if (isStealthItem)
-                            {
-                                float candidateScore = GetStealthScore(eqEl);
-                                if (candidateScore > currentScore) return true;
-                            }
+                            float candidateScore = GetStealthScore(eqEl);
+                            if (candidateScore > currentScore) return true;
                         }
                         else
                         {

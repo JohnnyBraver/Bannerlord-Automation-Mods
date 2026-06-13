@@ -17,7 +17,7 @@ namespace EquipmentManager
         private struct EquipTarget
         {
             public Hero Hero;
-            public bool IsCivilian;
+            public InventoryLogic.InventorySide Side;
             public bool PrioritizeStealth;
         }
 
@@ -495,19 +495,14 @@ namespace EquipmentManager
             {
                 if (hero.CharacterObject == null) continue;
 
-                // 1. Sneaking (Main Hero Civilian if Stealth Mode)
-                if (hero == Hero.MainHero && settings.MainHeroCivilianModeSetting == MainHeroCivilianMode.Stealth)
-                {
-                    sneakingTargets.Add(new EquipTarget { Hero = hero, IsCivilian = true, PrioritizeStealth = true });
-                }
-                else
-                {
-                    // 2. Civilian (Companions Civilian, or Main Hero Civilian if Armor Mode)
-                    civilianTargets.Add(new EquipTarget { Hero = hero, IsCivilian = true, PrioritizeStealth = false });
-                }
+                // 1. Sneaking (Stealth Equipment)
+                sneakingTargets.Add(new EquipTarget { Hero = hero, Side = InventoryLogic.InventorySide.StealthEquipment, PrioritizeStealth = true });
 
-                // 3. Combat (All)
-                combatTargets.Add(new EquipTarget { Hero = hero, IsCivilian = false, PrioritizeStealth = false });
+                // 2. Civilian (Civilian Equipment)
+                civilianTargets.Add(new EquipTarget { Hero = hero, Side = InventoryLogic.InventorySide.CivilianEquipment, PrioritizeStealth = false });
+
+                // 3. Combat (Battle Equipment)
+                combatTargets.Add(new EquipTarget { Hero = hero, Side = InventoryLogic.InventorySide.BattleEquipment, PrioritizeStealth = false });
             }
 
             var combinedTargets = new List<EquipTarget>();
@@ -552,11 +547,22 @@ namespace EquipmentManager
             foreach (var target in combinedTargets)
             {
                 var hero = target.Hero;
-                bool isCivilian = target.IsCivilian;
+                var targetSide = target.Side;
                 bool prioritizeStealth = target.PrioritizeStealth;
 
-                var targetSide = isCivilian ? InventoryLogic.InventorySide.CivilianEquipment : InventoryLogic.InventorySide.BattleEquipment;
-                var equipment = isCivilian ? hero.CivilianEquipment : hero.BattleEquipment;
+                Equipment equipment;
+                if (targetSide == InventoryLogic.InventorySide.StealthEquipment)
+                {
+                    equipment = hero.StealthEquipment;
+                }
+                else if (targetSide == InventoryLogic.InventorySide.CivilianEquipment)
+                {
+                    equipment = hero.CivilianEquipment;
+                }
+                else
+                {
+                    equipment = hero.BattleEquipment;
+                }
 
                 // A. Armor Slots
                 if (settings.AutoEquipCategorySetting == AutoEquipCategory.ArmorOnly || settings.AutoEquipCategorySetting == AutoEquipCategory.WeaponsAndArmor)
@@ -581,7 +587,8 @@ namespace EquipmentManager
                             var item = candidate.Item;
                             if (item == null || !item.HasArmorComponent) continue;
 
-                            if (isCivilian && !item.IsCivilian) continue;
+                            if (targetSide == InventoryLogic.InventorySide.CivilianEquipment && !item.IsCivilian) continue;
+                            if (targetSide == InventoryLogic.InventorySide.StealthEquipment && !item.IsStealthItem) continue;
                             if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
 
                             bool strictlyBeats = StrictlyBeatsArmor(candidate, currentArmor, prioritizeStealth);
@@ -616,7 +623,7 @@ namespace EquipmentManager
                             equippedCount++;
 
                             string slotName = GetSlotName(slot);
-                            string setName = isCivilian ? (prioritizeStealth ? "Sneaking" : "Civilian") : "Combat";
+                            string setName = targetSide == InventoryLogic.InventorySide.StealthEquipment ? "Sneaking" : (targetSide == InventoryLogic.InventorySide.CivilianEquipment ? "Civilian" : "Combat");
                             SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Equipped {upgradeElement.EquipmentElement.Item.Name} on {hero.Name} in {slotName} slot ({setName} set).");
 
                             // If we successfully upgraded, update currentArmor for drawback comparison
@@ -630,7 +637,7 @@ namespace EquipmentManager
                             if (bestDrawbackScore > currentScore)
                             {
                                 string slotName = GetSlotName(slot);
-                                string setName = isCivilian ? (prioritizeStealth ? "Sneaking" : "Civilian") : "Combat";
+                                string setName = targetSide == InventoryLogic.InventorySide.StealthEquipment ? "Sneaking" : (targetSide == InventoryLogic.InventorySide.CivilianEquipment ? "Civilian" : "Combat");
                                 notifications.Add($"{hero.Name} ({setName}): {bestDrawback.Value.EquipmentElement.Item.Name} in {slotName} slot is better but has drawbacks compared to {(currentArmor.IsEmpty ? "None" : currentArmor.Item.Name)}.");
                             }
                         }
@@ -660,7 +667,8 @@ namespace EquipmentManager
                             var item = candidate.Item;
                             if (item == null || item.PrimaryWeapon == null) continue;
 
-                            if (isCivilian && !item.IsCivilian) continue;
+                            if (targetSide == InventoryLogic.InventorySide.CivilianEquipment && !item.IsCivilian) continue;
+                            if (targetSide == InventoryLogic.InventorySide.StealthEquipment && !item.IsStealthItem) continue;
                             if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
 
                             bool strictlyBeats = StrictlyBeatsWeapon(candidate, currentWeapon);
@@ -694,7 +702,7 @@ namespace EquipmentManager
                             inventoryLogic.AddTransferCommand(command);
                             equippedCount++;
 
-                            string setName = isCivilian ? "Civilian" : "Combat";
+                            string setName = targetSide == InventoryLogic.InventorySide.StealthEquipment ? "Sneaking" : (targetSide == InventoryLogic.InventorySide.CivilianEquipment ? "Civilian" : "Combat");
                             SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Equipped {upgradeElement.EquipmentElement.Item.Name} on {hero.Name} in Weapon slot {slot} ({setName} set).");
 
                             currentWeapon = upgradeElement.EquipmentElement;
@@ -706,7 +714,7 @@ namespace EquipmentManager
                             float currentScore = GetWeaponScore(currentWeapon);
                             if (bestDrawbackScore > currentScore)
                             {
-                                string setName = isCivilian ? "Civilian" : "Combat";
+                                string setName = targetSide == InventoryLogic.InventorySide.StealthEquipment ? "Sneaking" : (targetSide == InventoryLogic.InventorySide.CivilianEquipment ? "Civilian" : "Combat");
                                 notifications.Add($"{hero.Name} ({setName}): {bestDrawback.Value.EquipmentElement.Item.Name} in {slot} slot is better but has drawbacks compared to {currentWeapon.Item.Name}.");
                             }
                         }

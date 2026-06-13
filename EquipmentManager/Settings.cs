@@ -22,19 +22,7 @@ namespace EquipmentManager
         public override string ToString() => _name;
     }
 
-    public enum MainHeroCivilianMode
-    {
-        Stealth,
-        Armor
-    }
 
-    public class MainHeroCivilianModeOption
-    {
-        private readonly string _name;
-        public MainHeroCivilianMode Value { get; }
-        public MainHeroCivilianModeOption(string name, MainHeroCivilianMode value) { _name = name; Value = value; }
-        public override string ToString() => _name;
-    }
 
     public enum LoadoutPriority
     {
@@ -109,11 +97,7 @@ namespace EquipmentManager
             new AutoEquipCategoryOption("Weapons & Armor", AutoEquipCategory.WeaponsAndArmor)
         };
 
-        private static readonly IReadOnlyList<MainHeroCivilianModeOption> MainHeroCivilianModeOptions = new List<MainHeroCivilianModeOption>
-        {
-            new MainHeroCivilianModeOption("Stealth (Optimize for Sneaking/Disguise)", MainHeroCivilianMode.Stealth),
-            new MainHeroCivilianModeOption("Armor (Optimize for Protection)", MainHeroCivilianMode.Armor)
-        };
+
 
         private static readonly IReadOnlyList<LoadoutPriorityOption> LoadoutPriorityOptions = new List<LoadoutPriorityOption>
         {
@@ -150,11 +134,7 @@ namespace EquipmentManager
         public Dropdown<AutoEquipCategoryOption> AutoEquipCategoryDropdown { get; set; } =
             new Dropdown<AutoEquipCategoryOption>(AutoEquipCategoryOptions, 3); // Default: Weapons & Armor
 
-        [SettingPropertyDropdown("Civilian Outfit Mode", RequireRestart = false,
-            HintText = "Select optimization goal for the civilian outfit (used in towns and sneaking/disguised scenarios). Stealth: Optimize for sneaking. Armor: Optimize for protection.")]
-        [SettingPropertyGroup("Civilian & Sneaking", GroupOrder = 1)]
-        public Dropdown<MainHeroCivilianModeOption> MainHeroCivilianModeDropdown { get; set; } =
-            new Dropdown<MainHeroCivilianModeOption>(MainHeroCivilianModeOptions, 0); // Default: Stealth (index 0)
+
 
         [SettingPropertyDropdown("Loadout Priority Order", RequireRestart = false,
             HintText = "Set the priority order for distributing equipment from inventory to loadouts.")]
@@ -245,7 +225,7 @@ namespace EquipmentManager
         public string MinQualityToKeep => MinQualityDropdown.SelectedValue;
         public AutoEquipCategory AutoEquipCategorySetting => AutoEquipCategoryDropdown.SelectedValue.Value;
         public LockDonationCategory LockDonationCategorySetting => LockDonationCategoryDropdown.SelectedValue.Value;
-        public MainHeroCivilianMode MainHeroCivilianModeSetting => MainHeroCivilianModeDropdown.SelectedValue.Value;
+
         public LoadoutPriority LoadoutPrioritySetting => LoadoutPriorityDropdown.SelectedValue.Value;
         public BuyEquipmentTarget BuyEquipmentTargetSetting => BuyEquipmentTargetDropdown.SelectedValue.Value;
     }
