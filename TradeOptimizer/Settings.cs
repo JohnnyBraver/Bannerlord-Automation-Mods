@@ -207,6 +207,29 @@ namespace TradeOptimizer
         [SettingPropertyGroup("Budget Protection", GroupOrder = 0)]
         public int MinimumGoldReserve { get; set; } = 1000;
 
+        [SettingPropertyBool("Auto-Buy Food to Restock", RequireRestart = false, HintText = "Automatically buy food to maintain supply for soldiers.", Order = 5)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
+        public bool AutoBuyFood { get; set; } = true;
+
+        [SettingPropertyInteger("Min Party Size for Variety", 1, 100, RequireRestart = false, HintText = "Minimum party size before the mod starts buying a variety of foods for Steward XP.", Order = 6)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
+        public int MinPartySizeForVariety { get; set; } = 20;
+
+        [SettingPropertyInteger("Min Gold for Variety", 500, 20000, RequireRestart = false, HintText = "Minimum gold reserve required to buy food varieties.", Order = 7)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
+        public int MinGoldForVariety { get; set; } = 3000;
+
+        [SettingPropertyBool("Auto-Buy Riding Mounts for Speed", RequireRestart = false, HintText = "Automatically buy mounts for foot soldiers to upgrade party speed.", Order = 8)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
+        public bool AutoBuyMounts { get; set; } = true;
+
+        [SettingPropertyInteger("Min Gold for Mounts", 1000, 50000, RequireRestart = false, HintText = "Minimum gold reserve required to buy mounts.", Order = 9)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
+        public int MinGoldForMounts { get; set; } = 10000;
+
+        [SettingPropertyInteger("Inventory Reservation Priority Threshold", 1, 100, RequireRestart = false, HintText = "Requests with priority higher than this will protect inventory items from being auto-sold.", Order = 10)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
+        public int InventoryReservationPriorityThreshold { get; set; } = 30;
 
         [SettingPropertyInteger("Min Days of Expenses to Keep", 0, 100, RequireRestart = false,
             HintText = "Ensure you keep enough gold to cover this many days of party wages/expenses (excluding daily income).", Order = 2)]

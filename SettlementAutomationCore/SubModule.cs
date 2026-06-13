@@ -473,91 +473,95 @@ namespace SettlementAutomationCore
                         var fulfilledItemParts = new List<string>();
 
                         // Part A: Process Item Requests (ItemCategory & SpecificItem)
-                        var itemRequests = activeRequests.Where(r => r.Type == RequestType.ItemCategory || r.Type == RequestType.SpecificItem).ToList();
-                        foreach (var req in itemRequests)
+                        // If TradeOptimizer is active, it handles item purchases during the Main Trade Phase (Step 6) using its advanced pricing and herding logic.
+                        if (!AutomationRegistry.IsTradeOptimizerActive())
                         {
-                            if (Hero.MainHero.Gold < req.MinGoldReserve) continue;
-
-                            // 1. Get current inventory count for matching items
-                            int currentHeld = 0;
-                            var playerElements = fulfillmentLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-                            for (int i = 0; i < playerElements.Count; i++)
+                            var itemRequests = activeRequests.Where(r => r.Type == RequestType.ItemCategory || r.Type == RequestType.SpecificItem).ToList();
+                            foreach (var req in itemRequests)
                             {
-                                var el = playerElements[i];
-                                if (el.EquipmentElement.Item != null && req.MatchesItem(el.EquipmentElement.Item))
+                                if (Hero.MainHero.Gold < req.MinGoldReserve) continue;
+
+                                // 1. Get current inventory count for matching items
+                                int currentHeld = 0;
+                                var playerElements = fulfillmentLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+                                for (int i = 0; i < playerElements.Count; i++)
                                 {
-                                    currentHeld += el.Amount;
-                                }
-                            }
-
-                            int deficit = req.TargetQuantity - currentHeld;
-                            if (deficit <= 0) continue;
-
-                            // 2. Locate candidates in settlement inventory
-                            var candidates = new List<ItemRosterElement>();
-                            var otherElements = fulfillmentLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
-                            for (int i = 0; i < otherElements.Count; i++)
-                            {
-                                var el = otherElements[i];
-                                if (el.EquipmentElement.Item != null && req.MatchesItem(el.EquipmentElement.Item) && el.Amount > 0)
-                                {
-                                    candidates.Add(el);
-                                }
-                            }
-
-                            // 3. Sort candidates by unit purchase price (cheapest first)
-                            var sortedCandidates = candidates.Select(c => new {
-                                Element = c,
-                                Price = fulfillmentLogic.GetItemPrice(c.EquipmentElement, true)
-                            }).OrderBy(x => x.Price).ToList();
-
-                            foreach (var candidate in sortedCandidates)
-                            {
-                                if (deficit <= 0) break;
-                                if (Hero.MainHero.Gold < req.MinGoldReserve) break;
-
-                                // Price multiplier protection check
-                                float baseValue = candidate.Element.EquipmentElement.Item.Value;
-                                if (baseValue > 0)
-                                {
-                                    float mult = (float)candidate.Price / baseValue;
-                                    if (mult > req.MaxPriceMultiplier)
+                                    var el = playerElements[i];
+                                    if (el.EquipmentElement.Item != null && req.MatchesItem(el.EquipmentElement.Item))
                                     {
-                                        continue; // skip overpriced items
+                                        currentHeld += el.Amount;
                                     }
                                 }
 
-                                int toBuy = Math.Min(deficit, candidate.Element.Amount);
-                                int maxAfford = (Hero.MainHero.Gold - req.MinGoldReserve) / Math.Max(1, candidate.Price);
-                                toBuy = Math.Min(toBuy, maxAfford);
+                                int deficit = req.TargetQuantity - currentHeld;
+                                if (deficit <= 0) continue;
 
-                                if (toBuy > 0)
+                                // 2. Locate candidates in settlement inventory
+                                var candidates = new List<ItemRosterElement>();
+                                var otherElements = fulfillmentLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
+                                for (int i = 0; i < otherElements.Count; i++)
                                 {
-                                    var command = TransferCommand.Transfer(
-                                        toBuy,
-                                        InventoryLogic.InventorySide.OtherInventory,
-                                        InventoryLogic.InventorySide.PlayerInventory,
-                                        new ItemRosterElement(candidate.Element.EquipmentElement, toBuy),
-                                        EquipmentIndex.None,
-                                        EquipmentIndex.None,
-                                        Hero.MainHero.CharacterObject
-                                    );
-                                    fulfillmentLogic.AddTransferCommand(command);
-                                    executedAnyItemTransfers = true;
-                                    deficit -= toBuy;
-                                    fulfilledItemParts.Add($"{toBuy}x {candidate.Element.EquipmentElement.Item.Name}");
+                                    var el = otherElements[i];
+                                    if (el.EquipmentElement.Item != null && req.MatchesItem(el.EquipmentElement.Item) && el.Amount > 0)
+                                    {
+                                        candidates.Add(el);
+                                    }
+                                }
+
+                                // 3. Sort candidates by unit purchase price (cheapest first)
+                                var sortedCandidates = candidates.Select(c => new {
+                                    Element = c,
+                                    Price = fulfillmentLogic.GetItemPrice(c.EquipmentElement, true)
+                                }).OrderBy(x => x.Price).ToList();
+
+                                foreach (var candidate in sortedCandidates)
+                                {
+                                    if (deficit <= 0) break;
+                                    if (Hero.MainHero.Gold < req.MinGoldReserve) break;
+
+                                    // Price multiplier protection check
+                                    float baseValue = candidate.Element.EquipmentElement.Item.Value;
+                                    if (baseValue > 0)
+                                    {
+                                        float mult = (float)candidate.Price / baseValue;
+                                        if (mult > req.MaxPriceMultiplier)
+                                        {
+                                            continue; // skip overpriced items
+                                        }
+                                    }
+
+                                    int toBuy = Math.Min(deficit, candidate.Element.Amount);
+                                    int maxAfford = (Hero.MainHero.Gold - req.MinGoldReserve) / Math.Max(1, candidate.Price);
+                                    toBuy = Math.Min(toBuy, maxAfford);
+
+                                    if (toBuy > 0)
+                                    {
+                                        var command = TransferCommand.Transfer(
+                                            toBuy,
+                                            InventoryLogic.InventorySide.OtherInventory,
+                                            InventoryLogic.InventorySide.PlayerInventory,
+                                            new ItemRosterElement(candidate.Element.EquipmentElement, toBuy),
+                                            EquipmentIndex.None,
+                                            EquipmentIndex.None,
+                                            Hero.MainHero.CharacterObject
+                                        );
+                                        fulfillmentLogic.AddTransferCommand(command);
+                                        executedAnyItemTransfers = true;
+                                        deficit -= toBuy;
+                                        fulfilledItemParts.Add($"{toBuy}x {candidate.Element.EquipmentElement.Item.Name}");
+                                    }
                                 }
                             }
-                        }
 
-                        if (executedAnyItemTransfers && fulfillmentLogic.IsThereAnyChanges())
-                        {
-                            int initialGold = Hero.MainHero?.Gold ?? 0;
-                            fulfillmentLogic.DoneLogic();
-                            int finalGold = Hero.MainHero?.Gold ?? 0;
-                            int goldDiff = finalGold - initialGold;
-                            string goldDiffSign = goldDiff >= 0 ? "+" : "";
-                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Prioritized items fulfilled at {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d). Purchased: {string.Join(", ", fulfilledItemParts)}");
+                            if (executedAnyItemTransfers && fulfillmentLogic.IsThereAnyChanges())
+                            {
+                                int initialGold = Hero.MainHero?.Gold ?? 0;
+                                fulfillmentLogic.DoneLogic();
+                                int finalGold = Hero.MainHero?.Gold ?? 0;
+                                int goldDiff = finalGold - initialGold;
+                                string goldDiffSign = goldDiff >= 0 ? "+" : "";
+                                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Prioritized items fulfilled at {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d). Purchased: {string.Join(", ", fulfilledItemParts)}");
+                            }
                         }
                     }
 

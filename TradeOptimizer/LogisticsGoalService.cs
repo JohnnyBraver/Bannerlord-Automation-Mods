@@ -9,6 +9,7 @@ using TaleWorlds.CampaignSystem.Roster;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
+using SettlementAutomationCore;
 
 namespace TradeOptimizer
 {
@@ -69,8 +70,8 @@ namespace TradeOptimizer
 
         public static int GetMinToKeepForLogistics(ItemObject itemObj, InventoryLogic? logic)
         {
-            var goals = SettlementAutomationCore.AutomationRegistry.ActiveLogisticsGoals;
-            if (goals == null || goals.Count == 0)
+            var requests = SettlementAutomationCore.AutomationRegistry.ActiveRequests;
+            if (requests == null || requests.Count == 0)
             {
                 // Standalone fallback: maintain standard food minToKeep if it's food
                 if (itemObj.IsFood)
@@ -82,62 +83,64 @@ namespace TradeOptimizer
                 return 0;
             }
 
+            var settings = Settings.Instance;
+            int threshold = settings?.InventoryReservationPriorityThreshold ?? 30;
             int minToKeep = 0;
 
-            if (itemObj.IsFood)
+            foreach (var req in requests)
             {
-                var foodGoal = goals.FirstOrDefault(g => g.GoalType == SettlementAutomationCore.LogisticsGoalType.FoodRestock);
-                if (foodGoal != null)
+                if (req.Priority < threshold) continue;
+
+                if (req.MatchesItem(itemObj))
                 {
-                    if (foodGoal.IsSurvivalMode)
+                    if (req.Type == SettlementAutomationCore.RequestType.ItemCategory && string.Equals(req.TargetId, "Food", StringComparison.OrdinalIgnoreCase))
                     {
-                        // In survival mode, we protect a total number of food items in inventory.
-                        int totalFoodInInventory = 0;
+                        if (req.Priority >= 50)
+                        {
+                            // Survival/Stability food request: protect all food if total food <= target
+                            int totalFoodInInventory = 0;
+                            if (logic != null)
+                            {
+                                var playerItems = logic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+                                foreach (var el in playerItems)
+                                {
+                                    if (el.EquipmentElement.Item != null && el.EquipmentElement.Item.IsFood)
+                                    {
+                                        totalFoodInInventory += el.Amount;
+                                    }
+                                }
+                            }
+                            if (totalFoodInInventory <= req.TargetQuantity)
+                            {
+                                return 99999; // Keep all
+                            }
+                        }
+                        else
+                        {
+                            // Variety food request: keep up to targetQuantity / 10 per type
+                            int targetPerType = (int)Math.Ceiling(req.TargetQuantity / 10.0f);
+                            minToKeep = Math.Max(minToKeep, targetPerType);
+                        }
+                    }
+                    else
+                    {
+                        // Mounts, Livestock, PackAnimal, or SpecificItem: protect up to TargetQuantity items in total inventory
+                        int totalMatchingInInventory = 0;
                         if (logic != null)
                         {
                             var playerItems = logic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
                             foreach (var el in playerItems)
                             {
-                                if (el.EquipmentElement.Item != null && el.EquipmentElement.Item.IsFood)
+                                if (el.EquipmentElement.Item != null && req.MatchesItem(el.EquipmentElement.Item))
                                 {
-                                    totalFoodInInventory += el.Amount;
+                                    totalMatchingInInventory += el.Amount;
                                 }
                             }
                         }
-                        if (totalFoodInInventory <= foodGoal.TargetQuantity)
+                        if (totalMatchingInInventory <= req.TargetQuantity)
                         {
                             return 99999; // Keep all
                         }
-                    }
-                    else
-                    {
-                        // In variety mode, target quantity is divided by 10 (food types) to get minToKeep per type
-                        minToKeep = (int)Math.Ceiling(foodGoal.TargetQuantity / 10.0f);
-                    }
-                }
-            }
-            else if (itemObj.IsMountable && !itemObj.HorseComponent.IsPackAnimal)
-            {
-                var mountGoal = goals.FirstOrDefault(g => g.GoalType == SettlementAutomationCore.LogisticsGoalType.SpeedMounts);
-                if (mountGoal != null)
-                {
-                    // For speed mounts, we protect up to TargetQuantity riding horses.
-                    int totalMountsInInventory = 0;
-                    if (logic != null)
-                    {
-                        var playerItems = logic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-                        foreach (var el in playerItems)
-                        {
-                            var item = el.EquipmentElement.Item;
-                            if (item != null && item.IsMountable && !item.HorseComponent.IsPackAnimal)
-                            {
-                                totalMountsInInventory += el.Amount;
-                            }
-                        }
-                    }
-                    if (totalMountsInInventory <= mountGoal.TargetQuantity)
-                    {
-                        return 99999; // Keep all
                     }
                 }
             }
@@ -147,8 +150,8 @@ namespace TradeOptimizer
 
         public static void SatisfyLogisticsGoals(SPInventoryVM vm, InventoryLogic? logic, Dictionary<SPItemVM, int> boughtQuantities, ref int currentBalance, ref float netWeightAdded, TradeTransactionReport report, HashSet<string> localExcludedItems)
         {
-            var goals = SettlementAutomationCore.AutomationRegistry.ActiveLogisticsGoals;
-            if (goals == null || goals.Count == 0) return;
+            var requests = SettlementAutomationCore.AutomationRegistry.ActiveRequests;
+            if (requests == null || requests.Count == 0) return;
 
             var settings = Settings.Instance;
             if (settings == null) return;
@@ -159,26 +162,20 @@ namespace TradeOptimizer
 
             var merchantItems = vm.LeftItemListVM?.ToList() ?? new List<SPItemVM>();
 
-            foreach (var goal in goals)
+            // Process requests by priority descending
+            var sortedRequests = requests.OrderByDescending(r => r.Priority).ToList();
+
+            foreach (var req in sortedRequests)
             {
-                int minRequiredBalance = Math.Max(defaultMinRequiredBalance, goal.MinGoldReserve);
+                // Only process Item-based requests (troops are handled in the core recruitment phase)
+                if (req.Type != SettlementAutomationCore.RequestType.ItemCategory && req.Type != SettlementAutomationCore.RequestType.SpecificItem)
+                    continue;
 
-                if (goal.GoalType == SettlementAutomationCore.LogisticsGoalType.FoodRestock)
+                int minRequiredBalance = Math.Max(defaultMinRequiredBalance, req.MinGoldReserve);
+
+                if (req.Type == SettlementAutomationCore.RequestType.ItemCategory && string.Equals(req.TargetId, "Food", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Calculate how much food we currently own
-                    int totalFoodOwned = 0;
-                    if (vm.RightItemListVM != null)
-                    {
-                        totalFoodOwned = vm.RightItemListVM
-                            .Where(r => r.ItemRosterElement.EquipmentElement.Item != null && r.ItemRosterElement.EquipmentElement.Item.IsFood)
-                            .Sum(r => r.ItemCount);
-                    }
-                    totalFoodOwned += boughtQuantities.Where(q => q.Key.ItemRosterElement.EquipmentElement.Item.IsFood).Sum(q => q.Value);
-
-                    int needed = goal.TargetQuantity - totalFoodOwned;
-                    if (needed <= 0) continue;
-
-                    // Gather all food items in merchant stock
+                    // Calculate buyable food items from merchant stock
                     var buyableFood = new List<SPItemVM>();
                     foreach (var item in merchantItems)
                     {
@@ -193,22 +190,47 @@ namespace TradeOptimizer
                     // Sort food by local price ascending
                     buyableFood = buyableFood.OrderBy(f => logic != null ? logic.GetItemPrice(f.ItemRosterElement.EquipmentElement, true) : f.ItemRosterElement.EquipmentElement.Item.Value).ToList();
 
-                    if (goal.IsSurvivalMode)
+                    if (req.Priority >= 50)
                     {
-                        // Survival mode: buy cheapest food to fill total gap
+                        // Survival/Stability mode: buy cheapest food to fill total gap
+                        int totalFoodOwned = 0;
+                        if (vm.RightItemListVM != null)
+                        {
+                            totalFoodOwned = vm.RightItemListVM
+                                .Where(r => r.ItemRosterElement.EquipmentElement.Item != null && r.ItemRosterElement.EquipmentElement.Item.IsFood)
+                                .Sum(r => r.ItemCount);
+                        }
+                        totalFoodOwned += boughtQuantities.Where(q => q.Key.ItemRosterElement.EquipmentElement.Item != null && q.Key.ItemRosterElement.EquipmentElement.Item.IsFood).Sum(q => q.Value);
+
+                        int deficit = req.TargetQuantity - totalFoodOwned;
+                        if (deficit <= 0) continue;
+
                         foreach (var food in buyableFood)
                         {
-                            if (needed <= 0) break;
+                            if (deficit <= 0) break;
                             var itemObj = food.ItemRosterElement.EquipmentElement.Item;
-                            
+
                             int bCount = boughtQuantities.TryGetValue(food, out int bVal) ? bVal : 0;
                             int merchantCount = food.ItemCount - bCount;
                             int price = logic != null ? logic.GetItemPrice(food.ItemRosterElement.EquipmentElement, true) : itemObj.Value;
 
+                            // Price multiplier check
+                            float baseValue = itemObj.Value;
+                            if (baseValue > 0)
+                            {
+                                float mult = (float)price / baseValue;
+                                if (mult > req.MaxPriceMultiplier)
+                                {
+                                    continue; // skip overpriced
+                                }
+                            }
+
                             for (int i = 0; i < merchantCount; i++)
                             {
-                                if (needed <= 0) break;
+                                if (deficit <= 0) break;
                                 if (currentBalance - price < minRequiredBalance) break;
+
+                                // Inventory capacity limits
                                 if (settings.LimitToInventoryCapacity && MobileParty.MainParty != null)
                                 {
                                     float projectedWeight = GetRosterWeight(MobileParty.MainParty.ItemRoster) + netWeightAdded;
@@ -231,19 +253,19 @@ namespace TradeOptimizer
                                     Gold = price,
                                     MarketPrice = PricingService.GetWorldAveragePrice(food.ItemRosterElement.EquipmentElement)
                                 });
-                                needed--;
+                                deficit--;
                             }
                         }
                     }
                     else
                     {
-                        // Variety mode: buy up to targetQuantity / 10 of each food type
-                        int targetPerType = (int)Math.Ceiling(goal.TargetQuantity / 10.0f);
+                        // Variety food request: buy up to targetQuantity / 10 of each food type
+                        int targetPerType = (int)Math.Ceiling(req.TargetQuantity / 10.0f);
                         foreach (var food in buyableFood)
                         {
                             var itemObj = food.ItemRosterElement.EquipmentElement.Item;
                             var playerItem = vm.RightItemListVM?.FirstOrDefault(r => r.ItemRosterElement.EquipmentElement.Item == itemObj);
-                            
+
                             int bCount = boughtQuantities.TryGetValue(food, out int bVal) ? bVal : 0;
                             int ownedOfThis = (playerItem != null ? playerItem.ItemCount : 0) + bCount;
 
@@ -252,6 +274,17 @@ namespace TradeOptimizer
 
                             int merchantCount = food.ItemCount - bCount;
                             int price = logic != null ? logic.GetItemPrice(food.ItemRosterElement.EquipmentElement, true) : itemObj.Value;
+
+                            // Price multiplier check
+                            float baseValue = itemObj.Value;
+                            if (baseValue > 0)
+                            {
+                                float mult = (float)price / baseValue;
+                                if (mult > req.MaxPriceMultiplier)
+                                {
+                                    continue; // skip overpriced
+                                }
+                            }
 
                             int criticalMin = (int)Math.Ceiling(targetPerType / 10.0f);
                             float referencePrice = PricingService.GetWorldAveragePrice(food.ItemRosterElement.EquipmentElement);
@@ -269,6 +302,8 @@ namespace TradeOptimizer
                                 }
 
                                 if (currentBalance - price < minRequiredBalance) break;
+
+                                // Inventory capacity limits
                                 if (settings.LimitToInventoryCapacity && MobileParty.MainParty != null)
                                 {
                                     float projectedWeight = GetRosterWeight(MobileParty.MainParty.ItemRoster) + netWeightAdded;
@@ -295,49 +330,68 @@ namespace TradeOptimizer
                         }
                     }
                 }
-                else if (goal.GoalType == SettlementAutomationCore.LogisticsGoalType.SpeedMounts)
+                else
                 {
-                    // Speed mounts: buy riding mounts up to target quantity
-                    int totalMountsOwned = 0;
+                    // Other categories (Horse, PackAnimal, Livestock) or SpecificItem
+                    int totalOwned = 0;
                     if (vm.RightItemListVM != null)
                     {
-                        totalMountsOwned = vm.RightItemListVM
-                            .Where(r => r.ItemRosterElement.EquipmentElement.Item != null && r.ItemRosterElement.EquipmentElement.Item.IsMountable && !r.ItemRosterElement.EquipmentElement.Item.HorseComponent.IsPackAnimal)
+                        totalOwned = vm.RightItemListVM
+                            .Where(r => r.ItemRosterElement.EquipmentElement.Item != null && req.MatchesItem(r.ItemRosterElement.EquipmentElement.Item))
                             .Sum(r => r.ItemCount);
                     }
-                    totalMountsOwned += boughtQuantities.Where(q => q.Key.ItemRosterElement.EquipmentElement.Item.IsMountable && !q.Key.ItemRosterElement.EquipmentElement.Item.HorseComponent.IsPackAnimal).Sum(q => q.Value);
+                    totalOwned += boughtQuantities
+                        .Where(q => q.Key.ItemRosterElement.EquipmentElement.Item != null && req.MatchesItem(q.Key.ItemRosterElement.EquipmentElement.Item))
+                        .Sum(q => q.Value);
 
-                    int needed = goal.TargetQuantity - totalMountsOwned;
+                    int needed = req.TargetQuantity - totalOwned;
                     if (needed <= 0) continue;
 
-                    var buyableMounts = new List<SPItemVM>();
+                    // Gather matching items from merchant stock
+                    var buyableItems = new List<SPItemVM>();
                     foreach (var item in merchantItems)
                     {
                         if (item == null || item.ItemRosterElement.EquipmentElement.Item == null) continue;
                         var itemObj = item.ItemRosterElement.EquipmentElement.Item;
-                        if (itemObj.IsMountable && !itemObj.HorseComponent.IsPackAnimal && !localExcludedItems.Contains(itemObj.Name.ToString()))
+                        if (req.MatchesItem(itemObj) && !localExcludedItems.Contains(itemObj.Name.ToString()))
                         {
-                            buyableMounts.Add(item);
+                            buyableItems.Add(item);
                         }
                     }
 
-                    buyableMounts = buyableMounts.OrderBy(m => logic != null ? logic.GetItemPrice(m.ItemRosterElement.EquipmentElement, true) : m.ItemRosterElement.EquipmentElement.Item.Value).ToList();
+                    // Sort by local purchase price ascending
+                    buyableItems = buyableItems.OrderBy(f => logic != null ? logic.GetItemPrice(f.ItemRosterElement.EquipmentElement, true) : f.ItemRosterElement.EquipmentElement.Item.Value).ToList();
 
-                    foreach (var mount in buyableMounts)
+                    foreach (var itemVM in buyableItems)
                     {
                         if (needed <= 0) break;
-                        var itemObj = mount.ItemRosterElement.EquipmentElement.Item;
-                        
-                        int bCount = boughtQuantities.TryGetValue(mount, out int bVal) ? bVal : 0;
-                        int merchantCount = mount.ItemCount - bCount;
-                        int price = logic != null ? logic.GetItemPrice(mount.ItemRosterElement.EquipmentElement, true) : itemObj.Value;
+                        var itemObj = itemVM.ItemRosterElement.EquipmentElement.Item;
 
-                        float referencePrice = PricingService.GetWorldAveragePrice(mount.ItemRosterElement.EquipmentElement);
-                        if (referencePrice <= 0f) referencePrice = itemObj.Value;
-                        if (price > referencePrice * settings.MountsLogisticsPriceThrottleFactor)
+                        int bCount = boughtQuantities.TryGetValue(itemVM, out int bVal) ? bVal : 0;
+                        int merchantCount = itemVM.ItemCount - bCount;
+                        int price = logic != null ? logic.GetItemPrice(itemVM.ItemRosterElement.EquipmentElement, true) : itemObj.Value;
+
+                        // Price multiplier check
+                        float baseValue = itemObj.Value;
+                        if (baseValue > 0)
                         {
-                            TradingEngine.WriteLog($"[Logistics] Skipping mount purchase of {itemObj.Name}: price {price} is above threshold ({referencePrice * settings.MountsLogisticsPriceThrottleFactor:F1})");
-                            continue;
+                            float mult = (float)price / baseValue;
+                            if (mult > req.MaxPriceMultiplier)
+                            {
+                                continue; // skip overpriced
+                            }
+                        }
+
+                        // Mount specific price throttle
+                        if (itemObj.IsMountable && !itemObj.HorseComponent.IsPackAnimal)
+                        {
+                            float referencePrice = PricingService.GetWorldAveragePrice(itemVM.ItemRosterElement.EquipmentElement);
+                            if (referencePrice <= 0f) referencePrice = itemObj.Value;
+                            if (price > referencePrice * settings.MountsLogisticsPriceThrottleFactor)
+                            {
+                                TradingEngine.WriteLog($"[Logistics] Skipping mount purchase of {itemObj.Name}: price {price} is above threshold ({referencePrice * settings.MountsLogisticsPriceThrottleFactor:F1})");
+                                continue;
+                            }
                         }
 
                         for (int i = 0; i < merchantCount; i++)
@@ -345,13 +399,15 @@ namespace TradeOptimizer
                             if (needed <= 0) break;
                             if (currentBalance - price < minRequiredBalance) break;
 
-                            if (MobileParty.MainParty != null)
+                            // Herding protection limits for horses/livestock
+                            if ((itemObj.IsMountable || itemObj.IsAnimal) && MobileParty.MainParty != null)
                             {
-                                int totalAnimalsBoughtInSim = boughtQuantities.Where(p => p.Key.ItemRosterElement.EquipmentElement.Item.IsAnimal || (p.Key.ItemRosterElement.EquipmentElement.Item.IsMountable && p.Key.ItemRosterElement.EquipmentElement.Item.HorseComponent != null)).Sum(p => p.Value);
+                                int totalAnimalsBoughtInSim = boughtQuantities.Where(p => p.Key.ItemRosterElement.EquipmentElement.Item != null && (p.Key.ItemRosterElement.EquipmentElement.Item.IsAnimal || p.Key.ItemRosterElement.EquipmentElement.Item.IsMountable)).Sum(p => p.Value);
                                 int remainingSlots = SettlementAutomationCore.HerdingCalculator.GetRemainingAnimalSlots(MobileParty.MainParty);
                                 if (totalAnimalsBoughtInSim >= remainingSlots) break;
                             }
 
+                            // Inventory capacity limits
                             if (settings.LimitToInventoryCapacity && MobileParty.MainParty != null)
                             {
                                 float projectedWeight = GetRosterWeight(MobileParty.MainParty.ItemRoster) + netWeightAdded;
@@ -360,11 +416,11 @@ namespace TradeOptimizer
 
                             if (logic != null && Hero.MainHero != null)
                             {
-                                var command = TransferCommand.Transfer(1, InventoryLogic.InventorySide.OtherInventory, InventoryLogic.InventorySide.PlayerInventory, new ItemRosterElement(mount.ItemRosterElement.EquipmentElement, 1), EquipmentIndex.None, EquipmentIndex.None, Hero.MainHero.CharacterObject);
+                                var command = TransferCommand.Transfer(1, InventoryLogic.InventorySide.OtherInventory, InventoryLogic.InventorySide.PlayerInventory, new ItemRosterElement(itemVM.ItemRosterElement.EquipmentElement, 1), EquipmentIndex.None, EquipmentIndex.None, Hero.MainHero.CharacterObject);
                                 logic.AddTransferCommand(command);
                             }
 
-                            boughtQuantities[mount] = (boughtQuantities.TryGetValue(mount, out int currentBVal) ? currentBVal : 0) + 1;
+                            boughtQuantities[itemVM] = (boughtQuantities.TryGetValue(itemVM, out int currentBVal) ? currentBVal : 0) + 1;
                             currentBalance -= price;
                             netWeightAdded += itemObj.Weight;
                             report.BoughtItems.Add(new TradedItemInfo
@@ -372,7 +428,7 @@ namespace TradeOptimizer
                                 Name = itemObj.Name.ToString(),
                                 Count = 1,
                                 Gold = price,
-                                MarketPrice = PricingService.GetWorldAveragePrice(mount.ItemRosterElement.EquipmentElement)
+                                MarketPrice = PricingService.GetWorldAveragePrice(itemVM.ItemRosterElement.EquipmentElement)
                             });
                             needed--;
                         }
