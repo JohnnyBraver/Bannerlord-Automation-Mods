@@ -9,6 +9,7 @@ using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.MountAndBlade;
 using SettlementAutomationCore;
+using PartyManager.Helpers;
 
 namespace PartyManager
 {
@@ -65,55 +66,7 @@ namespace PartyManager
         {
             var settings = Settings.Instance;
             if (settings == null) return;
-
-            var party = MobileParty.MainParty;
-            if (party == null || party.PrisonRoster == null) return;
-
-            int prisonerCount = party.PrisonRoster.TotalManCount;
-            int prisonerSizeLimit = party.Party.PrisonerSizeLimit;
-
-            // 1. Capacity Alert
-            if (settings.PrisonerCapacityAlertPercent > 0 && prisonerSizeLimit > 0)
-            {
-                int percentFill = (prisonerCount * 100) / prisonerSizeLimit;
-                if (percentFill >= settings.PrisonerCapacityAlertPercent)
-                {
-                    string msg = $"Prisoner capacity alert: {prisonerCount}/{prisonerSizeLimit} prisoners ({percentFill}% fill).";
-                    InformationManager.DisplayMessage(new InformationMessage($"[PartyManager] WARNING: {msg}", new Color(0.9f, 0.6f, 0.2f)));
-                }
-            }
-
-            // 2. Stack Size Alert
-            int threshold = int.MaxValue;
-            if (settings.PrisonerStackAlertFlatLimit > 0)
-            {
-                threshold = Math.Min(threshold, settings.PrisonerStackAlertFlatLimit);
-            }
-            if (settings.PrisonerStackAlertPercentLimit > 0 && prisonerSizeLimit > 0)
-            {
-                int percentThreshold = Math.Max(1, (settings.PrisonerStackAlertPercentLimit * prisonerSizeLimit) / 100);
-                threshold = Math.Min(threshold, percentThreshold);
-            }
-
-            if (threshold != int.MaxValue)
-            {
-                var highStacks = new List<string>();
-                var prisonRoster = party.PrisonRoster;
-                for (int i = 0; i < prisonRoster.Count; i++)
-                {
-                    var el = prisonRoster.GetElementCopyAtIndex(i);
-                    if (el.Character != null && el.Number >= threshold)
-                    {
-                        highStacks.Add($"{el.Character.Name} (x{el.Number})");
-                    }
-                }
-
-                if (highStacks.Count > 0)
-                {
-                    string msg = $"High count prisoner stack(s) detected: {string.Join(", ", highStacks)}";
-                    InformationManager.DisplayMessage(new InformationMessage($"[PartyManager] WARNING: {msg}", new Color(0.9f, 0.6f, 0.2f)));
-                }
-            }
+            PrisonerHelper.ProcessPostAutomationAlerts(settlement, settings);
         }
     }
 
@@ -153,107 +106,7 @@ namespace PartyManager
             // 2. Prisoner Auto-Discard
             if (settings.AutoDiscardPrisonersPostBattle)
             {
-                int currentCount = party.PrisonRoster.TotalManCount;
-                int limit = party.Party.PrisonerSizeLimit;
-
-                if (currentCount > limit)
-                {
-                    int excess = currentCount - limit;
-                    int discardedTotal = 0;
-                    var prisonRoster = party.PrisonRoster;
-
-                    // Collect all non-hero candidates matching discard policy
-                    var candidates = new List<TaleWorlds.CampaignSystem.Roster.TroopRosterElement>();
-                    for (int i = 0; i < prisonRoster.Count; i++)
-                    {
-                        var el = prisonRoster.GetElementCopyAtIndex(i);
-                        if (el.Character != null && !el.Character.IsHero && el.Number > 0)
-                        {
-                            bool isCandidate = false;
-
-                            if (settings.UsePerkBasedPrisonerDiscard && Hero.MainHero != null)
-                            {
-                                bool stoutDefender = Hero.MainHero.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Leadership.StoutDefender);
-                                bool ferventAttacker = Hero.MainHero.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Leadership.FerventAttacker);
-
-                                if (stoutDefender && ferventAttacker)
-                                {
-                                    isCandidate = el.Character.Tier <= settings.DiscardPrisonersUpToTier;
-                                }
-                                else if (stoutDefender)
-                                {
-                                    // Protect T4-6, discard T1-3 (subject to standard discard limits)
-                                    isCandidate = el.Character.Tier <= settings.DiscardPrisonersUpToTier && el.Character.Tier < 4;
-                                }
-                                else if (ferventAttacker)
-                                {
-                                    // Protect T1-3, discard T4-6 (noble bypass protects noble prisoners)
-                                    bool isNoble = el.Character.Tier >= 6;
-                                    bool protectNoble = isNoble && settings.BypassNoblePrisonerTierLimit;
-                                    if (!protectNoble)
-                                    {
-                                        isCandidate = el.Character.Tier >= 4;
-                                    }
-                                }
-                                else
-                                {
-                                    isCandidate = el.Character.Tier <= settings.DiscardPrisonersUpToTier;
-                                }
-                            }
-                            else
-                            {
-                                isCandidate = el.Character.Tier <= settings.DiscardPrisonersUpToTier;
-                            }
-
-                            if (isCandidate)
-                            {
-                                candidates.Add(el);
-                            }
-                        }
-                    }
-
-                    // Sort candidates by value approximation: mounted units and higher tier units are sorted last (retaining them)
-                    var sortedCandidates = candidates.OrderBy(c => {
-                        // Lower tiers are discarded first
-                        int baseScore = c.Character.Tier * 100;
-                        
-                        // Mounted units have higher value, so we add score to protect them
-                        if (c.Character.IsMounted)
-                        {
-                            baseScore += 50;
-                        }
-                        
-                        // Nobles are extremely valuable
-                        var leafTroops = new List<CharacterObject>();
-                        SettlementAutomationCore.Helpers.TroopHelper.GetLeafTroops(c.Character, leafTroops);
-                        int maxLeafTier = leafTroops.Count > 0 ? leafTroops.Max(l => l.Tier) : c.Character.Tier;
-                        if (maxLeafTier >= 6)
-                        {
-                            baseScore += 500;
-                        }
-                        
-                        return baseScore;
-                    }).ToList();
-
-                    foreach (var cand in sortedCandidates)
-                    {
-                        if (excess <= 0) break;
-                        int toDiscard = Math.Min(excess, cand.Number);
-                        if (toDiscard > 0)
-                        {
-                            prisonRoster.AddToCounts(cand.Character, -toDiscard);
-                            excess -= toDiscard;
-                            discardedTotal += toDiscard;
-                        }
-                    }
-
-                    if (discardedTotal > 0)
-                    {
-                        string msg = $"Auto-discarded {discardedTotal} low-value prisoners post-battle due to party capacity limits.";
-                        InformationManager.DisplayMessage(new InformationMessage($"[PartyManager] {msg}"));
-                        SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", msg);
-                    }
-                }
+                PrisonerHelper.ProcessPostBattleDiscard(party, settings);
             }
         }
 
