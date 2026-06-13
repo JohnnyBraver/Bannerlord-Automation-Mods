@@ -74,17 +74,20 @@ namespace SettlementAutomationCore
             try
             {
                 // ----------------------------------------------------
-                // Step 0: Collect Logistics Goals from active providers
+                // Step 0: Collect Prioritized Requests from active providers
                 // ----------------------------------------------------
-                AutomationRegistry.ClearLogisticsGoals();
-                var goalProviders = AutomationRegistry.ActiveGoalProviders;
-                foreach (var reg in goalProviders)
+                AutomationRegistry.ClearRequests();
+                var requestProviders = AutomationRegistry.ActiveRequestProviders;
+                foreach (var reg in requestProviders)
                 {
                     try
                     {
-                        reg.Provider.SubmitLogisticsGoals(MobileParty.MainParty, settlement);
+                        reg.Provider.SubmitAutomationRequests(MobileParty.MainParty, settlement);
                     }
-                    catch {}
+                    catch (Exception ex)
+                    {
+                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error gathering requests from {reg.ProviderName}: {ex.Message}");
+                    }
                 }
 
                 // ----------------------------------------------------
@@ -364,7 +367,6 @@ namespace SettlementAutomationCore
                     InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
                     Helpers.Logger.WriteLog("SettlementAutomationCore", msg);
                 }
-
                 // ----------------------------------------------------
                 // Step 4: Garrison Donation Phase
                 // ----------------------------------------------------
@@ -456,6 +458,221 @@ namespace SettlementAutomationCore
                         }
                     }
                     catch {}
+                }
+
+                // ----------------------------------------------------
+                // Step 5.5: Prioritized Order Fulfillment Engine
+                // ----------------------------------------------------
+                var activeRequests = AutomationRegistry.ActiveRequests.OrderByDescending(r => r.Priority).ToList();
+                if (activeRequests.Count > 0 && Hero.MainHero != null)
+                {
+                    var fulfillmentLogic = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
+                    if (fulfillmentLogic != null)
+                    {
+                        bool executedAnyItemTransfers = false;
+                        var fulfilledItemParts = new List<string>();
+
+                        // Part A: Process Item Requests (ItemCategory & SpecificItem)
+                        var itemRequests = activeRequests.Where(r => r.Type == RequestType.ItemCategory || r.Type == RequestType.SpecificItem).ToList();
+                        foreach (var req in itemRequests)
+                        {
+                            if (Hero.MainHero.Gold < req.MinGoldReserve) continue;
+
+                            // 1. Get current inventory count for matching items
+                            int currentHeld = 0;
+                            var playerElements = fulfillmentLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+                            for (int i = 0; i < playerElements.Count; i++)
+                            {
+                                var el = playerElements[i];
+                                if (el.EquipmentElement.Item != null && req.MatchesItem(el.EquipmentElement.Item))
+                                {
+                                    currentHeld += el.Amount;
+                                }
+                            }
+
+                            int deficit = req.TargetQuantity - currentHeld;
+                            if (deficit <= 0) continue;
+
+                            // 2. Locate candidates in settlement inventory
+                            var candidates = new List<ItemRosterElement>();
+                            var otherElements = fulfillmentLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
+                            for (int i = 0; i < otherElements.Count; i++)
+                            {
+                                var el = otherElements[i];
+                                if (el.EquipmentElement.Item != null && req.MatchesItem(el.EquipmentElement.Item) && el.Amount > 0)
+                                {
+                                    candidates.Add(el);
+                                }
+                            }
+
+                            // 3. Sort candidates by unit purchase price (cheapest first)
+                            var sortedCandidates = candidates.Select(c => new {
+                                Element = c,
+                                Price = fulfillmentLogic.GetItemPrice(c.EquipmentElement, true)
+                            }).OrderBy(x => x.Price).ToList();
+
+                            foreach (var candidate in sortedCandidates)
+                            {
+                                if (deficit <= 0) break;
+                                if (Hero.MainHero.Gold < req.MinGoldReserve) break;
+
+                                // Price multiplier protection check
+                                float baseValue = candidate.Element.EquipmentElement.Item.Value;
+                                if (baseValue > 0)
+                                {
+                                    float mult = (float)candidate.Price / baseValue;
+                                    if (mult > req.MaxPriceMultiplier)
+                                    {
+                                        continue; // skip overpriced items
+                                    }
+                                }
+
+                                int toBuy = Math.Min(deficit, candidate.Element.Amount);
+                                int maxAfford = (Hero.MainHero.Gold - req.MinGoldReserve) / Math.Max(1, candidate.Price);
+                                toBuy = Math.Min(toBuy, maxAfford);
+
+                                if (toBuy > 0)
+                                {
+                                    var command = TransferCommand.Transfer(
+                                        toBuy,
+                                        InventoryLogic.InventorySide.OtherInventory,
+                                        InventoryLogic.InventorySide.PlayerInventory,
+                                        new ItemRosterElement(candidate.Element.EquipmentElement, toBuy),
+                                        EquipmentIndex.None,
+                                        EquipmentIndex.None,
+                                        Hero.MainHero.CharacterObject
+                                    );
+                                    fulfillmentLogic.AddTransferCommand(command);
+                                    executedAnyItemTransfers = true;
+                                    deficit -= toBuy;
+                                    fulfilledItemParts.Add($"{toBuy}x {candidate.Element.EquipmentElement.Item.Name}");
+                                }
+                            }
+                        }
+
+                        if (executedAnyItemTransfers && fulfillmentLogic.IsThereAnyChanges())
+                        {
+                            int initialGold = Hero.MainHero?.Gold ?? 0;
+                            fulfillmentLogic.DoneLogic();
+                            int finalGold = Hero.MainHero?.Gold ?? 0;
+                            int goldDiff = finalGold - initialGold;
+                            string goldDiffSign = goldDiff >= 0 ? "+" : "";
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Prioritized items fulfilled at {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d). Purchased: {string.Join(", ", fulfilledItemParts)}");
+                        }
+                    }
+
+                    // Part B: Process Troop Requests (TroopFilter)
+                    var troopRequests = activeRequests.Where(r => r.Type == RequestType.TroopFilter).ToList();
+                    if (troopRequests.Count > 0 && settlement.Notables.Count > 0)
+                    {
+                        var priorityRecruitedMap = new Dictionary<CharacterObject, int>();
+                        int totalRecruited = 0;
+
+                        foreach (var req in troopRequests)
+                        {
+                            if (Hero.MainHero.Gold < req.MinGoldReserve) continue;
+
+                            int currentSize = MobileParty.MainParty.MemberRoster.TotalManCount;
+                            int limit = MobileParty.MainParty.Party.PartySizeLimit;
+
+                            bool canOverRecruit = false;
+                            try
+                            {
+                                foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+                                {
+                                    if (assembly.GetName().Name == "PartyManager")
+                                    {
+                                        var settingsType = assembly.GetType("PartyManager.Settings");
+                                        if (settingsType != null)
+                                        {
+                                            var instanceProp = settingsType.GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                                            var settingsInstance = instanceProp?.GetValue(null);
+                                            if (settingsInstance != null)
+                                            {
+                                                bool enableGarrisonDonation = (bool)(settingsType.GetProperty("EnableGarrisonDonation")?.GetValue(settingsInstance) ?? false);
+                                                int maxGarrisonSize = (int)(settingsType.GetProperty("MaxGarrisonSize")?.GetValue(settingsInstance) ?? 400);
+
+                                                canOverRecruit = enableGarrisonDonation && settlement.Town != null &&
+                                                                 settlement.Town.GarrisonParty != null &&
+                                                                 settlement.Town.GarrisonParty.MemberRoster.TotalManCount < maxGarrisonSize;
+                                            }
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                            catch {}
+
+                            if (currentSize >= limit && !canOverRecruit) continue;
+
+                            int deficit = req.TargetQuantity - currentSize;
+                            if (deficit <= 0) continue;
+
+                            foreach (var notable in settlement.Notables)
+                            {
+                                if (deficit <= 0) break;
+                                if (notable == null || notable.VolunteerTypes == null) continue;
+
+                                int maxIndex = Campaign.Current.Models.VolunteerModel.MaximumIndexHeroCanRecruitFromHero(Hero.MainHero, notable, -101);
+                                for (int slot = 0; slot < notable.VolunteerTypes.Length; slot++)
+                                {
+                                    if (deficit <= 0) break;
+                                    if (slot > maxIndex) continue;
+
+                                    var troop = notable.VolunteerTypes[slot];
+                                    if (troop == null) continue;
+
+                                    bool isMatch = false;
+                                    if (string.Equals(req.TargetId, "AnyRecruit", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        isMatch = true;
+                                    }
+                                    else if (string.Equals(req.TargetId, "MeleeCavalry", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        isMatch = troop.IsMounted && !troop.IsRanged;
+                                    }
+                                    else if (string.Equals(req.TargetId, "Ranged", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        isMatch = troop.IsRanged;
+                                    }
+                                    else if (string.Equals(req.TargetId, "Melee", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        isMatch = !troop.IsRanged && !troop.IsMounted;
+                                    }
+
+                                    if (isMatch)
+                                    {
+                                        int cost = (int)Campaign.Current.Models.PartyWageModel.GetTroopRecruitmentCost(troop, Hero.MainHero, false).ResultNumber;
+                                        if (Hero.MainHero.Gold - cost >= req.MinGoldReserve)
+                                        {
+                                            notable.VolunteerTypes[slot] = null;
+                                            MobileParty.MainParty.MemberRoster.AddToCounts(troop, 1);
+                                            GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, notable, cost, false);
+                                            CampaignEventDispatcher.Instance.OnTroopRecruited(Hero.MainHero, settlement, notable, troop, 1);
+
+                                            deficit--;
+                                            totalRecruited++;
+                                            if (priorityRecruitedMap.ContainsKey(troop))
+                                                priorityRecruitedMap[troop]++;
+                                            else
+                                                priorityRecruitedMap[troop] = 1;
+
+                                            currentSize++;
+                                            if (currentSize >= limit && !canOverRecruit) break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (totalRecruited > 0)
+                        {
+                            var troopParts = priorityRecruitedMap.Select(kvp => $"{kvp.Value}x {kvp.Key.Name}");
+                            string msg = $"Prioritized recruits fulfilled at {settlement.Name}: {string.Join(", ", troopParts)} (Total: {totalRecruited})";
+                            InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", msg);
+                        }
+                    }
                 }
 
                 // ----------------------------------------------------
