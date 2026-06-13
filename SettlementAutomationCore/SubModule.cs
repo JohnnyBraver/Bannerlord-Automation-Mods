@@ -17,6 +17,7 @@ namespace SettlementAutomationCore
 {
     public class SubModule : MBSubModuleBase
     {
+        public static event Action<Settlement>? OnAutomationCycleCompleted;
         private static Settlement? _pendingBackgroundTradeSettlement = null;
         private static readonly object QueueLock = new object();
 
@@ -107,9 +108,10 @@ namespace SettlementAutomationCore
                     if (logic1 != null)
                     {
                         bool executedAny = false;
+                        var preSoldList = new List<string>();
                         foreach (var order in preSellOrders)
                         {
-                            if (!order.IsBuy) // Pre-sell only supports selling!
+                            if (!order.IsBuy && order.EquipmentElement.Item != null) // Pre-sell only supports selling!
                             {
                                 var command = TransferCommand.Transfer(
                                     order.Amount,
@@ -122,11 +124,17 @@ namespace SettlementAutomationCore
                                 );
                                 logic1.AddTransferCommand(command);
                                 executedAny = true;
+                                preSoldList.Add($"{order.Amount}x {order.EquipmentElement.Item.Name}");
                             }
                         }
                         if (executedAny && logic1.IsThereAnyChanges())
                         {
+                            int initialGold = Hero.MainHero?.Gold ?? 0;
                             logic1.DoneLogic();
+                            int finalGold = Hero.MainHero?.Gold ?? 0;
+                            int goldDiff = finalGold - initialGold;
+                            string goldDiffSign = goldDiff >= 0 ? "+" : "";
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Auto-pre-sold in {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d). Sold: {string.Join(", ", preSoldList)}");
                         }
                     }
                 }
@@ -168,15 +176,29 @@ namespace SettlementAutomationCore
                             try
                             {
                                 SellPrisonersAction.ApplyForSelectedPrisoners(MobileParty.MainParty.Party, null, ransomRoster);
+                                var ransomParts = new List<string>();
+                                int estimatedGold = 0;
                                 foreach (var element in ransomRoster.GetTroopRoster())
                                 {
                                     InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed {element.Number}x {element.Character.Name}"));
+                                    ransomParts.Add($"{element.Number}x {element.Character.Name}");
+                                    try
+                                    {
+                                        var model = Campaign.Current?.Models?.RansomValueCalculationModel;
+                                        if (model != null)
+                                        {
+                                            estimatedGold += model.PrisonerRansomValue(element.Character, Hero.MainHero) * element.Number;
+                                        }
+                                    }
+                                    catch {}
                                 }
+                                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Ransomed at {settlement.Name}: {string.Join(", ", ransomParts)} (Est. Gold: +{estimatedGold}d)");
                             }
                             catch (Exception ex)
                             {
                                 Helpers.Logger.WriteLog("SettlementAutomationCore", $"Native ApplyForSelectedPrisoners failed ({ex.Message}). Applying manual ransom fallback.");
                                 int totalRansomGold = 0;
+                                var ransomParts = new List<string>();
                                 foreach (var element in ransomRoster.GetTroopRoster())
                                 {
                                     var character = element.Character;
@@ -199,6 +221,7 @@ namespace SettlementAutomationCore
 
                                     MobileParty.MainParty.PrisonRoster.AddToCounts(character, -count);
                                     InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed {count}x {character.Name} for {ransomAmount} denars"));
+                                    ransomParts.Add($"{count}x {character.Name} (+{ransomAmount}d)");
                                 }
 
                                 if (totalRansomGold > 0 && Hero.MainHero != null)
@@ -213,6 +236,7 @@ namespace SettlementAutomationCore
                                         Helpers.Logger.WriteLog("SettlementAutomationCore", $"Failed to award Roguery XP via SkillLevelingManager: {xpEx.Message}");
                                     }
                                 }
+                                Helpers.Logger.WriteLog("SettlementAutomationCore", $"[Manual Fallback] Ransomed at {settlement.Name}: {string.Join(", ", ransomParts)} (Total: +{totalRansomGold}d)");
                             }
                         }
                     }
@@ -455,6 +479,9 @@ namespace SettlementAutomationCore
                         var normalOrders = mainOrders.Where(o => !o.IsSlaughter).ToList();
 
                         bool executedAny = false;
+                        var soldList = new List<string>();
+                        var boughtList = new List<string>();
+                        var slaughteredList = new List<string>();
 
                         // Execute Normal Trades first (so arbitrage buys are in player inventory before slaughtering)
                         if (normalOrders.Count > 0)
@@ -502,6 +529,15 @@ namespace SettlementAutomationCore
                                 );
                                 logic2.AddTransferCommand(command);
                                 executedAny = true;
+
+                                if (isBuy)
+                                {
+                                    boughtList.Add($"{absAmount}x {item.Name}");
+                                }
+                                else
+                                {
+                                    soldList.Add($"{absAmount}x {item.Name}");
+                                }
                             }
                         }
 
@@ -515,13 +551,26 @@ namespace SettlementAutomationCore
                                 {
                                     logic2.SlaughterItem(itemRosterEl);
                                     executedAny = true;
+                                    slaughteredList.Add($"{order.Amount}x {order.EquipmentElement.Item.Name}");
                                     InformationManager.DisplayMessage(new InformationMessage($"[Automation] Slaughtered {order.Amount}x {order.EquipmentElement.Item.Name}"));
                                 }
                             }
                         }
                         if (executedAny && logic2.IsThereAnyChanges())
                         {
+                            int initialGold = Hero.MainHero?.Gold ?? 0;
                             logic2.DoneLogic();
+                            int finalGold = Hero.MainHero?.Gold ?? 0;
+                            int goldDiff = finalGold - initialGold;
+
+                            var logParts = new List<string>();
+                            if (soldList.Count > 0) logParts.Add($"Sold: {string.Join(", ", soldList)}");
+                            if (boughtList.Count > 0) logParts.Add($"Bought: {string.Join(", ", boughtList)}");
+                            if (slaughteredList.Count > 0) logParts.Add($"Slaughtered: {string.Join(", ", slaughteredList)}");
+
+                            string goldDiffSign = goldDiff >= 0 ? "+" : "";
+                            string logMsg = $"Auto-traded in {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d). {string.Join(" | ", logParts)}";
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", logMsg);
                         }
                     }
                 }
@@ -540,6 +589,15 @@ namespace SettlementAutomationCore
                 }
             }
             catch {}
+
+            try
+            {
+                OnAutomationCycleCompleted?.Invoke(settlement);
+            }
+            catch (Exception ex)
+            {
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error executing OnAutomationCycleCompleted callback: {ex}");
+            }
 
             // Refresh active game menu UI if we are in one to show the updated gold, prisoners, etc.
             try

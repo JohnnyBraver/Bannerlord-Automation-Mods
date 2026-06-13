@@ -4,6 +4,7 @@ using System.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.MapEvents;
 using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.MountAndBlade;
@@ -38,6 +39,8 @@ namespace PartyManager
                 AutomationRegistry.RegisterRansomProvider(_provider);
                 AutomationRegistry.RegisterDungeonProvider(_provider);
                 AutomationRegistry.RegisterGoalProvider(_provider);
+
+                SettlementAutomationCore.SubModule.OnAutomationCycleCompleted += OnAutomationCycleCompleted;
             }
         }
 
@@ -53,6 +56,63 @@ namespace PartyManager
                 AutomationRegistry.UnregisterDungeonProvider(_provider);
                 AutomationRegistry.UnregisterGoalProvider(_provider);
                 _provider = null;
+            }
+
+            SettlementAutomationCore.SubModule.OnAutomationCycleCompleted -= OnAutomationCycleCompleted;
+        }
+
+        private static void OnAutomationCycleCompleted(Settlement settlement)
+        {
+            var settings = Settings.Instance;
+            if (settings == null) return;
+
+            var party = MobileParty.MainParty;
+            if (party == null || party.PrisonRoster == null) return;
+
+            int prisonerCount = party.PrisonRoster.TotalManCount;
+            int prisonerSizeLimit = party.Party.PrisonerSizeLimit;
+
+            // 1. Capacity Alert
+            if (settings.PrisonerCapacityAlertPercent > 0 && prisonerSizeLimit > 0)
+            {
+                int percentFill = (prisonerCount * 100) / prisonerSizeLimit;
+                if (percentFill >= settings.PrisonerCapacityAlertPercent)
+                {
+                    string msg = $"Prisoner capacity alert: {prisonerCount}/{prisonerSizeLimit} prisoners ({percentFill}% fill).";
+                    InformationManager.DisplayMessage(new InformationMessage($"[PartyManager] WARNING: {msg}", new Color(0.9f, 0.6f, 0.2f)));
+                }
+            }
+
+            // 2. Stack Size Alert
+            int threshold = int.MaxValue;
+            if (settings.PrisonerStackAlertFlatLimit > 0)
+            {
+                threshold = Math.Min(threshold, settings.PrisonerStackAlertFlatLimit);
+            }
+            if (settings.PrisonerStackAlertPercentLimit > 0 && prisonerSizeLimit > 0)
+            {
+                int percentThreshold = Math.Max(1, (settings.PrisonerStackAlertPercentLimit * prisonerSizeLimit) / 100);
+                threshold = Math.Min(threshold, percentThreshold);
+            }
+
+            if (threshold != int.MaxValue)
+            {
+                var highStacks = new List<string>();
+                var prisonRoster = party.PrisonRoster;
+                for (int i = 0; i < prisonRoster.Count; i++)
+                {
+                    var el = prisonRoster.GetElementCopyAtIndex(i);
+                    if (el.Character != null && el.Number >= threshold)
+                    {
+                        highStacks.Add($"{el.Character.Name} (x{el.Number})");
+                    }
+                }
+
+                if (highStacks.Count > 0)
+                {
+                    string msg = $"High count prisoner stack(s) detected: {string.Join(", ", highStacks)}";
+                    InformationManager.DisplayMessage(new InformationMessage($"[PartyManager] WARNING: {msg}", new Color(0.9f, 0.6f, 0.2f)));
+                }
             }
         }
     }
