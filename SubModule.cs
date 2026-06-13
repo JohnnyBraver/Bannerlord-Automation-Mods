@@ -27,7 +27,7 @@ namespace SmithingOptimizer
                 var targetConstructor = typeof(WeaponDesignVM).GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).FirstOrDefault();
                 if (targetConstructor != null)
                 {
-                    var postfixMethod = typeof(CraftingPatches).GetMethod("WeaponDesignVMConstructorPostfix", BindingFlags.Public | BindingFlags.Static);
+                    var postfixMethod = typeof(CraftingPatches).GetMethod("OnWeaponDesignVMConstructed", BindingFlags.Public | BindingFlags.Static);
                     if (postfixMethod != null)
                     {
                         HarmonyInstance.Patch(targetConstructor, postfix: new HarmonyMethod(postfixMethod));

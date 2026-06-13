@@ -12,7 +12,7 @@ namespace SmithingOptimizer
     {
         public static WeaponDesignVM? ActiveWeaponDesignVM { get; private set; }
 
-        public static void WeaponDesignVMConstructorPostfix(WeaponDesignVM __instance)
+        public static void OnWeaponDesignVMConstructed(WeaponDesignVM __instance)
         {
             ActiveWeaponDesignVM = __instance;
         }
