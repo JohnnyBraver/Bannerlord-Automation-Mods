@@ -351,11 +351,7 @@ namespace PartyManager
         // --- Prisoner Capacity Alerts ---
         [SettingPropertyInteger("Prisoner Capacity Alert Threshold (%)", 0, 100, RequireRestart = false, HintText = "Trigger alert if total prisoners exceed this percentage of capacity after automation. Set to 0 to disable.")]
         [SettingPropertyGroup("Prisoners/Capacity Alerts", GroupOrder = 5)]
-        public int PrisonerCapacityAlertPercent { get; set; } = 20;
-
-        [SettingPropertyInteger("Prisoner Stack Alert Flat Limit", 0, 1000, RequireRestart = false, HintText = "Trigger alert if any single prisoner stack has at least this many prisoners. Set to 0 to disable.")]
-        [SettingPropertyGroup("Prisoners/Capacity Alerts", GroupOrder = 5)]
-        public int PrisonerStackAlertFlatLimit { get; set; } = 5;
+        public int PrisonerCapacityAlertPercent { get; set; } = 33;
 
         [SettingPropertyInteger("Prisoner Stack Alert Capacity Limit (%)", 0, 100, RequireRestart = false, HintText = "Trigger alert if any single prisoner stack exceeds this percentage of total prisoner capacity. Set to 0 to disable.")]
         [SettingPropertyGroup("Prisoners/Capacity Alerts", GroupOrder = 5)]

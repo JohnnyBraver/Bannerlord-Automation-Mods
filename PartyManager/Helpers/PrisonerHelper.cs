@@ -228,25 +228,15 @@ namespace PartyManager.Helpers
             }
 
             // 2. Stack Size Alert
-            int threshold = int.MaxValue;
-            if (settings.PrisonerStackAlertFlatLimit > 0)
-            {
-                threshold = Math.Min(threshold, settings.PrisonerStackAlertFlatLimit);
-            }
             if (settings.PrisonerStackAlertPercentLimit > 0 && prisonerSizeLimit > 0)
             {
                 int percentThreshold = Math.Max(1, (settings.PrisonerStackAlertPercentLimit * prisonerSizeLimit) / 100);
-                threshold = Math.Min(threshold, percentThreshold);
-            }
-
-            if (threshold != int.MaxValue)
-            {
                 var highStacks = new List<string>();
                 var prisonRoster = party.PrisonRoster;
                 for (int i = 0; i < prisonRoster.Count; i++)
                 {
                     var el = prisonRoster.GetElementCopyAtIndex(i);
-                    if (el.Character != null && el.Number >= threshold)
+                    if (el.Character != null && el.Number >= percentThreshold)
                     {
                         highStacks.Add($"{el.Character.Name} (x{el.Number})");
                     }
