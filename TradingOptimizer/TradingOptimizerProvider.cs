@@ -66,174 +66,191 @@ namespace TradingOptimizer
                 return orders;
             }
 
-            var tempLogic = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(party, settlement, true);
-            if (tempLogic == null) return orders;
+            // Back up the rosters so we can simulate on the real rosters to get accurate dynamic prices
+            // while restoring the original state completely after the simulation run finishes.
+            var backupPlayerRoster = new TaleWorlds.CampaignSystem.Roster.ItemRoster(party.ItemRoster);
+            var backupSettlementRoster = new TaleWorlds.CampaignSystem.Roster.ItemRoster(settlement.ItemRoster);
 
-            Func<TaleWorlds.Core.WeaponComponentData, TaleWorlds.Core.ItemObject.ItemUsageSetFlags> dummyFunc = w => (TaleWorlds.Core.ItemObject.ItemUsageSetFlags)0;
-            var vm = new SPInventoryVM(tempLogic, false, dummyFunc);
-
-            // Capture initial counts on both sides to determine net transfers later
-            var initialPlayerCounts = new Dictionary<string, int>();
-            var playerElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-            for (int i = 0; i < playerElements.Count; i++)
+            try
             {
-                var el = playerElements[i];
-                if (el.EquipmentElement.Item != null)
+                var tempLogic = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(party, settlement, false);
+                if (tempLogic == null) return orders;
+
+                Func<TaleWorlds.Core.WeaponComponentData, TaleWorlds.Core.ItemObject.ItemUsageSetFlags> dummyFunc = w => (TaleWorlds.Core.ItemObject.ItemUsageSetFlags)0;
+                var vm = new SPInventoryVM(tempLogic, false, dummyFunc);
+
+                // Capture initial counts on both sides to determine net transfers later
+                var initialPlayerCounts = new Dictionary<string, int>();
+                var playerElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+                for (int i = 0; i < playerElements.Count; i++)
                 {
-                    string key = el.EquipmentElement.Item.StringId;
-                    initialPlayerCounts[key] = initialPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
-                }
-            }
-
-            // Map StringId to EquipmentElement to construct TradeOrder later
-            var eqElementMap = new Dictionary<string, EquipmentElement>();
-            for (int i = 0; i < playerElements.Count; i++)
-            {
-                var el = playerElements[i];
-                if (el.EquipmentElement.Item != null)
-                {
-                    eqElementMap[el.EquipmentElement.Item.StringId] = el.EquipmentElement;
-                }
-            }
-            var otherElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
-            for (int i = 0; i < otherElements.Count; i++)
-            {
-                var el = otherElements[i];
-                if (el.EquipmentElement.Item != null)
-                {
-                    eqElementMap[el.EquipmentElement.Item.StringId] = el.EquipmentElement;
-                }
-            }
-
-            // Run the actual optimization on the temp logic (mutates tempLogic)
-            var report = TradingEngine.RunOptimization(vm, runSell, runBuy, excludedItems);
-
-            // Compute net difference to determine what actually got traded in the simulation
-            var finalPlayerCounts = new Dictionary<string, int>();
-            var finalPlayerElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-            for (int i = 0; i < finalPlayerElements.Count; i++)
-            {
-                var el = finalPlayerElements[i];
-                if (el.EquipmentElement.Item != null)
-                {
-                    string key = el.EquipmentElement.Item.StringId;
-                    finalPlayerCounts[key] = finalPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
-                }
-            }
-
-            // Adjust final counts to subtract yields of slaughter arbitrage
-            foreach (var slaughter in report.ArbitrageSlaughters)
-            {
-                var item = slaughter.EqElement.Item;
-                if (item != null && item.HorseComponent != null)
-                {
-                    int meatYield = item.HorseComponent.MeatCount * slaughter.Amount;
-                    int hidesYield = item.HorseComponent.HideCount * slaughter.Amount;
-
-                    string meatId = DefaultItems.Meat.StringId;
-                    string hidesId = DefaultItems.Hides.StringId;
-
-                    if (meatYield > 0 && finalPlayerCounts.ContainsKey(meatId))
+                    var el = playerElements[i];
+                    if (el.EquipmentElement.Item != null)
                     {
-                        finalPlayerCounts[meatId] = Math.Max(0, finalPlayerCounts[meatId] - meatYield);
-                    }
-                    if (hidesYield > 0 && finalPlayerCounts.ContainsKey(hidesId))
-                    {
-                        finalPlayerCounts[hidesId] = Math.Max(0, finalPlayerCounts[hidesId] - hidesYield);
+                        string key = el.EquipmentElement.Item.StringId;
+                        initialPlayerCounts[key] = initialPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
                     }
                 }
-            }
 
-            // All unique items across initial & final player inventory
-            var allKeys = initialPlayerCounts.Keys.Union(finalPlayerCounts.Keys).Distinct();
-
-            foreach (var key in allKeys)
-            {
-                int initialCount = initialPlayerCounts.TryGetValue(key, out int c1) ? c1 : 0;
-                int finalCount = finalPlayerCounts.TryGetValue(key, out int c2) ? c2 : 0;
-                int diff = finalCount - initialCount; // positive means we bought, negative means we sold
-
-                if (diff > 0)
+                // Map StringId to EquipmentElement to construct TradeOrder later
+                var eqElementMap = new Dictionary<string, EquipmentElement>();
+                for (int i = 0; i < playerElements.Count; i++)
                 {
-                    orders.Add(new TradeOrder(eqElementMap[key], diff, true));
-                }
-                else if (diff < 0)
-                {
-                    orders.Add(new TradeOrder(eqElementMap[key], -diff, false));
-                }
-            }
-
-            // Manually append the buy and slaughter orders for arbitrage slaughters
-            foreach (var slaughter in report.ArbitrageSlaughters)
-            {
-                orders.Add(new TradeOrder(slaughter.EqElement, slaughter.Amount, true, false));
-                orders.Add(new TradeOrder(slaughter.EqElement, slaughter.Amount, false, true));
-            }
-
-            // Accumulate transaction report for final printing
-            if (isMainCall && orders.Count > 0 && Hero.MainHero != null)
-            {
-                if (_currentTradeSettlement != settlement)
-                {
-                    _currentTradeSettlement = settlement;
-                    _initialGold = Hero.MainHero.Gold;
-                    _accumulatedReport = new TradeTransactionReport();
-                }
-
-                if (_accumulatedReport != null)
-                {
-                    // Merge sold items
-                    foreach (var s in report.SoldItems)
+                    var el = playerElements[i];
+                    if (el.EquipmentElement.Item != null)
                     {
-                        int existingIdx = _accumulatedReport.SoldItems.FindIndex(x => x.Name == s.Name);
-                        if (existingIdx >= 0)
+                        eqElementMap[el.EquipmentElement.Item.StringId] = el.EquipmentElement;
+                    }
+                }
+                var otherElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
+                for (int i = 0; i < otherElements.Count; i++)
+                {
+                    var el = otherElements[i];
+                    if (el.EquipmentElement.Item != null)
+                    {
+                        eqElementMap[el.EquipmentElement.Item.StringId] = el.EquipmentElement;
+                    }
+                }
+
+                // Run the actual optimization on the temp logic (mutates tempLogic, which mutates real rosters)
+                var report = TradingEngine.RunOptimization(vm, runSell, runBuy, excludedItems);
+
+                // Compute net difference to determine what actually got traded in the simulation
+                var finalPlayerCounts = new Dictionary<string, int>();
+                var finalPlayerElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+                for (int i = 0; i < finalPlayerElements.Count; i++)
+                {
+                    var el = finalPlayerElements[i];
+                    if (el.EquipmentElement.Item != null)
+                    {
+                        string key = el.EquipmentElement.Item.StringId;
+                        finalPlayerCounts[key] = finalPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
+                    }
+                }
+
+                // Adjust final counts to subtract yields of slaughter arbitrage
+                foreach (var slaughter in report.ArbitrageSlaughters)
+                {
+                    var item = slaughter.EqElement.Item;
+                    if (item != null && item.HorseComponent != null)
+                    {
+                        int meatYield = item.HorseComponent.MeatCount * slaughter.Amount;
+                        int hidesYield = item.HorseComponent.HideCount * slaughter.Amount;
+
+                        string meatId = DefaultItems.Meat.StringId;
+                        string hidesId = DefaultItems.Hides.StringId;
+
+                        if (meatYield > 0 && finalPlayerCounts.ContainsKey(meatId))
                         {
-                            var old = _accumulatedReport.SoldItems[existingIdx];
-                            old.Count += s.Count;
-                            old.Gold += s.Gold;
-                            if (s.MarketPrice > 0) old.MarketPrice = s.MarketPrice;
+                            finalPlayerCounts[meatId] = Math.Max(0, finalPlayerCounts[meatId] - meatYield);
                         }
-                        else
+                        if (hidesYield > 0 && finalPlayerCounts.ContainsKey(hidesId))
                         {
-                            _accumulatedReport.SoldItems.Add(new TradedItemInfo
+                            finalPlayerCounts[hidesId] = Math.Max(0, finalPlayerCounts[hidesId] - hidesYield);
+                        }
+                    }
+                }
+
+                // All unique items across initial & final player inventory
+                var allKeys = initialPlayerCounts.Keys.Union(finalPlayerCounts.Keys).Distinct();
+
+                foreach (var key in allKeys)
+                {
+                    int initialCount = initialPlayerCounts.TryGetValue(key, out int c1) ? c1 : 0;
+                    int finalCount = finalPlayerCounts.TryGetValue(key, out int c2) ? c2 : 0;
+                    int diff = finalCount - initialCount; // positive means we bought, negative means we sold
+
+                    if (diff > 0)
+                    {
+                        orders.Add(new TradeOrder(eqElementMap[key], diff, true));
+                    }
+                    else if (diff < 0)
+                    {
+                        orders.Add(new TradeOrder(eqElementMap[key], -diff, false));
+                    }
+                }
+
+                // Manually append the buy and slaughter orders for arbitrage slaughters
+                foreach (var slaughter in report.ArbitrageSlaughters)
+                {
+                    orders.Add(new TradeOrder(slaughter.EqElement, slaughter.Amount, true, false));
+                    orders.Add(new TradeOrder(slaughter.EqElement, slaughter.Amount, false, true));
+                }
+
+                // Accumulate transaction report for final printing
+                if (isMainCall && orders.Count > 0 && Hero.MainHero != null)
+                {
+                    if (_currentTradeSettlement != settlement)
+                    {
+                        _currentTradeSettlement = settlement;
+                        _initialGold = Hero.MainHero.Gold;
+                        _accumulatedReport = new TradeTransactionReport();
+                    }
+
+                    if (_accumulatedReport != null)
+                    {
+                        // Merge sold items
+                        foreach (var s in report.SoldItems)
+                        {
+                            int existingIdx = _accumulatedReport.SoldItems.FindIndex(x => x.Name == s.Name);
+                            if (existingIdx >= 0)
                             {
-                                Name = s.Name,
-                                Count = s.Count,
-                                Gold = s.Gold,
-                                MarketPrice = s.MarketPrice
-                            });
-                        }
-                    }
-
-                    // Merge bought items
-                    foreach (var b in report.BoughtItems)
-                    {
-                        int existingIdx = _accumulatedReport.BoughtItems.FindIndex(x => x.Name == b.Name);
-                        if (existingIdx >= 0)
-                        {
-                            var old = _accumulatedReport.BoughtItems[existingIdx];
-                            old.Count += b.Count;
-                            old.Gold += b.Gold;
-                            if (b.MarketPrice > 0) old.MarketPrice = b.MarketPrice;
-                        }
-                        else
-                        {
-                            _accumulatedReport.BoughtItems.Add(new TradedItemInfo
+                                var old = _accumulatedReport.SoldItems[existingIdx];
+                                old.Count += s.Count;
+                                old.Gold += s.Gold;
+                                if (s.MarketPrice > 0) old.MarketPrice = s.MarketPrice;
+                            }
+                            else
                             {
-                                Name = b.Name,
-                                Count = b.Count,
-                                Gold = b.Gold,
-                                MarketPrice = b.MarketPrice
-                            });
+                                _accumulatedReport.SoldItems.Add(new TradedItemInfo
+                                {
+                                    Name = s.Name,
+                                    Count = s.Count,
+                                    Gold = s.Gold,
+                                    MarketPrice = s.MarketPrice
+                                });
+                            }
                         }
-                    }
 
-                    // Merge arbitrage slaughters
-                    foreach (var s in report.ArbitrageSlaughters)
-                    {
-                        _accumulatedReport.ArbitrageSlaughters.Add(s);
+                        // Merge bought items
+                        foreach (var b in report.BoughtItems)
+                        {
+                            int existingIdx = _accumulatedReport.BoughtItems.FindIndex(x => x.Name == b.Name);
+                            if (existingIdx >= 0)
+                            {
+                                var old = _accumulatedReport.BoughtItems[existingIdx];
+                                old.Count += b.Count;
+                                old.Gold += b.Gold;
+                                if (b.MarketPrice > 0) old.MarketPrice = b.MarketPrice;
+                            }
+                            else
+                            {
+                                _accumulatedReport.BoughtItems.Add(new TradedItemInfo
+                                {
+                                    Name = b.Name,
+                                    Count = b.Count,
+                                    Gold = b.Gold,
+                                    MarketPrice = b.MarketPrice
+                                });
+                            }
+                        }
+
+                        // Merge arbitrage slaughters
+                        foreach (var s in report.ArbitrageSlaughters)
+                        {
+                            _accumulatedReport.ArbitrageSlaughters.Add(s);
+                        }
                     }
                 }
+            }
+            finally
+            {
+                // Restore original rosters
+                party.ItemRoster.Clear();
+                party.ItemRoster.Add(backupPlayerRoster);
+
+                settlement.ItemRoster.Clear();
+                settlement.ItemRoster.Add(backupSettlementRoster);
             }
 
             return orders;
