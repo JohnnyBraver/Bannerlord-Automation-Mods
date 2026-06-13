@@ -125,12 +125,12 @@ namespace EquipmentManager
 
         [SettingPropertyBool("Auto-Equip Companions", RequireRestart = false,
             HintText = "Automatically equip companions when optimizing party equipment.")]
-        [SettingPropertyGroup("General", GroupOrder = 0)]
+        [SettingPropertyGroup("General", GroupOrder = 4)]
         public bool AutoEquipCompanions { get; set; } = true;
 
         [SettingPropertyDropdown("Auto-Equip Loadout Category", RequireRestart = false,
             HintText = "Choose which categories of equipment to automatically manage.")]
-        [SettingPropertyGroup("General", GroupOrder = 0)]
+        [SettingPropertyGroup("General", GroupOrder = 4)]
         public Dropdown<AutoEquipCategoryOption> AutoEquipCategoryDropdown { get; set; } =
             new Dropdown<AutoEquipCategoryOption>(AutoEquipCategoryOptions, 3); // Default: Weapons & Armor
 
@@ -138,55 +138,55 @@ namespace EquipmentManager
 
         [SettingPropertyDropdown("Loadout Priority Order", RequireRestart = false,
             HintText = "Set the priority order for distributing equipment from inventory to loadouts.")]
-        [SettingPropertyGroup("Civilian & Sneaking", GroupOrder = 1)]
+        [SettingPropertyGroup("Civilian & Sneaking", GroupOrder = 3)]
         public Dropdown<LoadoutPriorityOption> LoadoutPriorityDropdown { get; set; } =
             new Dropdown<LoadoutPriorityOption>(LoadoutPriorityOptions, 0); // Default: Sneaking > Civilian > Combat (index 0)
 
         [SettingPropertyInteger("Min Tier to Keep", 0, 6, "0", RequireRestart = false,
             HintText = "Items at or above this tier will be locked/kept in your inventory and not donated/sold.")]
-        [SettingPropertyGroup("Keep & Lock Rules", GroupOrder = 3)]
+        [SettingPropertyGroup("Keep & Lock Rules", GroupOrder = 1)]
         public int MinTierToKeep { get; set; } = 4;
 
         [SettingPropertyDropdown("Min Quality to Keep", RequireRestart = false,
             HintText = "Items with modifiers at or above this quality level will be locked/kept.")]
-        [SettingPropertyGroup("Keep & Lock Rules", GroupOrder = 3)]
+        [SettingPropertyGroup("Keep & Lock Rules", GroupOrder = 1)]
         public Dropdown<string> MinQualityDropdown { get; set; } = new Dropdown<string>(QualityOptions, 3); // Default: Fine (index 3)
 
         [SettingPropertyBool("Keep Positive Modifiers", RequireRestart = false,
             HintText = "Keep any items that have positive stat modifiers regardless of quality level.")]
-        [SettingPropertyGroup("Keep & Lock Rules", GroupOrder = 3)]
+        [SettingPropertyGroup("Keep & Lock Rules", GroupOrder = 1)]
         public bool KeepPositiveModifiers { get; set; } = true;
 
         [SettingPropertyDropdown("Lock Donation Items", RequireRestart = false,
             HintText = "Keep donation weapons or armor locked in inventory instead of donating them for XP.")]
-        [SettingPropertyGroup("Keep & Lock Rules", GroupOrder = 3)]
+        [SettingPropertyGroup("Keep & Lock Rules", GroupOrder = 1)]
         public Dropdown<LockDonationCategoryOption> LockDonationCategoryDropdown { get; set; } =
             new Dropdown<LockDonationCategoryOption>(LockDonationCategoryOptions, 3); // Default: Weapons & Armor
 
         [SettingPropertyFloatingInteger("Max Cost per XP", 0.1f, 10.0f, "#0.0", RequireRestart = false,
             HintText = "Maximum denar value of gear to discard per XP point gained from donation perks.")]
-        [SettingPropertyGroup("Economy & Auto-Sell", GroupOrder = 4)]
+        [SettingPropertyGroup("Economy & Auto-Sell", GroupOrder = 0)]
         public float MaxCostPerXp { get; set; } = 1.0f;
 
         [SettingPropertyBool("Sell Unlocked Equipment", RequireRestart = false,
             HintText = "Sell any non-locked equipment that isn't chosen for party use.")]
-        [SettingPropertyGroup("Economy & Auto-Sell", GroupOrder = 4)]
+        [SettingPropertyGroup("Economy & Auto-Sell", GroupOrder = 0)]
         public bool SellUnlockedEquipment { get; set; } = true;
 
         [SettingPropertyBool("Prevent Equipment Sale in Villages", RequireRestart = false,
             HintText = "If enabled, auto-trading/selling will never sell equipment when entering villages. Safe to keep enabled to save valuable gear for rich towns.")]
-        [SettingPropertyGroup("Economy & Auto-Sell", GroupOrder = 4)]
+        [SettingPropertyGroup("Economy & Auto-Sell", GroupOrder = 0)]
         public bool PreventEquipmentSaleInVillages { get; set; } = true;
 
         [SettingPropertyBool("Prioritize Weight/Value Ratio", RequireRestart = false,
             HintText = "If enabled, sort equipment by weight/value ratio descending before selling so that heavy, low-value items are sold first when town gold is low.")]
-        [SettingPropertyGroup("Economy & Auto-Sell", GroupOrder = 4)]
+        [SettingPropertyGroup("Economy & Auto-Sell", GroupOrder = 0)]
         public bool PrioritizeHeavyTrash { get; set; } = true;
 
 
         [SettingPropertyBool("Limit to Carry Capacity", RequireRestart = false,
             HintText = "Stop actions if they would cause party to exceed carry capacity.")]
-        [SettingPropertyGroup("Economy & Auto-Sell", GroupOrder = 4)]
+        [SettingPropertyGroup("Economy & Auto-Sell", GroupOrder = 0)]
         public bool LimitToInventoryCapacity { get; set; } = true;
 
         [SettingPropertyBool("Buy Stealth Gear Upgrades", RequireRestart = false,

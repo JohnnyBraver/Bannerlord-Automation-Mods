@@ -103,114 +103,114 @@ namespace TradingOptimizer
 
         [SettingPropertyBool("Auto-trade on Settlement Entry", RequireRestart = false,
             HintText = "Automatically evaluate and execute trades when entering a town or village.")]
-        [SettingPropertyGroup("General", GroupOrder = 0)]
+        [SettingPropertyGroup("General", GroupOrder = 3)]
         public bool AutoTradeOnEnterSettlement { get; set; } = true;
 
         [SettingPropertyBool("Buy Blackened Stealth Gear", RequireRestart = false,
             HintText = "Automatically buy any available 'Blackened' armor/stealth items from merchants, regardless of standard trade restrictions.")]
-        [SettingPropertyGroup("General", GroupOrder = 0)]
+        [SettingPropertyGroup("General", GroupOrder = 3)]
         public bool BuyBlackenedStealthGear { get; set; } = false;
 
         [SettingPropertyBool("Simulation Mode (Dry Run)", RequireRestart = false,
             HintText = "Show what the mod WOULD buy/sell without making real trades. Great for tuning thresholds.")]
-        [SettingPropertyGroup("General", GroupOrder = 0)]
+        [SettingPropertyGroup("General", GroupOrder = 3)]
         public bool SimulationMode { get; set; } = false;
 
         [SettingPropertyInteger("Initial Economy Settling Days", 0, 200, RequireRestart = false,
             HintText = "Number of campaign days to wait on a new game/save before auto-trading starts to let the initial economy stabilize (e.g., 50 days).")]
-        [SettingPropertyGroup("General", GroupOrder = 0)]
+        [SettingPropertyGroup("General", GroupOrder = 3)]
         public int InitialSettlementDaysDelay { get; set; } = 50;
 
         [SettingPropertyDropdown("Pricing Reference Mode", RequireRestart = false,
             HintText = "Perk-Based: scales with perks. Always Global: uses global average. Always Local: uses local deviation.")]
-        [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
+        [SettingPropertyGroup("Price Margins", GroupOrder = 2)]
         public Dropdown<PricingReferenceModeOption> PricingReferenceDropdown { get; set; } =
             new Dropdown<PricingReferenceModeOption>(PricingReferenceModeOptions, 0);
 
         [SettingPropertyDropdown("Trading Stance", RequireRestart = false,
             HintText = "Balanced: sells at margin, holds cheap items unless cargo is >= 80%. Max Profit: always holds cheap items.")]
-        [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
+        [SettingPropertyGroup("Price Margins", GroupOrder = 2)]
         public Dropdown<TradingStanceOption> TradingStanceDropdown { get; set; } =
             new Dropdown<TradingStanceOption>(TradingStanceOptions, 0);
 
         [SettingPropertyDropdown("Loot Handling Mode", RequireRestart = false,
             HintText = "Liquidate: sell loot immediately. XP Farm: sell loot to crash price, rebuy in Transaction 2. Profit: evaluate normal.")]
-        [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
+        [SettingPropertyGroup("Price Margins", GroupOrder = 2)]
         public Dropdown<LootHandlingModeOption> LootHandlingDropdown { get; set; } =
             new Dropdown<LootHandlingModeOption>(LootHandlingModeOptions, 2);
 
         [SettingPropertyFloatingInteger("Buy Price Threshold", 0.5f, 0.80f, "#0.00", RequireRestart = false,
             HintText = "Buy items priced at or below this fraction of their average price. Maxes out at 0.80 (20% below average - where green begins).")]
-        [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
+        [SettingPropertyGroup("Price Margins", GroupOrder = 2)]
         public float BuyPriceThresholdFactor { get; set; } = 0.80f;
 
         [SettingPropertyFloatingInteger("Sell Price Threshold", 1.30f, 2.0f, "#0.00", RequireRestart = false,
             HintText = "Sell items priced at or above this fraction of their average price. Starts at 1.30 (30% above average - where red begins).")]
-        [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
+        [SettingPropertyGroup("Price Margins", GroupOrder = 2)]
         public float SellPriceThresholdFactor { get; set; } = 1.30f;
 
         [SettingPropertyFloatingInteger("Food Logistics Price Throttle Factor", 0.5f, 3.0f, "#0.00", RequireRestart = false,
             HintText = "Postpone non-urgent food variety purchases if their price exceeds this multiplier of their average price. Range: 0.50 - 3.00. Default: 1.30 (130% - where red begins).")]
-        [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
+        [SettingPropertyGroup("Price Margins", GroupOrder = 2)]
         public float FoodLogisticsPriceThrottleFactor { get; set; } = 1.30f;
 
         [SettingPropertyFloatingInteger("Mounts Logistics Price Throttle Factor", 0.5f, 3.0f, "#0.00", RequireRestart = false,
             HintText = "Postpone speed mount purchases if their price exceeds this multiplier of their average price. Range: 0.50 - 3.00. Default: 1.50 (150% - mounts are harder to find cheap).")]
-        [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
+        [SettingPropertyGroup("Price Margins", GroupOrder = 2)]
         public float MountsLogisticsPriceThrottleFactor { get; set; } = 1.50f;
 
         [SettingPropertyBool("Force Buy Critical Variety Food", RequireRestart = false,
             HintText = "If current supply of a food type is under 1/10 of its target variety quantity (rounded up), force buy it regardless of price to prevent complete lack of that food type.")]
-        [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
+        [SettingPropertyGroup("Price Margins", GroupOrder = 2)]
         public bool ForceBuyMinVarietyFood { get; set; } = true;
 
         [SettingPropertyBool("Limit to Carry Capacity", RequireRestart = false,
             HintText = "Stop buying when your party's carry weight would be exceeded.")]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public bool LimitToInventoryCapacity { get; set; } = true;
 
         [SettingPropertyInteger("Max Stack Size to Buy", 1, 500, RequireRestart = false,
             HintText = "Maximum number of any single item type to buy per trade stop.")]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public int MaxStackSizeToBuy { get; set; } = 100;
 
         [SettingPropertyInteger("Max Stack Total Value (d)", 100, 50000, RequireRestart = false,
             HintText = "Stop buying an item type once its total stack value exceeds this in denars.")]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public int MaxStackValueToBuy { get; set; } = 2000;
 
         [SettingPropertyDropdown("Food Trading Policy", RequireRestart = false,
             HintText = "Control how food items are auto-traded.")]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public Dropdown<TradingModeOption> FoodTradingModeDropdown { get; set; } =
             new Dropdown<TradingModeOption>(TradingModeOptions, 3); // Default: Buy & Sell (index 3)
 
         [SettingPropertyInteger("Party Food Days to Keep", 1, 100, RequireRestart = false,
             HintText = "Keep at least this many days of food supply for the party before selling food items.")]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public int PartyFoodDaysToKeep { get; set; } = 10;
 
         [SettingPropertyDropdown("Livestock Trading Policy", RequireRestart = false,
             HintText = "Control how livestock (animals) are auto-traded.")]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public Dropdown<TradingModeOption> LivestockTradingModeDropdown { get; set; } =
             new Dropdown<TradingModeOption>(TradingModeOptions, 0); // Default: None (index 0)
 
         [SettingPropertyDropdown("Mounts Trading Policy", RequireRestart = false,
             HintText = "Control how mounts (horses, camels) are auto-traded.")]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public Dropdown<TradingModeOption> MountsTradingModeDropdown { get; set; } =
             new Dropdown<TradingModeOption>(TradingModeOptions, 0); // Default: None (index 0)
 
         [SettingPropertyInteger("Minimum Gold Reserve", 0, 50000, RequireRestart = false,
             HintText = "Never let your gold balance drop below this amount when buying. Default: 1000 denars.")]
-        [SettingPropertyGroup("Budget Protection", GroupOrder = 3)]
+        [SettingPropertyGroup("Budget Protection", GroupOrder = 0)]
         public int MinimumGoldReserve { get; set; } = 1000;
 
 
         [SettingPropertyInteger("Min Days of Expenses to Keep", 0, 100, RequireRestart = false,
             HintText = "Ensure you keep enough gold to cover this many days of party wages/expenses (excluding daily income).")]
-        [SettingPropertyGroup("Budget Protection", GroupOrder = 3)]
+        [SettingPropertyGroup("Budget Protection", GroupOrder = 0)]
         public int MinDaysExpensesToKeep { get; set; } = 10;
 
         // Helper properties for cleaner logic access
