@@ -6,6 +6,7 @@ using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Inventory;
 using TaleWorlds.Core;
+using System.Reflection;
 using SettlementAutomationCore;
 
 namespace PartyManager.Helpers
@@ -94,234 +95,18 @@ namespace PartyManager.Helpers
             return orders;
         }
 
-        public static List<TradeOrder> GetMainOrders(MobileParty party, Settlement settlement, InventoryLogic currentLogic, Settings settings)
+        public static void SubmitAutomationRequests(MobileParty party, Settings settings)
         {
-            var orders = new List<TradeOrder>();
-            if (settings == null) return orders;
+            if (settings == null || party == null || Hero.MainHero == null) return;
 
-            if (settings.PreventHerdingPenalty)
-            {
-                orders.AddRange(GetPreSellOrders(party, settings));
-            }
+            // 1. Gather settings from TradeOptimizer using reflection to avoid direct DLL dependency
+            bool optAutoBuyFood = true;
+            int optFoodDays = 10;
+            int optMinSizeVariety = 20;
+            int optMinGoldVariety = 3000;
+            bool optAutoBuyMounts = true;
+            int optMinGoldMounts = 10000;
 
-            if (AutomationRegistry.IsTradeOptimizerActive())
-            {
-                return orders;
-            }
-
-            // Auto-Buy Mounts
-            if (settings.AutoBuyMounts && Hero.MainHero != null && Hero.MainHero.Gold >= settings.MinGoldForMounts)
-            {
-                AnimalCalculator.CalculatePartyAnimals(party, out int infantry, out _, out int riding, out _, out _,
-                    out _, out _, out _);
-
-                int mountsNeeded = infantry - riding;
-                if (mountsNeeded > 0)
-                {
-                    var otherElements = currentLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
-                    var buyableMounts = new List<RosterElementInfo>();
-
-                    for (int i = 0; i < otherElements.Count; i++)
-                    {
-                        var el = otherElements[i];
-                        if (el.IsEmpty || el.Amount <= 0) continue;
-                        var item = el.EquipmentElement.Item;
-                        if (item != null && item.IsMountable && item.HorseComponent != null && !item.HorseComponent.IsPackAnimal)
-                        {
-                            int price = currentLogic.GetItemPrice(el.EquipmentElement, true);
-                            buyableMounts.Add(new RosterElementInfo(el.EquipmentElement, el.Amount, price));
-                        }
-                    }
-
-                    buyableMounts = buyableMounts.OrderBy(m => m.Price).ToList();
-                    int budget = Hero.MainHero.Gold - settings.MinGoldForMounts;
-
-                    foreach (var m in buyableMounts)
-                    {
-                        if (mountsNeeded <= 0 || budget <= 0) break;
-                        int toBuy = Math.Min(mountsNeeded, m.Amount);
-                        int cost = toBuy * m.Price;
-                        if (cost > budget)
-                        {
-                            toBuy = budget / m.Price;
-                        }
-                        if (toBuy > 0)
-                        {
-                            orders.Add(new TradeOrder(m.EqElement, toBuy, true));
-                            mountsNeeded -= toBuy;
-                            budget -= toBuy * m.Price;
-                        }
-                    }
-                }
-            }
-
-            // Auto-Buy Food
-            if (settings.AutoBuyFood && party != null && Hero.MainHero != null)
-            {
-                int partySize = party.MemberRoster.TotalManCount;
-                if (partySize > 0)
-                {
-                    int dailyWage = party.TotalWage;
-                    int minGoldReserve = Math.Max(1000, dailyWage * 2);
-                    int foodBudget = Hero.MainHero.Gold - minGoldReserve;
-
-                    if (foodBudget > 0)
-                    {
-                        var otherElements = currentLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
-                        var foodItems = new List<RosterElementInfo>();
-
-                        for (int i = 0; i < otherElements.Count; i++)
-                        {
-                            var el = otherElements[i];
-                            if (el.IsEmpty || el.Amount <= 0) continue;
-                            var item = el.EquipmentElement.Item;
-                            if (item != null && item.IsFood)
-                            {
-                                int price = currentLogic.GetItemPrice(el.EquipmentElement, true);
-                                foodItems.Add(new RosterElementInfo(el.EquipmentElement, el.Amount, price));
-                            }
-                        }
-
-                        if (foodItems.Count > 0)
-                        {
-                            foodItems = foodItems.OrderBy(f => f.Price).ToList();
-                            int syncedDaysLimit = GetSyncedFoodDaysLimit(settings);
-                            bool isSurvivalMode = partySize < settings.MinPartySizeForVariety || Hero.MainHero.Gold < settings.MinGoldForVariety;
-                            var playerInventory = currentLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-
-                            if (isSurvivalMode)
-                            {
-                                int totalFoodTarget = (int)Math.Ceiling(partySize * syncedDaysLimit / 20.0f);
-                                int totalOwned = 0;
-                                for (int j = 0; j < playerInventory.Count; j++)
-                                {
-                                    var pEl = playerInventory[j];
-                                    if (pEl.EquipmentElement.Item != null && pEl.EquipmentElement.Item.IsFood)
-                                    {
-                                        totalOwned += pEl.Amount;
-                                    }
-                                }
-
-                                int totalNeeded = totalFoodTarget - totalOwned;
-                                if (totalNeeded > 0)
-                                {
-                                    foreach (var food in foodItems)
-                                    {
-                                        if (totalNeeded <= 0 || foodBudget <= 0) break;
-
-                                        int toBuy = Math.Min(totalNeeded, food.Amount);
-                                        int cost = toBuy * food.Price;
-                                        if (cost > foodBudget)
-                                        {
-                                            toBuy = foodBudget / food.Price;
-                                        }
-
-                                        if (toBuy > 0)
-                                        {
-                                            orders.Add(new TradeOrder(food.EqElement, toBuy, true));
-                                            totalNeeded -= toBuy;
-                                            foodBudget -= toBuy * food.Price;
-                                        }
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                int minToKeep = (int)Math.Ceiling(partySize * syncedDaysLimit / 200.0f);
-                                foreach (var food in foodItems)
-                                {
-                                    if (foodBudget <= 0) break;
-
-                                    var itemObj = food.EqElement.Item;
-                                    int owned = 0;
-                                    for (int j = 0; j < playerInventory.Count; j++)
-                                    {
-                                        var pEl = playerInventory[j];
-                                        if (pEl.EquipmentElement.Item != null && pEl.EquipmentElement.Item.StringId == itemObj.StringId)
-                                        {
-                                            owned += pEl.Amount;
-                                        }
-                                    }
-
-                                    int needed = minToKeep - owned;
-                                    if (needed > 0)
-                                    {
-                                        int toBuy = Math.Min(needed, food.Amount);
-                                        int cost = toBuy * food.Price;
-                                        if (cost > foodBudget)
-                                        {
-                                            toBuy = foodBudget / food.Price;
-                                        }
-
-                                        if (toBuy > 0)
-                                        {
-                                            orders.Add(new TradeOrder(food.EqElement, toBuy, true));
-                                            foodBudget -= toBuy * food.Price;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            return orders;
-        }
-
-        public static void SubmitLogisticsGoals(MobileParty party, Settings settings)
-        {
-            if (settings == null) return;
-
-            if (settings.AutoBuyFood && party != null && Hero.MainHero != null)
-            {
-                int partySize = party.MemberRoster.TotalManCount;
-                if (partySize > 0)
-                {
-                    int syncedDaysLimit = GetSyncedFoodDaysLimit(settings);
-                    bool isSurvivalMode = partySize < settings.MinPartySizeForVariety || Hero.MainHero.Gold < settings.MinGoldForVariety;
-                    int targetQuantity;
-                    int minGoldReserve;
-
-                    if (isSurvivalMode)
-                    {
-                        targetQuantity = (int)Math.Ceiling(partySize * syncedDaysLimit / 20.0f);
-                        int dailyWage = party.TotalWage;
-                        minGoldReserve = Math.Max(1000, dailyWage * 2);
-                    }
-                    else
-                    {
-                        int minToKeep = (int)Math.Ceiling(partySize * syncedDaysLimit / 200.0f);
-                        targetQuantity = 10 * minToKeep;
-                        minGoldReserve = settings.MinGoldForVariety;
-                    }
-
-                    AutomationRegistry.RegisterLogisticsGoal(new LogisticsGoal(
-                        LogisticsGoalType.FoodRestock,
-                        targetQuantity,
-                        minGoldReserve,
-                        isSurvivalMode
-                    ));
-                }
-            }
-
-            if (settings.AutoBuyMounts && Hero.MainHero != null)
-            {
-                AnimalCalculator.CalculatePartyAnimals(party, out int infantry, out _, out _, out _, out _, out _, out _, out _);
-                if (infantry > 0)
-                {
-                    AutomationRegistry.RegisterLogisticsGoal(new LogisticsGoal(
-                        LogisticsGoalType.SpeedMounts,
-                        infantry,
-                        settings.MinGoldForMounts
-                    ));
-                }
-            }
-        }
-
-        private static int GetSyncedFoodDaysLimit(Settings settings)
-        {
-            int limit = settings?.PartyFoodDaysToKeep ?? 10;
             try
             {
                 foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
@@ -331,16 +116,16 @@ namespace PartyManager.Helpers
                         var settingsType = assembly.GetType("TradeOptimizer.Settings");
                         if (settingsType != null)
                         {
-                            var instanceProp = settingsType.GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                            var instanceProp = settingsType.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
                             var settingsInstance = instanceProp?.GetValue(null);
                             if (settingsInstance != null)
                             {
-                                var limitProp = settingsType.GetProperty("PartyFoodDaysToKeep", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-                                if (limitProp != null)
-                                {
-                                    int toLimit = (int)limitProp.GetValue(settingsInstance);
-                                    return Math.Max(limit, toLimit);
-                                }
+                                optAutoBuyFood = (bool)(settingsType.GetProperty("AutoBuyFood")?.GetValue(settingsInstance) ?? true);
+                                optFoodDays = (int)(settingsType.GetProperty("PartyFoodDaysToKeep")?.GetValue(settingsInstance) ?? 10);
+                                optMinSizeVariety = (int)(settingsType.GetProperty("MinPartySizeForVariety")?.GetValue(settingsInstance) ?? 20);
+                                optMinGoldVariety = (int)(settingsType.GetProperty("MinGoldForVariety")?.GetValue(settingsInstance) ?? 3000);
+                                optAutoBuyMounts = (bool)(settingsType.GetProperty("AutoBuyMounts")?.GetValue(settingsInstance) ?? true);
+                                optMinGoldMounts = (int)(settingsType.GetProperty("MinGoldForMounts")?.GetValue(settingsInstance) ?? 10000);
                             }
                         }
                         break;
@@ -348,7 +133,134 @@ namespace PartyManager.Helpers
                 }
             }
             catch {}
-            return limit;
+
+            int partySize = party.MemberRoster.TotalManCount;
+            if (partySize <= 0) return;
+
+            // 2. Submit Tiered Food Requests
+            if (optAutoBuyFood)
+            {
+                // Tier 1: Starvation/Survival (Keep 2 days of food at high priority)
+                int survivalTarget = (int)Math.Ceiling(partySize * 2 / 20.0f); // 20 man-days per unit of food
+                int dailyWage = party.TotalWage;
+                int survivalMinGold = Math.Max(1000, dailyWage * 2);
+                AutomationRegistry.RegisterRequest(new AutomationRequest(
+                    "PartyManager",
+                    RequestType.ItemCategory,
+                    "Food",
+                    survivalTarget,
+                    95, // Priority: Emergency
+                    survivalMinGold,
+                    3.0f // Max Price: Pay any price
+                ));
+
+                // Tier 2: Stability (Keep 5 days of food at high/medium priority)
+                int stabilityTarget = (int)Math.Ceiling(partySize * 5 / 20.0f);
+                AutomationRegistry.RegisterRequest(new AutomationRequest(
+                    "PartyManager",
+                    RequestType.ItemCategory,
+                    "Food",
+                    stabilityTarget,
+                    70, // Priority: High
+                    2000,
+                    1.5f
+                ));
+
+                // Tier 3: Full Buffer & Variety (Keep optFoodDays of food variety)
+                if (partySize >= optMinSizeVariety)
+                {
+                    int varietyTarget = (int)Math.Ceiling(partySize * optFoodDays / 20.0f);
+                    AutomationRegistry.RegisterRequest(new AutomationRequest(
+                        "PartyManager",
+                        RequestType.ItemCategory,
+                        "Food",
+                        varietyTarget,
+                        35, // Priority: Low
+                        optMinGoldVariety,
+                        1.1f
+                    ));
+                }
+            }
+
+            // 3. Submit Mount Requests
+            if (optAutoBuyMounts)
+            {
+                AnimalCalculator.CalculatePartyAnimals(party, out int infantry, out _, out int riding, out _, out _, out _, out _, out _);
+                int missing = infantry - riding;
+                if (missing > 0)
+                {
+                    // Scale priority by percentage of infantry that is currently unmounted
+                    int scalePriority = (int)(30 + 50 * ((float)missing / infantry));
+                    AutomationRegistry.RegisterRequest(new AutomationRequest(
+                        "PartyManager",
+                        RequestType.ItemCategory,
+                        "Horse",
+                        infantry, // Cumulative target is to reach fully mounted infantry
+                        scalePriority,
+                        optMinGoldMounts,
+                        1.2f
+                    ));
+                }
+            }
+
+            // 4. Submit Prioritized Recruit Requests
+            if (settings.AutoRecruitVolunteers)
+            {
+                int currentSize = party.MemberRoster.TotalManCount;
+                int limit = party.Party.PartySizeLimit;
+                if (currentSize < limit)
+                {
+                    bool wantsCavalry = settings.RecruitMeleeCavalry || settings.RecruitHorseArchers;
+                    bool wantsRanged = settings.RecruitFootArchers || settings.RecruitCrossbowmen || settings.RecruitHorseArchers;
+                    bool wantsMelee = settings.RecruitShieldInfantry || settings.RecruitShockInfantry || settings.RecruitSkirmishers;
+
+                    string recruitFilter = "AnyRecruit";
+                    if (wantsCavalry && !wantsRanged && !wantsMelee)
+                        recruitFilter = "MeleeCavalry";
+                    else if (wantsRanged && !wantsCavalry && !wantsMelee)
+                        recruitFilter = "Ranged";
+                    else if (wantsMelee && !wantsCavalry && !wantsRanged)
+                        recruitFilter = "Melee";
+
+                    // Tier 1: Emergency Hires (fill up to 30% capacity if extremely low)
+                    int emergencyTarget = (int)(limit * 0.3f);
+                    if (currentSize < emergencyTarget)
+                    {
+                        AutomationRegistry.RegisterRequest(new AutomationRequest(
+                            "PartyManager",
+                            RequestType.TroopFilter,
+                            "AnyRecruit", // Hire anyone in an emergency
+                            emergencyTarget,
+                            90, // Priority: Emergency
+                            500,
+                            1.0f
+                        ));
+                    }
+
+                    // Tier 2: Standard Recruit Hires (fill up to 80% capacity with filtered recruits)
+                    int normalTarget = (int)(limit * 0.8f);
+                    AutomationRegistry.RegisterRequest(new AutomationRequest(
+                        "PartyManager",
+                        RequestType.TroopFilter,
+                        recruitFilter,
+                        normalTarget,
+                        60, // Priority: Medium-High
+                        1000,
+                        1.0f
+                    ));
+
+                    // Tier 3: Optimization Fill (fill up to 100% capacity with filtered recruits)
+                    AutomationRegistry.RegisterRequest(new AutomationRequest(
+                        "PartyManager",
+                        RequestType.TroopFilter,
+                        recruitFilter,
+                        limit,
+                        30, // Priority: Low
+                        5000,
+                        1.0f
+                    ));
+                }
+            }
         }
     }
 }

@@ -39,7 +39,7 @@ namespace PartyManager
                 AutomationRegistry.RegisterGarrisonProvider(_provider);
                 AutomationRegistry.RegisterRansomProvider(_provider);
                 AutomationRegistry.RegisterDungeonProvider(_provider);
-                AutomationRegistry.RegisterGoalProvider(_provider);
+                AutomationRegistry.RegisterRequestProvider(_provider);
 
                 SettlementAutomationCore.SubModule.OnAutomationCycleCompleted += OnAutomationCycleCompleted;
             }
@@ -55,7 +55,7 @@ namespace PartyManager
                 AutomationRegistry.UnregisterGarrisonProvider(_provider);
                 AutomationRegistry.UnregisterRansomProvider(_provider);
                 AutomationRegistry.UnregisterDungeonProvider(_provider);
-                AutomationRegistry.UnregisterGoalProvider(_provider);
+                AutomationRegistry.UnregisterRequestProvider(_provider);
                 _provider = null;
             }
 

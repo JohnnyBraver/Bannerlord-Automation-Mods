@@ -12,7 +12,7 @@ using PartyManager.Helpers;
 
 namespace PartyManager
 {
-    public class PartyManagerProvider : ITradeOrderProvider, IRecruitOrderProvider, IGarrisonOrderProvider, IRansomOrderProvider, IDungeonOrderProvider, ILogisticsGoalProvider
+    public class PartyManagerProvider : ITradeOrderProvider, IRecruitOrderProvider, IGarrisonOrderProvider, IRansomOrderProvider, IDungeonOrderProvider, IAutomationRequestProvider
     {
         public string ProviderName => "PartyManager";
 
@@ -28,20 +28,18 @@ namespace PartyManager
 
         public List<TradeOrder> GetMainOrders(MobileParty party, Settlement settlement, InventoryLogic currentLogic)
         {
-            var settings = Settings.Instance;
-            if (settings == null) return new List<TradeOrder>();
-            return TradeHelper.GetMainOrders(party, settlement, currentLogic, settings);
+            return new List<TradeOrder>(); // Buying is handled by core priority engine now
         }
 
         // ----------------------------------------------------
-        // ILogisticsGoalProvider
+        // IAutomationRequestProvider
         // ----------------------------------------------------
-        public void SubmitLogisticsGoals(MobileParty party, Settlement settlement)
+        public void SubmitAutomationRequests(MobileParty party, Settlement settlement)
         {
             var settings = Settings.Instance;
             if (settings != null)
             {
-                TradeHelper.SubmitLogisticsGoals(party, settings);
+                TradeHelper.SubmitAutomationRequests(party, settings);
             }
         }
 

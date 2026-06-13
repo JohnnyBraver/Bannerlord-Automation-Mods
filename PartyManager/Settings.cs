@@ -285,29 +285,6 @@ namespace PartyManager
         public bool RecruitHorseArchers { get; set; } = true;
 
         // --- Mount & Herding settings ---
-        [SettingPropertyBool("Auto-Buy Food to Restock", RequireRestart = false, HintText = "Automatically buy food to maintain supply for soldiers.", Order = 1)]
-        [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
-        public bool AutoBuyFood { get; set; } = true;
-
-        [SettingPropertyInteger("Party Food Days to Keep", 1, 100, RequireRestart = false, HintText = "Maintain at least this many days of food supply for the party.", Order = 2)]
-        [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
-        public int PartyFoodDaysToKeep { get; set; } = 10;
-
-        [SettingPropertyInteger("Min Party Size for Variety", 1, 100, RequireRestart = false, HintText = "Minimum party size before the mod starts buying a variety of foods for Steward XP. Below this size, the mod only buys the cheapest food to prevent starvation.", Order = 3)]
-        [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
-        public int MinPartySizeForVariety { get; set; } = 20;
-
-        [SettingPropertyInteger("Min Gold for Variety", 500, 20000, RequireRestart = false, HintText = "Minimum gold reserve required to buy food varieties. Below this, only survival food is bought.", Order = 4)]
-        [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
-        public int MinGoldForVariety { get; set; } = 3000;
-
-        [SettingPropertyBool("Auto-Buy Riding Mounts for Speed", RequireRestart = false, HintText = "Automatically buy mounts for foot soldiers to upgrade party speed.", Order = 5)]
-        [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
-        public bool AutoBuyMounts { get; set; } = true;
-
-        [SettingPropertyInteger("Min Gold for Mounts", 1000, 50000, RequireRestart = false, HintText = "Minimum gold reserve required to buy mounts. Below this, mount buying is skipped.", Order = 6)]
-        [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
-        public int MinGoldForMounts { get; set; } = 10000;
 
         [SettingPropertyBool("Herding Penalty Protection", RequireRestart = false, HintText = "Automatically sell or slaughter excess animals to avoid herding speed penalty.", Order = 7)]
         [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
