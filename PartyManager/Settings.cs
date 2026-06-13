@@ -348,10 +348,6 @@ namespace PartyManager
         [SettingPropertyGroup("Prisoners/Ransom", GroupOrder = 5)]
         public bool AutoRansomPrisoners { get; set; } = true;
 
-        [SettingPropertyInteger("Min Tier to Ransom", 1, 6, RequireRestart = false, HintText = "Minimum tier of prisoner to automatically ransom.")]
-        [SettingPropertyGroup("Prisoners/Ransom", GroupOrder = 5)]
-        public int MinRansomTier { get; set; } = 1;
-
         // --- Prisoner Capacity Alerts ---
         [SettingPropertyInteger("Prisoner Capacity Alert Threshold (%)", 0, 100, RequireRestart = false, HintText = "Trigger alert if total prisoners exceed this percentage of capacity after automation. Set to 0 to disable.")]
         [SettingPropertyGroup("Prisoners/Capacity Alerts", GroupOrder = 5)]

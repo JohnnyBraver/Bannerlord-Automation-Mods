@@ -30,11 +30,8 @@ namespace PartyManager.Helpers
                 // 1. Keep Heroes check
                 if (prisoner.IsHero && settings.KeepHeroPrisoners) continue;
 
-                // 2. Keep Filter check
+                // 2. Keep Filter check: If we keep it, we do NOT ransom it.
                 if (PrisonerFilter.MatchKeepFilter(prisoner, settings)) continue;
-
-                // 3. Min Tier to ransom check
-                if (prisoner.Tier < settings.MinRansomTier) continue;
 
                 orders.Add(new RansomOrder(prisoner, el.Number));
             }
