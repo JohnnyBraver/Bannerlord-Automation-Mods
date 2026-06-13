@@ -6,9 +6,46 @@ using TaleWorlds.CampaignSystem.Inventory;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
+using TaleWorlds.Localization;
 
 namespace SettlementAutomationCore.Helpers
 {
+    public class AutomationInventoryListener : InventoryListener
+    {
+        private readonly Settlement _settlement;
+        private int _gold;
+
+        public AutomationInventoryListener(Settlement settlement)
+        {
+            _settlement = settlement;
+            _gold = settlement.Town?.Gold ?? settlement.Village?.Bound?.Town?.Gold ?? 50000;
+        }
+
+        public override int GetGold()
+        {
+            return _gold;
+        }
+
+        public override TextObject GetTraderName()
+        {
+            return _settlement.Name;
+        }
+
+        public override void SetGold(int gold)
+        {
+            _gold = gold;
+        }
+
+        public override PartyBase GetOppositeParty()
+        {
+            return _settlement.Party;
+        }
+
+        public override void OnTransaction()
+        {
+        }
+    }
+
     public static class InventoryHelper
     {
         public static IMarketData? GetMarketData(Settlement settlement)
@@ -24,6 +61,11 @@ namespace SettlementAutomationCore.Helpers
             try
             {
                 var logic = new InventoryLogic(party, Hero.MainHero.CharacterObject, settlement.Party);
+
+                // Set private InventoryListener property via reflection to avoid NullReferenceException in DoneLogic
+                var listener = new AutomationInventoryListener(settlement);
+                var listenerProp = typeof(InventoryLogic).GetProperty("InventoryListener", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                listenerProp?.SetValue(logic, listener);
 
                 var initMethod = typeof(InventoryLogic).GetMethods()
                     .FirstOrDefault(m => m.Name == "Initialize" && m.GetParameters().Length == 13);

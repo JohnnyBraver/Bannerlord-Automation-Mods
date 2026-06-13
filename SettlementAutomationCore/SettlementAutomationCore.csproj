@@ -61,7 +61,6 @@
     </PropertyGroup>
     <MakeDir Directories="$(ModBinFolder)" Condition="!Exists('$(ModBinFolder)')" />
     <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll" DestinationFolder="$(ModBinFolder)" />
-    <Copy SourceFiles="$(OutputPath)0Harmony.dll" DestinationFolder="$(ModBinFolder)" />
     <Copy SourceFiles="SubModule.xml" DestinationFolder="$(ModFolder)" />
   </Target>
 </Project>

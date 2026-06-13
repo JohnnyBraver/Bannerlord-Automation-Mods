@@ -285,6 +285,27 @@ namespace EquipmentManager
             // 6. Refresh UI
             vm.ExecuteRemoveZeroCounts();
             vm.RefreshValues();
+
+            // Refresh character VM slots, stats, and visual model
+            try
+            {
+                var updateRight = vm.GetType().GetMethod("UpdateRightCharacter", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                updateRight?.Invoke(vm, null);
+
+                var updateLeft = vm.GetType().GetMethod("UpdateLeftCharacter", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                updateLeft?.Invoke(vm, null);
+
+                var refreshInfo = vm.GetType().GetMethod("RefreshInformationValues", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                refreshInfo?.Invoke(vm, null);
+
+                // Trigger event to notify the UI view layer that equipment set has changed, prompting redrawing of 3D models
+                Game.Current?.EventManager?.TriggerEvent(new InventoryEquipmentTypeChangedEvent(!vm.IsCivilianMode));
+            }
+            catch (Exception ex)
+            {
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error refreshing character visuals: {ex.Message}");
+            }
+
             SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"=== Equipment Optimization Run completed (Total equipped: {equippedCount}, Total sold: {totalSold}) ===");
         }
 

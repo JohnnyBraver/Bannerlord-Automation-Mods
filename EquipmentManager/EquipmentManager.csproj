@@ -79,7 +79,6 @@
     </PropertyGroup>
     <MakeDir Directories="$(ModBinFolder)" Condition="!Exists('$(ModBinFolder)')" />
     <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll" DestinationFolder="$(ModBinFolder)" />
-    <Copy SourceFiles="$(OutputPath)0Harmony.dll" DestinationFolder="$(ModBinFolder)" />
     <Copy SourceFiles="SubModule.xml" DestinationFolder="$(ModFolder)" />
     <MakeDir Directories="$(ModFolder)\GUI\PrefabExtensions" Condition="!Exists('$(ModFolder)\GUI\PrefabExtensions')" />
     <ItemGroup>
