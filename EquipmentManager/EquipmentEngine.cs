@@ -163,7 +163,15 @@ namespace EquipmentManager
                             }
                         }
                     }
-
+                    // D. Prevent selling unequipped upgrades / side-grades
+                    if (!shouldLock && item.HasArmorComponent)
+                    {
+                        if (EquipmentManagerProvider.IsUpgradeForAnyTarget(eqEl, heroesToProcess, settings))
+                        {
+                            shouldLock = true;
+                        }
+                    }
+                    
                     if (shouldLock)
                     {
                         itemVM.IsLocked = true;
@@ -275,6 +283,7 @@ namespace EquipmentManager
             }
 
             // 6. Refresh UI
+            vm.ExecuteRemoveZeroCounts();
             vm.RefreshValues();
             SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"=== Equipment Optimization Run completed (Total equipped: {equippedCount}, Total sold: {totalSold}) ===");
         }
@@ -651,6 +660,15 @@ namespace EquipmentManager
                     {
                         var currentWeapon = equipment[slot];
                         if (currentWeapon.IsEmpty || currentWeapon.Item == null || currentWeapon.Item.PrimaryWeapon == null) continue;
+
+                        // Ignore special stone throwing weapons in stealth loadout
+                        if (targetSide == InventoryLogic.InventorySide.StealthEquipment && 
+                            currentWeapon.Item.ItemType == ItemObject.ItemTypeEnum.Thrown && 
+                            (currentWeapon.Item.StringId.IndexOf("stone", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                             (currentWeapon.Item.Name != null && currentWeapon.Item.Name.ToString().IndexOf("stone", StringComparison.OrdinalIgnoreCase) >= 0)))
+                        {
+                            continue;
+                        }
 
                         ItemRosterElement? bestStrictUpgrade = null;
                         float bestStrictScore = -9999f;

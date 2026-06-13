@@ -340,7 +340,7 @@ namespace EquipmentManager
             return bestScore;
         }
 
-        private static bool IsUpgradeForAnyTarget(EquipmentElement eqEl, List<Hero> targets, Settings settings)
+        public static bool IsUpgradeForAnyTarget(EquipmentElement eqEl, List<Hero> targets, Settings settings)
         {
             var item = eqEl.Item;
             if (item == null || !item.HasArmorComponent) return false;
