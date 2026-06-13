@@ -483,6 +483,68 @@ namespace SettlementAutomationCore
             }
         }
 
+        private static readonly List<ProviderRegistration<IAutomationRequestProvider>> RequestProviders = new();
+        private static readonly List<AutomationRequest> CurrentRequests = new();
+
+        // --- Request Providers ---
+        public static void RegisterRequestProvider(IAutomationRequestProvider provider)
+        {
+            lock (RequestProviders)
+            {
+                if (!RequestProviders.Any(r => EqualityComparer<IAutomationRequestProvider>.Default.Equals(r.Provider, provider)))
+                {
+                    string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
+                    RequestProviders.Add(new ProviderRegistration<IAutomationRequestProvider>(provider, provider.ProviderName, callingAssembly));
+                }
+            }
+        }
+
+        public static void UnregisterRequestProvider(IAutomationRequestProvider provider)
+        {
+            lock (RequestProviders)
+            {
+                RequestProviders.RemoveAll(r => EqualityComparer<IAutomationRequestProvider>.Default.Equals(r.Provider, provider));
+            }
+        }
+
+        public static IReadOnlyList<ProviderRegistration<IAutomationRequestProvider>> ActiveRequestProviders
+        {
+            get
+            {
+                lock (RequestProviders)
+                {
+                    return new List<ProviderRegistration<IAutomationRequestProvider>>(RequestProviders);
+                }
+            }
+        }
+
+        public static void ClearRequests()
+        {
+            lock (CurrentRequests)
+            {
+                CurrentRequests.Clear();
+            }
+        }
+
+        public static void RegisterRequest(AutomationRequest request)
+        {
+            lock (CurrentRequests)
+            {
+                CurrentRequests.Add(request);
+            }
+        }
+
+        public static IReadOnlyList<AutomationRequest> ActiveRequests
+        {
+            get
+            {
+                lock (CurrentRequests)
+                {
+                    return new List<AutomationRequest>(CurrentRequests);
+                }
+            }
+        }
+
         public static IReadOnlyList<ProviderRegistration<ILogisticsGoalProvider>> ActiveGoalProviders
         {
             get
