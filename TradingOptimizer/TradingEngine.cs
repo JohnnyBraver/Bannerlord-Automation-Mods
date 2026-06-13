@@ -26,10 +26,18 @@ namespace TradingOptimizer
         }
     }
 
+    public class TradedItemInfo
+    {
+        public string Name { get; set; } = "";
+        public int Count { get; set; }
+        public int Gold { get; set; }
+        public float MarketPrice { get; set; } // 0 if not known
+    }
+
     public class TradeTransactionReport
     {
-        public List<(string Name, int Count, int Gold)> SoldItems { get; } = new List<(string, int, int)>();
-        public List<(string Name, int Count, int Gold)> BoughtItems { get; } = new List<(string, int, int)>();
+        public List<TradedItemInfo> SoldItems { get; } = new List<TradedItemInfo>();
+        public List<TradedItemInfo> BoughtItems { get; } = new List<TradedItemInfo>();
         public HashSet<string> SoldNormalItems { get; } = new HashSet<string>();
         public List<(EquipmentElement EqElement, int Amount)> ArbitrageSlaughters { get; } = new List<(EquipmentElement, int)>();
     }
@@ -297,7 +305,13 @@ namespace TradingOptimizer
 
                     if (sold > 0)
                     {
-                        report.SoldItems.Add((itemObj.Name.ToString(), sold, totalGoldGained));
+                        report.SoldItems.Add(new TradedItemInfo
+                        {
+                            Name = itemObj.Name.ToString(),
+                            Count = sold,
+                            Gold = totalGoldGained,
+                            MarketPrice = PricingService.GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement)
+                        });
                         if (!isLoot)
                         {
                             report.SoldNormalItems.Add(itemObj.Name.ToString());
@@ -483,14 +497,18 @@ namespace TradingOptimizer
                         }
                     }
 
-                    if (bestItem == null)
-                    {
-                        break;
-                    }
+                    if (bestItem == null) break;
 
                     var bestItemObj = bestItem.ItemRosterElement.EquipmentElement.Item;
-                    int price = logic != null ? logic.GetItemPrice(bestItem.ItemRosterElement.EquipmentElement, true) : bestItemObj.Value;
-                    float itemWeightVal = bestItemObj.Weight;
+                    int price = 0;
+                    if (logic != null)
+                    {
+                        price = logic.GetItemPrice(bestItem.ItemRosterElement.EquipmentElement, true);
+                    }
+                    else
+                    {
+                        price = bestItem.ItemCost;
+                    }
 
                     if (logic != null && Hero.MainHero != null)
                     {
@@ -510,47 +528,39 @@ namespace TradingOptimizer
                         bestItem.ExecuteBuySingle();
                     }
 
-                    boughtQuantities[bestItem]++;
-                    totalGoldSpentMap[bestItem] += price;
+                    boughtQuantities[bestItem] = (boughtQuantities.TryGetValue(bestItem, out int bq) ? bq : 0) + 1;
+                    totalGoldSpentMap[bestItem] = (totalGoldSpentMap.TryGetValue(bestItem, out int tg) ? tg : 0) + price;
                     currentBalance -= price;
-                    netWeightAdded += itemWeightVal;
+                    netWeightAdded += bestItemObj.Weight;
 
-                    float dbgAvg = 0f;
                     bool isBestItemBlackened = settings.BuyBlackenedStealthGear && 
                         (bestItemObj.Name != null && bestItemObj.Name.ToString().IndexOf("blackened", StringComparison.OrdinalIgnoreCase) >= 0);
-                    if (!isBestItemBlackened)
+
+                    float dbgAvg = 0f;
+                    if (settings.PricingReference == PricingReferenceMode.AlwaysGlobal)
                     {
-                        var refModeForDbg = settings.PricingReference;
-                        if (refModeForDbg == PricingReferenceMode.AlwaysGlobal)
-                        {
-                            dbgAvg = PricingService.GetWorldAveragePrice(bestItem.ItemRosterElement.EquipmentElement);
-                        }
-                        else if (refModeForDbg == PricingReferenceMode.AlwaysLocal)
+                        dbgAvg = PricingService.GetWorldAveragePrice(bestItem.ItemRosterElement.EquipmentElement);
+                    }
+                    else if (settings.PricingReference == PricingReferenceMode.AlwaysLocal)
+                    {
+                        if (logic != null)
                         {
                             dbgAvg = PricingService.GetLocalCategoryAveragePrice(logic, bestItem.ItemRosterElement.EquipmentElement);
                         }
-                        else // PerkBased
+                    }
+                    else
+                    {
+                        if (Hero.MainHero != null && Hero.MainHero.GetPerkValue(DefaultPerks.Trade.WholeSeller))
                         {
-                            if (hasTier1Perks && hasTier2Perks)
-                            {
-                                dbgAvg = PricingService.GetWorldAveragePrice(bestItem.ItemRosterElement.EquipmentElement);
-                            }
-                            else
+                            dbgAvg = PricingService.GetWorldAveragePrice(bestItem.ItemRosterElement.EquipmentElement);
+                        }
+                        else
+                        {
+                            if (logic != null)
                             {
                                 dbgAvg = PricingService.GetLocalCategoryAveragePrice(logic, bestItem.ItemRosterElement.EquipmentElement);
                             }
                         }
-                    }
-                    if (dbgAvg <= 0f) dbgAvg = bestItemObj.Value;
-
-                    float dbgRatio = dbgAvg > 0 ? (float)price / dbgAvg : 1f;
-                    if (isBestItemBlackened)
-                    {
-                        WriteLog($"[Buy Action] Blackened Stealth Item {bestItemObj.Name}: Price={price} -> BOUGHT 1");
-                    }
-                    else
-                    {
-                        WriteLog($"[Buy Action] {bestItemObj.Name}: Price={price}, ReferenceAvg={dbgAvg:F1} (Ratio={dbgRatio:P1}, Thresh={settings.BuyPriceThresholdFactor:P1}), Density={bestProfitDensity:F2} -> BOUGHT 1");
                     }
                 }
 
@@ -558,7 +568,13 @@ namespace TradingOptimizer
                 {
                     if (pair.Value > 0)
                     {
-                        report.BoughtItems.Add((pair.Key.ItemRosterElement.EquipmentElement.Item.Name.ToString(), pair.Value, totalGoldSpentMap[pair.Key]));
+                        report.BoughtItems.Add(new TradedItemInfo
+                        {
+                            Name = pair.Key.ItemRosterElement.EquipmentElement.Item.Name.ToString(),
+                            Count = pair.Value,
+                            Gold = totalGoldSpentMap[pair.Key],
+                            MarketPrice = PricingService.GetWorldAveragePrice(pair.Key.ItemRosterElement.EquipmentElement)
+                        });
                     }
                 }
             }

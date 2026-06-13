@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Module>
-  <Name value="Trading Optimizer" />
+  <Name value="Trade Optimizer" />
   <Id value="TradingOptimizer" />
   <Version value="v1.0.0" />
   <SingleplayerModule value="true" />

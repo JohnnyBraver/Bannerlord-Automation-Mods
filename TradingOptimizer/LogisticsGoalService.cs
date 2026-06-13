@@ -224,7 +224,13 @@ namespace TradingOptimizer
                                 boughtQuantities[food] = (boughtQuantities.TryGetValue(food, out int currentBVal) ? currentBVal : 0) + 1;
                                 currentBalance -= price;
                                 netWeightAdded += itemObj.Weight;
-                                report.BoughtItems.Add((itemObj.Name.ToString(), 1, price));
+                                report.BoughtItems.Add(new TradedItemInfo
+                                {
+                                    Name = itemObj.Name.ToString(),
+                                    Count = 1,
+                                    Gold = price,
+                                    MarketPrice = PricingService.GetWorldAveragePrice(food.ItemRosterElement.EquipmentElement)
+                                });
                                 needed--;
                             }
                         }
@@ -278,7 +284,13 @@ namespace TradingOptimizer
                                 boughtQuantities[food] = (boughtQuantities.TryGetValue(food, out int currentBVal) ? currentBVal : 0) + 1;
                                 currentBalance -= price;
                                 netWeightAdded += itemObj.Weight;
-                                report.BoughtItems.Add((itemObj.Name.ToString(), 1, price));
+                                report.BoughtItems.Add(new TradedItemInfo
+                                {
+                                    Name = itemObj.Name.ToString(),
+                                    Count = 1,
+                                    Gold = price,
+                                    MarketPrice = PricingService.GetWorldAveragePrice(food.ItemRosterElement.EquipmentElement)
+                                });
                             }
                         }
                     }
@@ -355,7 +367,13 @@ namespace TradingOptimizer
                             boughtQuantities[mount] = (boughtQuantities.TryGetValue(mount, out int currentBVal) ? currentBVal : 0) + 1;
                             currentBalance -= price;
                             netWeightAdded += itemObj.Weight;
-                            report.BoughtItems.Add((itemObj.Name.ToString(), 1, price));
+                            report.BoughtItems.Add(new TradedItemInfo
+                            {
+                                Name = itemObj.Name.ToString(),
+                                Count = 1,
+                                Gold = price,
+                                MarketPrice = PricingService.GetWorldAveragePrice(mount.ItemRosterElement.EquipmentElement)
+                            });
                             needed--;
                         }
                     }

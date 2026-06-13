@@ -5,6 +5,7 @@ using System.Text;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Inventory;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
@@ -37,7 +38,7 @@ namespace TradingOptimizer
                 if (settings != null && elapsedDays < settings.InitialSettlementDaysDelay)
                 {
                     InformationManager.DisplayMessage(new InformationMessage(
-                        $"[TradingOptimizer] Manual trade disabled during economy settling period (Day {elapsedDays:F1}/{settings.InitialSettlementDaysDelay})"
+                        $"[TradeOptimizer] Manual trade disabled during economy settling period (Day {elapsedDays:F1}/{settings.InitialSettlementDaysDelay})"
                     ));
                     return;
                 }
@@ -56,7 +57,7 @@ namespace TradingOptimizer
             }
             catch (Exception ex)
             {
-                InformationManager.DisplayMessage(new InformationMessage($"Trading Optimizer Error: {ex.Message}"));
+                InformationManager.DisplayMessage(new InformationMessage($"Trade Optimizer Error: {ex.Message}"));
             }
         }
 
@@ -68,39 +69,101 @@ namespace TradingOptimizer
 
             if (report.SoldItems.Count == 0 && report.BoughtItems.Count == 0)
             {
-                string noTradeMsg = $"{simPrefix}Trading Optimizer: Visited {traderName} - No profitable trades found.";
+                string noTradeMsg = $"{simPrefix}Trade Optimizer: Visited {traderName} - No profitable trades found.";
                 InformationManager.DisplayMessage(new InformationMessage(noTradeMsg));
                 TradingEngine.WriteLog(noTradeMsg);
                 return;
             }
 
-            string profitText = netProfit >= 0 ? $"+{netProfit}d" : $"{netProfit}d";
-            uint msgColor = netProfit >= 0 ? 0x40FF40FF : 0xFF4040FF; // Green or Red
-            string tradeVerb = isSim ? "WOULD trade with" : "Auto-traded with";
+            // Calculate premium and discount
+            double totalPremium = 0;
+            double totalDiscount = 0;
+            foreach (var s in report.SoldItems)
+            {
+                if (s.MarketPrice > 0)
+                {
+                    totalPremium += s.Gold - (s.MarketPrice * s.Count);
+                }
+            }
+            foreach (var b in report.BoughtItems)
+            {
+                if (b.MarketPrice > 0)
+                {
+                    totalDiscount += (b.MarketPrice * b.Count) - b.Gold;
+                }
+            }
+            double totalAdvantage = totalPremium + totalDiscount;
 
-            string headerMsg = $"{simPrefix}Trading Optimizer: {tradeVerb} {traderName}! Profit: {profitText}";
-            InformationManager.DisplayMessage(new InformationMessage(
-                headerMsg,
-                Color.FromUint(msgColor)
-            ));
-            TradingEngine.WriteLog(headerMsg);
+            // Determine accuracy level from settings and trade perks
+            bool hasTier1 = false;
+            bool hasTier2 = false;
+            if (Hero.MainHero != null)
+            {
+                try
+                {
+                    var defaultPerksType = typeof(PerkObject).Assembly.GetType("TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks");
+                    var tradeType = defaultPerksType?.GetNestedType("Trade", BindingFlags.Public | BindingFlags.NonPublic);
+                    if (tradeType != null)
+                    {
+                        var appraiserProp = tradeType.GetProperty("Appraiser", BindingFlags.Public | BindingFlags.Static);
+                        var wholesellerProp = tradeType.GetProperty("WholeSeller", BindingFlags.Public | BindingFlags.Static);
+                        var caravanProp = tradeType.GetProperty("CaravanMaster", BindingFlags.Public | BindingFlags.Static);
+                        var marketProp = tradeType.GetProperty("MarketDealer", BindingFlags.Public | BindingFlags.Static);
+
+                        var appraiserPerk = appraiserProp?.GetValue(null) as PerkObject;
+                        var wholesellerPerk = wholesellerProp?.GetValue(null) as PerkObject;
+                        var caravanPerk = caravanProp?.GetValue(null) as PerkObject;
+                        var marketPerk = marketProp?.GetValue(null) as PerkObject;
+
+                        if (appraiserPerk != null && Hero.MainHero.GetPerkValue(appraiserPerk)) hasTier1 = true;
+                        if (wholesellerPerk != null && Hero.MainHero.GetPerkValue(wholesellerPerk)) hasTier1 = true;
+                        if (caravanPerk != null && Hero.MainHero.GetPerkValue(caravanPerk)) hasTier2 = true;
+                        if (marketPerk != null && Hero.MainHero.GetPerkValue(marketPerk)) hasTier2 = true;
+                    }
+                }
+                catch { }
+            }
+
+            var settings = Settings.Instance;
+            bool alwaysGlobal = settings?.PricingReference == PricingReferenceMode.AlwaysGlobal;
+            bool alwaysLocal = settings?.PricingReference == PricingReferenceMode.AlwaysLocal;
+
+            bool exactMode = alwaysGlobal || (hasTier1 && hasTier2);
+            bool estimateMode = alwaysLocal || hasTier1;
+
+            double totalTradedValue = report.SoldItems.Sum(s => s.Gold) + report.BoughtItems.Sum(b => b.Gold);
+            double pctAdvantage = totalTradedValue > 0 ? (totalAdvantage / totalTradedValue) * 100 : 0;
+
+            string profitText = netProfit >= 0 ? $"+{netProfit}d" : $"{netProfit}d";
+            string headlineMsg;
+            if (totalAdvantage > 0)
+            {
+                string advantageStr = exactMode ? $"+{(int)Math.Round(pctAdvantage)}% (+{(int)Math.Round(totalAdvantage)}d)" : $"~{(int)Math.Round(pctAdvantage)}%";
+                headlineMsg = $"{simPrefix}Trade Optimizer: {traderName}! Net Gold: {profitText} | Market Advantage: {advantageStr}";
+            }
+            else
+            {
+                headlineMsg = $"{simPrefix}Trade Optimizer: {traderName}! Net Gold: {profitText}";
+            }
+
+            uint msgColor = netProfit >= 0 ? 0x40FF40FF : 0xFF4040FF; // Green or Red
+            InformationManager.DisplayMessage(new InformationMessage(headlineMsg, Color.FromUint(msgColor)));
+            TradingEngine.WriteLog(headlineMsg);
 
             if (report.SoldItems.Count > 0)
             {
-                string wouldSell = isSim ? "Would sell: " : "  Sold: ";
-                var sb = new StringBuilder(wouldSell);
-                sb.Append(string.Join(", ", report.SoldItems.Select(s => $"{s.Count} {s.Name} (+{s.Gold}d)")));
-                string msg = sb.ToString();
+                string label = isSim ? "Would sell: " : "  Sold: ";
+                var itemsList = report.SoldItems.Select(s => $"{s.Count}x {s.Name} (+{s.Gold}d)");
+                string msg = label + string.Join(", ", itemsList);
                 InformationManager.DisplayMessage(new InformationMessage(msg));
                 TradingEngine.WriteLog("  " + msg.Trim());
             }
 
             if (report.BoughtItems.Count > 0)
             {
-                string wouldBuy = isSim ? "Would buy:  " : "  Bought: ";
-                var sb = new StringBuilder(wouldBuy);
-                sb.Append(string.Join(", ", report.BoughtItems.Select(b => $"{b.Count} {b.Name} (-{b.Gold}d)")));
-                string msg = sb.ToString();
+                string label = isSim ? "Would buy:  " : "  Bought: ";
+                var itemsList = report.BoughtItems.Select(b => $"{b.Count}x {b.Name} (-{b.Gold}d)");
+                string msg = label + string.Join(", ", itemsList);
                 InformationManager.DisplayMessage(new InformationMessage(msg));
                 TradingEngine.WriteLog("  " + msg.Trim());
             }

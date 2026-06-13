@@ -15,7 +15,37 @@ namespace TradingOptimizer
     {
         public string ProviderName => "TradingOptimizer";
 
-        private List<TradeOrder> SimulateAndCollectOrders(MobileParty party, Settlement settlement, bool runSell, bool runBuy, HashSet<string>? excludedItems = null)
+        private static Settlement? _currentTradeSettlement = null;
+        private static int _initialGold = 0;
+        private static TradeTransactionReport? _accumulatedReport = null;
+
+        public TradingOptimizerProvider()
+        {
+            SettlementAutomationCore.SubModule.OnAutomationCycleCompleted += OnAutomationCycleCompleted;
+        }
+
+        private void OnAutomationCycleCompleted(Settlement settlement)
+        {
+            try
+            {
+                if (_currentTradeSettlement == settlement && _accumulatedReport != null)
+                {
+                    int finalGold = Hero.MainHero?.Gold ?? 0;
+                    TradingPatches.PrintTradeReport(finalGold, _initialGold, _accumulatedReport, settlement.Name.ToString());
+                }
+            }
+            catch (Exception ex)
+            {
+                TradingEngine.WriteLog($"Error printing final trade report: {ex}");
+            }
+            finally
+            {
+                _currentTradeSettlement = null;
+                _accumulatedReport = null;
+            }
+        }
+
+        private List<TradeOrder> SimulateAndCollectOrders(MobileParty party, Settlement settlement, bool runSell, bool runBuy, HashSet<string>? excludedItems = null, bool isMainCall = true)
         {
             var orders = new List<TradeOrder>();
             var settings = Settings.Instance;
@@ -133,13 +163,70 @@ namespace TradingOptimizer
                 orders.Add(new TradeOrder(slaughter.EqElement, slaughter.Amount, false, true));
             }
 
-            // Print summary to in-game logs if not simulation mode (or even if simulation mode, depending on user settings)
-            if (orders.Count > 0 && Hero.MainHero != null)
+            // Accumulate transaction report for final printing
+            if (isMainCall && orders.Count > 0 && Hero.MainHero != null)
             {
-                int initialGold = Hero.MainHero.Gold;
-                int netGoldChange = report.SoldItems.Sum(s => s.Gold) - report.BoughtItems.Sum(b => b.Gold);
-                int projectedFinalGold = initialGold + netGoldChange;
-                TradingPatches.PrintTradeReport(projectedFinalGold, initialGold, report, settlement.Name.ToString());
+                if (_currentTradeSettlement != settlement)
+                {
+                    _currentTradeSettlement = settlement;
+                    _initialGold = Hero.MainHero.Gold;
+                    _accumulatedReport = new TradeTransactionReport();
+                }
+
+                if (_accumulatedReport != null)
+                {
+                    // Merge sold items
+                    foreach (var s in report.SoldItems)
+                    {
+                        int existingIdx = _accumulatedReport.SoldItems.FindIndex(x => x.Name == s.Name);
+                        if (existingIdx >= 0)
+                        {
+                            var old = _accumulatedReport.SoldItems[existingIdx];
+                            old.Count += s.Count;
+                            old.Gold += s.Gold;
+                            if (s.MarketPrice > 0) old.MarketPrice = s.MarketPrice;
+                        }
+                        else
+                        {
+                            _accumulatedReport.SoldItems.Add(new TradedItemInfo
+                            {
+                                Name = s.Name,
+                                Count = s.Count,
+                                Gold = s.Gold,
+                                MarketPrice = s.MarketPrice
+                            });
+                        }
+                    }
+
+                    // Merge bought items
+                    foreach (var b in report.BoughtItems)
+                    {
+                        int existingIdx = _accumulatedReport.BoughtItems.FindIndex(x => x.Name == b.Name);
+                        if (existingIdx >= 0)
+                        {
+                            var old = _accumulatedReport.BoughtItems[existingIdx];
+                            old.Count += b.Count;
+                            old.Gold += b.Gold;
+                            if (b.MarketPrice > 0) old.MarketPrice = b.MarketPrice;
+                        }
+                        else
+                        {
+                            _accumulatedReport.BoughtItems.Add(new TradedItemInfo
+                            {
+                                Name = b.Name,
+                                Count = b.Count,
+                                Gold = b.Gold,
+                                MarketPrice = b.MarketPrice
+                            });
+                        }
+                    }
+
+                    // Merge arbitrage slaughters
+                    foreach (var s in report.ArbitrageSlaughters)
+                    {
+                        _accumulatedReport.ArbitrageSlaughters.Add(s);
+                    }
+                }
             }
 
             return orders;
@@ -152,7 +239,7 @@ namespace TradingOptimizer
             {
                 return new List<TradeOrder>();
             }
-            return SimulateAndCollectOrders(party, settlement, runSell: true, runBuy: false);
+            return SimulateAndCollectOrders(party, settlement, runSell: true, runBuy: false, isMainCall: true);
         }
 
         public List<TradeOrder> GetMainOrders(MobileParty party, Settlement settlement, InventoryLogic currentLogic)
@@ -162,14 +249,14 @@ namespace TradingOptimizer
 
             if (settings.ShouldSplitTransactions)
             {
-                var preSellOrders = SimulateAndCollectOrders(party, settlement, runSell: true, runBuy: false);
+                var preSellOrders = SimulateAndCollectOrders(party, settlement, runSell: true, runBuy: false, isMainCall: false);
                 var excluded = new HashSet<string>(preSellOrders.Where(o => !o.IsBuy).Select(o => o.EquipmentElement.Item.Name.ToString()));
 
-                return SimulateAndCollectOrders(party, settlement, runSell: false, runBuy: true, excludedItems: excluded);
+                return SimulateAndCollectOrders(party, settlement, runSell: false, runBuy: true, excludedItems: excluded, isMainCall: true);
             }
             else
             {
-                return SimulateAndCollectOrders(party, settlement, runSell: true, runBuy: true);
+                return SimulateAndCollectOrders(party, settlement, runSell: true, runBuy: true, isMainCall: true);
             }
         }
 
