@@ -71,6 +71,12 @@ namespace SettlementAutomationCore.Helpers
             {
                 var logic = new InventoryLogic(party, Hero.MainHero.CharacterObject, settlement.Party);
 
+                // TransactionDebt's setter always invokes TotalAmountChange. When no SPInventoryVM is
+                // attached (automation path), this delegate is null → NullReferenceException inside
+                // AddTransferCommand, silently swallowed, leaving TransactionDebt = 0 permanently.
+                // That means DoneLogic hands over 0 gold and sees 0 profit for XP calculations.
+                logic.TotalAmountChange = _ => { };
+
                 var initMethod = typeof(InventoryLogic).GetMethods()
                     .FirstOrDefault(m => m.Name == "Initialize" && m.GetParameters().Length == 13);
 
