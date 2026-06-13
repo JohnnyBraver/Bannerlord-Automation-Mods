@@ -31,7 +31,14 @@ namespace TradingOptimizer
                 if (_currentTradeSettlement == settlement && _accumulatedReport != null)
                 {
                     int finalGold = Hero.MainHero?.Gold ?? 0;
+                    bool anythingTraded = _accumulatedReport.SoldItems.Count > 0 || _accumulatedReport.BoughtItems.Count > 0;
                     TradingPatches.PrintTradeReport(finalGold, _initialGold, _accumulatedReport, settlement.Name.ToString());
+                    // Print cargo only after ALL phases have completed so the weight is accurate
+                    if (anythingTraded)
+                    {
+                        bool isSim = Settings.Instance?.SimulationMode ?? false;
+                        TradingPatches.PrintCargoStatus(isSim);
+                    }
                 }
             }
             catch (Exception ex)

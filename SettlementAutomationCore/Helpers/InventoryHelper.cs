@@ -13,12 +13,14 @@ namespace SettlementAutomationCore.Helpers
     public class AutomationInventoryListener : InventoryListener
     {
         private readonly Settlement _settlement;
+        private int _initialGold;
         private int _gold;
 
         public AutomationInventoryListener(Settlement settlement)
         {
             _settlement = settlement;
-            _gold = settlement.Town?.Gold ?? settlement.Village?.Bound?.Town?.Gold ?? 50000;
+            _initialGold = settlement.Town?.Gold ?? settlement.Village?.Bound?.Town?.Gold ?? 50000;
+            _gold = _initialGold;
         }
 
         public override int GetGold()
@@ -33,7 +35,14 @@ namespace SettlementAutomationCore.Helpers
 
         public override void SetGold(int gold)
         {
+            // Apply the delta to the real settlement so town gold actually changes in-game
+            int delta = gold - _gold;
             _gold = gold;
+            var component = _settlement.Town ?? _settlement.Village?.Bound?.Town;
+            if (component != null && delta != 0)
+            {
+                component.ChangeGold(delta);
+            }
         }
 
         public override PartyBase GetOppositeParty()
@@ -61,11 +70,6 @@ namespace SettlementAutomationCore.Helpers
             try
             {
                 var logic = new InventoryLogic(party, Hero.MainHero.CharacterObject, settlement.Party);
-
-                // Set private InventoryListener property via reflection to avoid NullReferenceException in DoneLogic
-                var listener = new AutomationInventoryListener(settlement);
-                var listenerProp = typeof(InventoryLogic).GetProperty("InventoryListener", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                listenerProp?.SetValue(logic, listener);
 
                 var initMethod = typeof(InventoryLogic).GetMethods()
                     .FirstOrDefault(m => m.Name == "Initialize" && m.GetParameters().Length == 13);
@@ -102,6 +106,13 @@ namespace SettlementAutomationCore.Helpers
                     null!, // leftMemberRoster
                     null! // otherSideCapacityData
                 });
+
+                // IMPORTANT: Set our custom listener AFTER Initialize() to prevent it from being
+                // overwritten by Initialize()'s internal 'InventoryListener = new FakeInventoryListener()' call.
+                // This ensures gold and XP are properly tracked and applied on DoneLogic().
+                var listener = new AutomationInventoryListener(settlement);
+                var listenerProp = typeof(InventoryLogic).GetProperty("InventoryListener", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                listenerProp?.SetValue(logic, listener);
 
                 return logic;
             }
