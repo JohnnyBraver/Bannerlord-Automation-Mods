@@ -525,7 +525,7 @@ namespace SettlementAutomationCore
         {
             lock (TradeProviders)
             {
-                return TradeProviders.Any(p => p.ProviderName == "TradingOptimizer" || p.ProviderName == "TradeOptimizer");
+                return TradeProviders.Any(p => p.ProviderName == "TradeOptimizer");
             }
         }
     }

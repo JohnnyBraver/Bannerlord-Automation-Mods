@@ -1,10 +1,10 @@
 [size=4][b]Description[/b][/size]
-[size=3][color=#D4D4D8]Trading Optimizer is an automated trade engine. It automatically buys and sells commodities when you enter settlements, executing profitable transactions based on average prices. It also satisfies party logistics goals (variety food, mount upgrades) while respecting market price thresholds.[/color][/size]
+[size=3][color=#D4D4D8]Trade Optimizer is an automated trade engine. It automatically buys and sells commodities when you enter settlements, executing profitable transactions based on average prices. It also satisfies party logistics goals (variety food, mount upgrades) while respecting market price thresholds.[/color][/size]
 
 [size=4][b]Installation instructions[/b][/size]
 [size=3][color=#D4D4D8]1. Extract the downloaded archive into your Mount & Blade II Bannerlord game directory (inside the Modules folder).
-2. Ensure the "TradingOptimizer" folder is present under Modules.
-3. Enable "Trading Optimizer" in the game launcher.[/color][/size]
+2. Ensure the "TradeOptimizer" folder is present under Modules.
+3. Enable "Trade Optimizer" in the game launcher.[/color][/size]
 
 [size=4][b]Main features[/b][/size]
 [size=3][color=#D4D4D8]- Auto-Trade on Entry: Seamless trade execution whenever entering town/village gates.
