@@ -84,7 +84,8 @@ namespace TradeOptimizer
             if (game.GameType is Campaign)
             {
                 _provider = new TradeOptimizerProvider();
-                AutomationRegistry.RegisterTradeProvider(_provider);
+                AutomationRegistry.RegisterPreSellProvider(_provider);
+                AutomationRegistry.RegisterFreeTradeAnalyzer(_provider);
             }
         }
 
@@ -93,7 +94,8 @@ namespace TradeOptimizer
             base.OnGameEnd(game);
             if (_provider != null)
             {
-                AutomationRegistry.UnregisterTradeProvider(_provider);
+                AutomationRegistry.UnregisterPreSellProvider(_provider);
+                AutomationRegistry.UnregisterFreeTradeAnalyzer(_provider);
                 _provider = null;
             }
         }

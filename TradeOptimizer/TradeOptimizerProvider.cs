@@ -11,7 +11,7 @@ using SettlementAutomationCore;
 
 namespace TradeOptimizer
 {
-    public class TradeOptimizerProvider : ITradeOrderProvider
+    public class TradeOptimizerProvider : IPreSellProvider, IFreeTradeAnalyzer
     {
         public string ProviderName => "TradeOptimizer";
 
@@ -256,6 +256,7 @@ namespace TradeOptimizer
             return orders;
         }
 
+        // IPreSellProvider: handles XP-farm split transaction selling (pre-sell phase)
         public List<TradeOrder> GetPreSellOrders(MobileParty party, Settlement settlement)
         {
             var settings = Settings.Instance;
@@ -266,23 +267,174 @@ namespace TradeOptimizer
             return SimulateAndCollectOrders(party, settlement, runSell: true, runBuy: false, isMainCall: true);
         }
 
-        public List<TradeOrder> GetMainOrders(MobileParty party, Settlement settlement, InventoryLogic currentLogic)
+        // IFreeTradeAnalyzer: analyzes market and returns a TradeProposal within the given context limits
+        public TradeProposal AnalyzeMarket(TradeContext context)
         {
+            var actions = new List<TradeAction>();
             var settings = Settings.Instance;
-            if (settings == null) return new List<TradeOrder>();
+            if (settings == null || !settings.AutoTradeOnEnterSettlement)
+                return new TradeProposal(actions);
 
-            if (settings.ShouldSplitTransactions)
-            {
-                var preSellOrders = SimulateAndCollectOrders(party, settlement, runSell: true, runBuy: false, isMainCall: false);
-                var excluded = new HashSet<string>(preSellOrders.Where(o => !o.IsBuy).Select(o => o.EquipmentElement.Item.Name.ToString()));
+            var party = context.Party;
+            var settlement = context.Settlement;
 
-                return SimulateAndCollectOrders(party, settlement, runSell: false, runBuy: true, excludedItems: excluded, isMainCall: true);
-            }
-            else
+            // Check settling period
+            float elapsedDays = Campaign.Current.Models.CampaignTimeModel.CampaignStartTime.ElapsedDaysUntilNow;
+            if (elapsedDays < settings.InitialSettlementDaysDelay)
             {
-                return SimulateAndCollectOrders(party, settlement, runSell: true, runBuy: true, isMainCall: true);
+                TradingEngine.WriteLog($"[Settling Period] Skipped free trade for {settlement.Name} (Day {elapsedDays:F1} < Limit {settings.InitialSettlementDaysDelay})");
+                return new TradeProposal(actions);
             }
+
+            // Build a synthetic sellable map for TradingEngine to use (from context.SellableItems)
+            // The TradingEngine uses the InventoryLogic in context for price queries
+            // We simulate with rostert backups, but pass context limits to RunOptimization
+            var backupPlayerRoster = new TaleWorlds.CampaignSystem.Roster.ItemRoster(party.ItemRoster);
+            var backupSettlementRoster = new TaleWorlds.CampaignSystem.Roster.ItemRoster(settlement.ItemRoster);
+
+            try
+            {
+                var tempLogic = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(party, settlement, false);
+                if (tempLogic == null) return new TradeProposal(actions);
+
+                Func<TaleWorlds.Core.WeaponComponentData, TaleWorlds.Core.ItemObject.ItemUsageSetFlags> dummyFunc = w => (TaleWorlds.Core.ItemObject.ItemUsageSetFlags)0;
+                var vm = new SPInventoryVM(tempLogic, false, dummyFunc);
+
+                // Capture initial counts
+                var initialPlayerCounts = new Dictionary<string, int>();
+                var eqElementMap = new Dictionary<string, EquipmentElement>();
+                var playerElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+                for (int i = 0; i < playerElements.Count; i++)
+                {
+                    var el = playerElements[i];
+                    if (el.EquipmentElement.Item != null)
+                    {
+                        string key = el.EquipmentElement.Item.StringId;
+                        initialPlayerCounts[key] = initialPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
+                        eqElementMap[key] = el.EquipmentElement;
+                    }
+                }
+                var otherElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
+                for (int i = 0; i < otherElements.Count; i++)
+                {
+                    var el = otherElements[i];
+                    if (el.EquipmentElement.Item != null)
+                        eqElementMap[el.EquipmentElement.Item.StringId] = el.EquipmentElement;
+                }
+
+                // If split transactions, for free trade we only run buy phase (sell was handled in pre-sell)
+                bool runSell = !settings.ShouldSplitTransactions;
+                bool runBuy = true;
+
+                HashSet<string>? excludedSellItems = null;
+                if (settings.ShouldSplitTransactions)
+                {
+                    // Pre-sell already handled the sell phase; exclude those items
+                    var preSellOrders = SimulateAndCollectOrders(party, settlement, runSell: true, runBuy: false, isMainCall: false);
+                    excludedSellItems = new HashSet<string>(preSellOrders.Where(o => !o.IsBuy).Select(o => o.EquipmentElement.Item?.Name.ToString() ?? ""));
+                }
+
+                var report = TradingEngine.RunOptimization(vm, runSell, runBuy, excludedSellItems, context);
+
+                // Compute net changes
+                var finalPlayerCounts = new Dictionary<string, int>();
+                var finalPlayerElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+                for (int i = 0; i < finalPlayerElements.Count; i++)
+                {
+                    var el = finalPlayerElements[i];
+                    if (el.EquipmentElement.Item != null)
+                    {
+                        string key = el.EquipmentElement.Item.StringId;
+                        finalPlayerCounts[key] = finalPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
+                        if (!eqElementMap.ContainsKey(key))
+                            eqElementMap[key] = el.EquipmentElement;
+                    }
+                }
+
+                // Adjust for slaughter yields
+                foreach (var slaughter in report.ArbitrageSlaughters)
+                {
+                    var item = slaughter.EqElement.Item;
+                    if (item?.HorseComponent != null)
+                    {
+                        int meatYield = item.HorseComponent.MeatCount * slaughter.Amount;
+                        int hidesYield = item.HorseComponent.HideCount * slaughter.Amount;
+                        string meatId = DefaultItems.Meat.StringId;
+                        string hidesId = DefaultItems.Hides.StringId;
+                        if (meatYield > 0 && finalPlayerCounts.ContainsKey(meatId))
+                            finalPlayerCounts[meatId] = Math.Max(0, finalPlayerCounts[meatId] - meatYield);
+                        if (hidesYield > 0 && finalPlayerCounts.ContainsKey(hidesId))
+                            finalPlayerCounts[hidesId] = Math.Max(0, finalPlayerCounts[hidesId] - hidesYield);
+                    }
+                }
+
+                var allKeys = initialPlayerCounts.Keys.Union(finalPlayerCounts.Keys).Distinct();
+                foreach (var key in allKeys)
+                {
+                    if (!eqElementMap.ContainsKey(key)) continue;
+                    int initialCount = initialPlayerCounts.TryGetValue(key, out int c1) ? c1 : 0;
+                    int finalCount = finalPlayerCounts.TryGetValue(key, out int c2) ? c2 : 0;
+                    int diff = finalCount - initialCount;
+
+                    if (diff > 0)
+                    {
+                        actions.Add(new TradeAction(eqElementMap[key], diff, TradeActionType.Buy));
+                    }
+                    else if (diff < 0)
+                    {
+                        // Only propose sell if item is in context's sellable list
+                        var sellable = context.SellableItems.FirstOrDefault(s => s.EquipmentElement.Item?.StringId == key);
+                        int sellQty = Math.Min(-diff, sellable?.AvailableQuantity ?? 0);
+                        if (sellQty > 0)
+                            actions.Add(new TradeAction(eqElementMap[key], sellQty, TradeActionType.Sell));
+                    }
+                }
+
+                // Append slaughter actions
+                foreach (var slaughter in report.ArbitrageSlaughters)
+                {
+                    actions.Add(new TradeAction(slaughter.EqElement, slaughter.Amount, TradeActionType.Buy));
+                    actions.Add(new TradeAction(slaughter.EqElement, slaughter.Amount, TradeActionType.Slaughter));
+                }
+
+                // Accumulate report for final printing
+                if (report.SoldItems.Count > 0 || report.BoughtItems.Count > 0)
+                {
+                    if (_currentTradeSettlement != settlement && Hero.MainHero != null)
+                    {
+                        _currentTradeSettlement = settlement;
+                        _initialGold = Hero.MainHero.Gold;
+                        _accumulatedReport = new TradeTransactionReport();
+                    }
+
+                    if (_accumulatedReport != null)
+                    {
+                        foreach (var s in report.SoldItems)
+                        {
+                            int existingIdx = _accumulatedReport.SoldItems.FindIndex(x => x.Name == s.Name);
+                            if (existingIdx >= 0) { _accumulatedReport.SoldItems[existingIdx].Count += s.Count; _accumulatedReport.SoldItems[existingIdx].Gold += s.Gold; }
+                            else _accumulatedReport.SoldItems.Add(new TradedItemInfo { Name = s.Name, Count = s.Count, Gold = s.Gold, MarketPrice = s.MarketPrice });
+                        }
+                        foreach (var b in report.BoughtItems)
+                        {
+                            int existingIdx = _accumulatedReport.BoughtItems.FindIndex(x => x.Name == b.Name);
+                            if (existingIdx >= 0) { _accumulatedReport.BoughtItems[existingIdx].Count += b.Count; _accumulatedReport.BoughtItems[existingIdx].Gold += b.Gold; }
+                            else _accumulatedReport.BoughtItems.Add(new TradedItemInfo { Name = b.Name, Count = b.Count, Gold = b.Gold, MarketPrice = b.MarketPrice });
+                        }
+                        foreach (var sl in report.ArbitrageSlaughters)
+                            _accumulatedReport.ArbitrageSlaughters.Add(sl);
+                    }
+                }
+            }
+            finally
+            {
+                party.ItemRoster.Clear();
+                party.ItemRoster.Add(backupPlayerRoster);
+                settlement.ItemRoster.Clear();
+                settlement.ItemRoster.Add(backupSettlementRoster);
+            }
+
+            return new TradeProposal(actions);
         }
-
     }
 }

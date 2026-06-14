@@ -50,7 +50,7 @@ namespace TradeOptimizer
             SettlementAutomationCore.Helpers.Logger.WriteLog("TradeOptimizer", message);
         }
 
-        public static TradeTransactionReport RunOptimization(SPInventoryVM vm, bool isSellPhase, bool isBuyPhase, HashSet<string>? excludedItems = null)
+        public static TradeTransactionReport RunOptimization(SPInventoryVM vm, bool isSellPhase, bool isBuyPhase, HashSet<string>? excludedItems = null, SettlementAutomationCore.TradeContext? tradeContext = null)
         {
             var report = new TradeTransactionReport();
             if (vm == null) return report;
@@ -65,7 +65,11 @@ namespace TradeOptimizer
             int partySize = MobileParty.MainParty?.MemberRoster?.TotalManCount ?? 1;
             float netWeightAdded = 0f;
 
-            int currentBalance = (Hero.MainHero?.Gold ?? 0) + (logic != null ? logic.TotalAmount : 0);
+            // When a TradeContext is provided, use its pre-computed limits instead of re-deriving them.
+            // The Core has already accounted for reservations and budget reserves.
+            int currentBalance = tradeContext != null
+                ? tradeContext.AvailableGold
+                : (Hero.MainHero?.Gold ?? 0) + (logic != null ? logic.TotalAmount : 0);
             WriteLog($"Initial Balance: {currentBalance} (Hero Gold: {Hero.MainHero?.Gold ?? 0}, Logic TotalAmount: {logic?.TotalAmount ?? 0})");
 
             // Query perks once at the start
@@ -140,9 +144,14 @@ namespace TradeOptimizer
                         if (mode == TradingMode.None || mode == TradingMode.BuyOnly) continue;
                     }
 
-                    int minToKeep = LogisticsGoalService.GetMinToKeepForLogistics(itemObj, logic);
-
-                    int maxSellable = item.ItemCount - minToKeep;
+                    // Reservations are now enforced by the Core via ItemReservation; here we sell the full available quantity.
+                    // When a context is provided, SellableItems already have reservations applied.
+                    int maxSellable = item.ItemCount;
+                    if (tradeContext != null)
+                    {
+                        var sellableEntry = tradeContext.SellableItems.FirstOrDefault(s => s.EquipmentElement.Item?.StringId == itemObj.StringId);
+                        maxSellable = sellableEntry?.AvailableQuantity ?? 0;
+                    }
                     if (maxSellable <= 0) continue;
 
                     int sold = 0;
@@ -258,7 +267,7 @@ namespace TradeOptimizer
                                 else // Balanced
                                 {
                                     float capacity = MobileParty.MainParty?.InventoryCapacity ?? 0f;
-                                    float currentWeight = LogisticsGoalService.GetRosterWeight(MobileParty.MainParty?.ItemRoster) + netWeightAdded;
+                                    float currentWeight = SettlementAutomationCore.Helpers.InventoryHelper.GetRosterWeight(MobileParty.MainParty?.ItemRoster) + netWeightAdded;
                                     bool isCargoFull = capacity > 0f && (currentWeight / capacity) >= 0.80f;
                                     if (!isCargoFull)
                                     {
@@ -337,9 +346,8 @@ namespace TradeOptimizer
                 }
 
                 // (Slaughter Arbitrage Sub-Phase removed to simplify purchase loop)
-
-                // Satisfy logistics goals (e.g. food restocking, speed mounts) before starting standard trade arbitrage
-                LogisticsGoalService.SatisfyLogisticsGoals(vm, logic, boughtQuantities, ref currentBalance, ref netWeightAdded, report, localExcludedItems);
+                // Logistics goals (food restocking, speed mounts) are now handled by the Core's AutomationRequest
+                // pipeline. The free-trade phase only maximizes profit arbitrage.
 
                 while (true)
                 {
@@ -398,13 +406,18 @@ namespace TradeOptimizer
                             }
                         }
 
-                        if (skipReason == "" && settings.LimitToInventoryCapacity && MobileParty.MainParty != null)
+                        if (skipReason == "" && MobileParty.MainParty != null)
                         {
-                            float currentWeight = LogisticsGoalService.GetRosterWeight(MobileParty.MainParty.ItemRoster);
-                            float projectedWeight = currentWeight + netWeightAdded;
-                            if (projectedWeight + itemWeight >= MobileParty.MainParty.InventoryCapacity)
+                            bool shouldEnforceCargo = tradeContext != null ? tradeContext.EnforceCargoLimit : settings.LimitToInventoryCapacity;
+                            if (shouldEnforceCargo)
                             {
-                                skipReason = "Overburdened";
+                                float freeCargo = tradeContext != null
+                                    ? tradeContext.FreeCargoCapacity - netWeightAdded
+                                    : MobileParty.MainParty.InventoryCapacity - SettlementAutomationCore.Helpers.InventoryHelper.GetRosterWeight(MobileParty.MainParty.ItemRoster) - netWeightAdded;
+                                if (freeCargo < itemWeight)
+                                {
+                                    skipReason = "Overburdened";
+                                }
                             }
                         }
                         if (skipReason == "" && !isBlackenedStealthItem && currentlyOwned >= settings.MaxStackSizeToBuy)
@@ -415,12 +428,17 @@ namespace TradeOptimizer
                         {
                             skipReason = $"StackValueLimitExceeded (value={currentlyOwned * currentPrice}, max={settings.MaxStackValueToBuy})";
                         }
-                        int dailyWage = MobileParty.MainParty?.TotalWage ?? 0;
-                        int expenseReserve = dailyWage * settings.MinDaysExpensesToKeep;
-                        int minRequiredBalance = Math.Max(settings.MinimumGoldReserve, expenseReserve);
-                        if (skipReason == "" && currentBalance - currentPrice < minRequiredBalance)
+                        // When a TradeContext is provided, AvailableGold is already net of reserves (the Core computed it).
+                        // For standalone use (simulation), derive the reserve from local settings.
+                        if (skipReason == "" && tradeContext == null)
                         {
-                            skipReason = $"BudgetProtectionActive (projectedBalance={currentBalance - currentPrice}, required={minRequiredBalance})";
+                            int dailyWage = MobileParty.MainParty?.TotalWage ?? 0;
+                            int expenseReserve = dailyWage * settings.MinDaysExpensesToKeep;
+                            int minRequiredBalance = Math.Max(settings.MinimumGoldReserve, expenseReserve);
+                            if (currentBalance - currentPrice < minRequiredBalance)
+                            {
+                                skipReason = $"BudgetProtectionActive (projectedBalance={currentBalance - currentPrice}, required={minRequiredBalance})";
+                            }
                         }
                         if (skipReason == "" && itemObj.Name != null && localExcludedItems.Contains(itemObj.Name.ToString()))
                         {
