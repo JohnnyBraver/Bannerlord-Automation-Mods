@@ -9,28 +9,21 @@
     <AssemblyVersion>3.0.0.0</AssemblyVersion>
     <FileVersion>3.0.0.0</FileVersion>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Lib.Harmony" Version="2.3.3" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />
-    <Reference Include="Bannerlord.UIExtenderEx">
-      <HintPath>E:\SteamLibrary\steamapps\workshop\content\261550\2859222409\bin\Win64_Shipping_Client\Bannerlord.UIExtenderEx.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="MCMv5">
       <HintPath>E:\SteamLibrary\steamapps\workshop\content\261550\2859238197\bin\Win64_Shipping_Client\MCMv5.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\Newtonsoft.Json.dll</HintPath>
       <Private>False</Private>
     </Reference>
   </ItemGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\SettlementAutomationCore\SettlementAutomationCore.csproj" />
+    <ProjectReference Include="..\SettlementAutomationCore\SettlementAutomationCore.csproj">
+      <Private>False</Private>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>
@@ -72,7 +65,7 @@
     </Reference>
   </ItemGroup>
 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(SkipBannerlordModuleCopy)' != 'true'">
     <PropertyGroup>
       <ModFolder>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\FiefManager</ModFolder>
       <ModBinFolder>$(ModFolder)\bin\Win64_Shipping_Client</ModBinFolder>

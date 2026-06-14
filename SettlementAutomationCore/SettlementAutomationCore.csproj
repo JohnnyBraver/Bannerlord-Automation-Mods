@@ -9,11 +9,10 @@
     <AssemblyVersion>3.0.0.0</AssemblyVersion>
     <FileVersion>3.0.0.0</FileVersion>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Lib.Harmony" Version="2.3.3" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />
     <Reference Include="MCMv5">
       <HintPath>E:\SteamLibrary\steamapps\workshop\content\261550\2859238197\bin\Win64_Shipping_Client\MCMv5.dll</HintPath>
@@ -61,7 +60,7 @@
   </ItemGroup>
 
   <!-- Post-Build Action: Copy built outputs to the Bannerlord Modules folder -->
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(SkipBannerlordModuleCopy)' != 'true'">
     <PropertyGroup>
       <ModFolder>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\SettlementAutomationCore</ModFolder>
       <ModBinFolder>$(ModFolder)\bin\Win64_Shipping_Client</ModBinFolder>

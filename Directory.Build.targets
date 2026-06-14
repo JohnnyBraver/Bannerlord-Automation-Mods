@@ -1,0 +1,33 @@
+<Project>
+  <Target Name="RemoveCopiedModuleDependencyDlls"
+          AfterTargets="Build"
+          Condition="Exists('$(MSBuildProjectDirectory)\SubModule.xml')">
+    <ItemGroup>
+      <CopiedModuleDependencyDlls Include="$(TargetDir)0Harmony.dll" />
+      <CopiedModuleDependencyDlls Include="$(TargetDir)Bannerlord.UIExtenderEx.dll" />
+      <CopiedModuleDependencyDlls Include="$(TargetDir)MCMv5.dll" />
+      <CopiedModuleDependencyDlls Include="$(TargetDir)Newtonsoft.Json.dll" />
+      <CopiedModuleDependencyDlls Include="$(TargetDir)SettlementAutomationCore.dll" Condition="'$(MSBuildProjectName)' != 'SettlementAutomationCore'" />
+      <CopiedModuleDependencyDlls Include="$(TargetDir)TradingOptimizer.dll" />
+    </ItemGroup>
+    <Delete Files="@(CopiedModuleDependencyDlls)" />
+  </Target>
+
+  <Target Name="RemoveInstalledModuleDependencyDlls"
+          AfterTargets="PostBuild"
+          Condition="Exists('$(MSBuildProjectDirectory)\SubModule.xml') and '$(SkipBannerlordModuleCopy)' != 'true'">
+    <PropertyGroup>
+      <BannerlordModulesRoot>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\Modules</BannerlordModulesRoot>
+      <InstalledModuleBin>$(BannerlordModulesRoot)\$(MSBuildProjectName)\bin\Win64_Shipping_Client</InstalledModuleBin>
+    </PropertyGroup>
+    <ItemGroup>
+      <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\0Harmony.dll" />
+      <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\Bannerlord.UIExtenderEx.dll" />
+      <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\MCMv5.dll" />
+      <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\Newtonsoft.Json.dll" />
+      <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\SettlementAutomationCore.dll" Condition="'$(MSBuildProjectName)' != 'SettlementAutomationCore'" />
+      <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\TradingOptimizer.dll" />
+    </ItemGroup>
+    <Delete Files="@(InstalledModuleDependencyDlls)" />
+  </Target>
+</Project>

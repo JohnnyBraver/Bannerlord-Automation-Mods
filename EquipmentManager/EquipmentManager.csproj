@@ -9,7 +9,7 @@
     <AssemblyVersion>3.0.0.0</AssemblyVersion>
     <FileVersion>3.0.0.0</FileVersion>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,14 +23,12 @@
       <HintPath>E:\SteamLibrary\steamapps\workshop\content\261550\2859238197\bin\Win64_Shipping_Client\MCMv5.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\Newtonsoft.Json.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
   </ItemGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\SettlementAutomationCore\SettlementAutomationCore.csproj" />
+    <ProjectReference Include="..\SettlementAutomationCore\SettlementAutomationCore.csproj">
+      <Private>False</Private>
+    </ProjectReference>
   </ItemGroup>
 
 
@@ -75,7 +73,7 @@
   </ItemGroup>
 
   <!-- Post-Build Action: Copy built outputs to the Bannerlord Modules folder -->
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(SkipBannerlordModuleCopy)' != 'true'">
     <PropertyGroup>
       <ModFolder>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\EquipmentManager</ModFolder>
       <ModBinFolder>$(ModFolder)\bin\Win64_Shipping_Client</ModBinFolder>
