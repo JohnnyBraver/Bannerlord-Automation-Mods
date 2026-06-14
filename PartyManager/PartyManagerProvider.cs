@@ -49,19 +49,16 @@ namespace PartyManager
             var settings = Settings.Instance;
             if (settings == null || !settings.AutoRecruitVolunteers) return orders;
 
-            // Stop recruiting if over capacity (unless garrison donation is active and garrison size limit is not hit)
+            // Stop recruiting at the configured party-size target, plus any garrison donation space.
             int currentSize = party.MemberRoster.TotalManCount;
-            int limit = party.Party.PartySizeLimit;
-
-            bool canOverRecruit = settings.EnableGarrisonDonation && settlement.Town != null &&
-                                  settlement.Town.GarrisonParty != null &&
-                                  settlement.Town.GarrisonParty.MemberRoster.TotalManCount < settings.MaxGarrisonSize;
-
-            if (currentSize >= limit && !canOverRecruit) return orders;
+            int maxRecruitableSize = GetMaxRecruitablePartySize(party, settlement, settings);
+            int remainingRecruitSlots = Math.Max(0, maxRecruitableSize - currentSize);
+            if (remainingRecruitSlots <= 0) return orders;
 
             // Cycle through settlement notables
             foreach (var notable in settlement.Notables)
             {
+                if (remainingRecruitSlots <= 0) break;
                 if (notable == null || notable.VolunteerTypes == null) continue;
 
                 // Check relation level and recruit slots unlocked
@@ -82,6 +79,8 @@ namespace PartyManager
                     if (RecruitmentFilter.MatchTroopFilter(troop, settings))
                     {
                         orders.Add(new RecruitOrder(notable, slot));
+                        remainingRecruitSlots--;
+                        if (remainingRecruitSlots <= 0) break;
                     }
                 }
             }
@@ -185,15 +184,15 @@ namespace PartyManager
             var orders = new List<MercenaryRecruitOrder>();
             var settings = Settings.Instance;
             if (settings == null || settings.MercenaryRecruitSetting == MercenaryRecruitPolicy.None || settlement.Town == null) return orders;
+            var mainHero = Hero.MainHero;
+            if (mainHero == null) return orders;
+            var campaign = Campaign.Current;
+            if (campaign == null) return orders;
 
             int currentSize = party.MemberRoster.TotalManCount;
-            int limit = party.Party.PartySizeLimit;
-
-            bool canOverRecruit = settings.EnableGarrisonDonation &&
-                                   settlement.Town.GarrisonParty != null &&
-                                   settlement.Town.GarrisonParty.MemberRoster.TotalManCount < settings.MaxGarrisonSize;
-
-            if (currentSize >= limit && !canOverRecruit) return orders;
+            int maxRecruitableSize = GetMaxRecruitablePartySize(party, settlement, settings);
+            int capacity = Math.Max(0, maxRecruitableSize - currentSize);
+            if (capacity <= 0) return orders;
 
             var recruitmentBehavior = Campaign.Current?.GetCampaignBehavior<TaleWorlds.CampaignSystem.CampaignBehaviors.RecruitmentCampaignBehavior>();
             if (recruitmentBehavior != null)
@@ -205,20 +204,8 @@ namespace PartyManager
                     int count = data.Number;
                     if (RecruitmentFilter.MatchTroopFilter(troop, settings))
                     {
-                        int cost = (int)Campaign.Current.Models.PartyWageModel.GetTroopRecruitmentCost(troop, Hero.MainHero, false).ResultNumber;
-                        int budget = Hero.MainHero.Gold - 1000;
-                        int capacity = limit - currentSize;
-                        
-                        // If garrison donation is active, we can overrecruit up to the garrison space limit
-                        if (canOverRecruit && capacity <= 0)
-                        {
-                            capacity = settings.MaxGarrisonSize - settlement.Town.GarrisonParty.MemberRoster.TotalManCount;
-                        }
-                        else if (canOverRecruit)
-                        {
-                            capacity += (settings.MaxGarrisonSize - settlement.Town.GarrisonParty.MemberRoster.TotalManCount);
-                        }
-
+                        int cost = (int)campaign.Models.PartyWageModel.GetTroopRecruitmentCost(troop, mainHero, false).ResultNumber;
+                        int budget = mainHero.Gold - 1000;
                         int toRecruit = Math.Min(count, capacity);
                         if (cost > 0)
                         {
@@ -233,6 +220,30 @@ namespace PartyManager
             }
 
             return orders;
+        }
+
+        private static int GetMaxRecruitablePartySize(MobileParty party, Settlement settlement, Settings settings)
+        {
+            int partyLimit = party.Party.PartySizeLimit;
+            int normalLimit = (int)Math.Ceiling(partyLimit * Math.Max(1, Math.Min(100, settings.RecruitUpToPartySizePercent)) / 100.0);
+            normalLimit = Math.Min(partyLimit, normalLimit);
+            if (normalLimit < partyLimit)
+            {
+                return normalLimit;
+            }
+
+            return partyLimit + GetAvailableGarrisonDonationSpace(settlement, settings);
+        }
+
+        private static int GetAvailableGarrisonDonationSpace(Settlement settlement, Settings settings)
+        {
+            if (!settings.EnableGarrisonDonation || settlement.Town?.GarrisonParty == null)
+            {
+                return 0;
+            }
+
+            int garrisonSize = settlement.Town.GarrisonParty.MemberRoster.TotalManCount;
+            return Math.Max(0, settings.MaxGarrisonSize - garrisonSize);
         }
     }
 }

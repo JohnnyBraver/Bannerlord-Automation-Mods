@@ -3,6 +3,7 @@ using MCM.Abstractions.Attributes;
 using MCM.Abstractions.Attributes.v2;
 using MCM.Abstractions.Base.Global;
 using MCM.Common;
+using SettlementAutomationCore;
 
 namespace PartyManager
 {
@@ -202,29 +203,83 @@ namespace PartyManager
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public bool AutoRecruitVolunteers { get; set; } = true;
 
-        [SettingPropertyDropdown("Regular Recruitment Policy", RequireRestart = false, HintText = "Control how regular troops are recruited from notables.", Order = 2)]
+        [SettingPropertyInteger("Recruit Up To Party Size (%)", 1, 100, RequireRestart = false,
+            HintText = "Stop normal auto-recruitment when the party reaches this percentage of its size limit. Garrison donation can still over-recruit into available garrison space.", Order = 2)]
+        [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
+        public int RecruitUpToPartySizePercent { get; set; } = 100;
+
+        [SettingPropertyDropdown("Regular Recruitment Policy", RequireRestart = false, HintText = "Control how regular troops are recruited from notables.", Order = 3)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public Dropdown<RegularRecruitPolicyOption> RegularRecruitDropdown { get; set; } = new Dropdown<RegularRecruitPolicyOption>(RegularRecruitPolicyOptions, 1); // Default: Match Recruitment Filters
 
-        [SettingPropertyDropdown("Noble Recruitment Policy", RequireRestart = false, HintText = "Control how noble troops are recruited from notables.", Order = 3)]
+        [SettingPropertyDropdown("Noble Recruitment Policy", RequireRestart = false, HintText = "Control how noble troops are recruited from notables.", Order = 4)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public Dropdown<NobleRecruitPolicyOption> NobleRecruitDropdown { get; set; } = new Dropdown<NobleRecruitPolicyOption>(NobleRecruitPolicyOptions, 1); // Default: Match Recruitment Filters
 
-        [SettingPropertyDropdown("Mercenary Recruitment Policy", RequireRestart = false, HintText = "Control how mercenary troops are recruited from taverns.", Order = 4)]
+        [SettingPropertyDropdown("Mercenary Recruitment Policy", RequireRestart = false, HintText = "Control how mercenary troops are recruited from taverns.", Order = 5)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public Dropdown<MercenaryRecruitPolicyOption> MercenaryRecruitDropdown { get; set; } = new Dropdown<MercenaryRecruitPolicyOption>(MercenaryRecruitPolicyOptions, 0); // Default: Do Not Recruit Mercenaries
 
-        [SettingPropertyInteger("Min Tier to Recruit", 1, 6, RequireRestart = false, HintText = "Minimum troop tier to buy.", Order = 5)]
+        [SettingPropertyInteger("Min Tier to Recruit", 1, 6, RequireRestart = false, HintText = "Minimum troop tier to buy.", Order = 6)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public int MinRecruitTier { get; set; } = 1;
 
-        [SettingPropertyInteger("Max Tier to Recruit", 1, 6, RequireRestart = false, HintText = "Maximum troop tier to buy.", Order = 6)]
+        [SettingPropertyInteger("Max Tier to Recruit", 1, 6, RequireRestart = false, HintText = "Maximum troop tier to buy.", Order = 7)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public int MaxRecruitTier { get; set; } = 6;
 
-        [SettingPropertyDropdown("Evaluation Target Tier", RequireRestart = false, HintText = "Evaluate filters against the troop's current purchase tier or their final upgrade tier.", Order = 7)]
+        [SettingPropertyDropdown("Evaluation Target Tier", RequireRestart = false, HintText = "Evaluate filters against the troop's current purchase tier or their final upgrade tier.", Order = 8)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public Dropdown<EvalTimeOption> EvalTimeDropdown { get; set; } = new Dropdown<EvalTimeOption>(EvalTimeOptions, 0);
+
+        // --- Party Needs ---
+        [SettingPropertyBool("Auto-Buy Food", RequireRestart = false, HintText = "Automatically buy food to maintain party supplies.", Order = 1)]
+        [SettingPropertyGroup("Party Needs", GroupOrder = 6)]
+        public bool AutoBuyFood { get; set; } = true;
+
+        [SettingPropertyInteger("Critical Food Days", 1, 30, RequireRestart = false,
+            HintText = "Buy any available food before other item requests if supplies fall below this many days.", Order = 2)]
+        [SettingPropertyGroup("Party Needs", GroupOrder = 6)]
+        public int CriticalFoodDays { get; set; } = 2;
+
+        [SettingPropertyInteger("Party Food Days to Keep", 1, 100, RequireRestart = false,
+            HintText = "Maintain this many total days of food after critical and variety food requests.", Order = 3)]
+        [SettingPropertyGroup("Party Needs", GroupOrder = 6)]
+        public int PartyFoodDaysToKeep { get; set; } = 10;
+
+        [SettingPropertyInteger("Min Party Size for Variety", 1, 100, RequireRestart = false,
+            HintText = "Minimum party size before the mod requests one stack of each known food type.", Order = 4)]
+        [SettingPropertyGroup("Party Needs", GroupOrder = 6)]
+        public int MinPartySizeForVariety { get; set; } = 20;
+
+        [SettingPropertyBool("Auto-Buy Riding Mounts", RequireRestart = false,
+            HintText = "Automatically buy riding mounts for unmounted infantry.", Order = 5)]
+        [SettingPropertyGroup("Party Needs", GroupOrder = 6)]
+        public bool AutoBuyMounts { get; set; } = true;
+
+        [SettingPropertyDropdown("Critical Food Spend Mode", RequireRestart = false,
+            HintText = "Controls when emergency food purchases run compared to other item requests.", Order = 6)]
+        [SettingPropertyGroup("Party Needs", GroupOrder = 6)]
+        public Dropdown<RequestProfileOption> CriticalFoodSpendModeDropdown { get; set; } =
+            new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Critical));
+
+        [SettingPropertyDropdown("Food Variety Spend Mode", RequireRestart = false,
+            HintText = "Controls when specific food variety requests run compared to other item requests.", Order = 7)]
+        [SettingPropertyGroup("Party Needs", GroupOrder = 6)]
+        public Dropdown<RequestProfileOption> FoodVarietySpendModeDropdown { get; set; } =
+            new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Essential));
+
+        [SettingPropertyDropdown("Food Buffer Spend Mode", RequireRestart = false,
+            HintText = "Controls when the total food buffer request runs compared to other item requests.", Order = 8)]
+        [SettingPropertyGroup("Party Needs", GroupOrder = 6)]
+        public Dropdown<RequestProfileOption> FoodBufferSpendModeDropdown { get; set; } =
+            new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Routine));
+
+        [SettingPropertyDropdown("Riding Mount Spend Mode", RequireRestart = false,
+            HintText = "Controls when riding mount requests run compared to other item requests.", Order = 9)]
+        [SettingPropertyGroup("Party Needs", GroupOrder = 6)]
+        public Dropdown<RequestProfileOption> RidingMountSpendModeDropdown { get; set; } =
+            new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Routine));
 
         // --- Recruitment Cultures ---
         [SettingPropertyBool("Recruit Empire", RequireRestart = false, HintText = "Recruit Empire culture troops.", Order = 1)]
@@ -412,6 +467,10 @@ namespace PartyManager
         public MercenaryRecruitPolicy MercenaryRecruitSetting => MercenaryRecruitDropdown.SelectedValue.Value;
         public NobleRecruitPolicy NobleRecruitSetting => NobleRecruitDropdown.SelectedValue.Value;
         public RegularRecruitPolicy RegularRecruitSetting => RegularRecruitDropdown.SelectedValue.Value;
+        public RequestProfile CriticalFoodRequestProfile => CriticalFoodSpendModeDropdown.SelectedValue.Value;
+        public RequestProfile FoodVarietyRequestProfile => FoodVarietySpendModeDropdown.SelectedValue.Value;
+        public RequestProfile FoodBufferRequestProfile => FoodBufferSpendModeDropdown.SelectedValue.Value;
+        public RequestProfile RidingMountRequestProfile => RidingMountSpendModeDropdown.SelectedValue.Value;
         public PrisonerKeepPolicy NoblePrisonerKeepPolicySetting => NoblePrisonerKeepPolicyDropdown.SelectedValue.Value;
         public PrisonerKeepPolicy RegularPrisonerKeepPolicySetting => RegularPrisonerKeepPolicyDropdown.SelectedValue.Value;
         public BanditPrisonerKeepPolicy BanditPrisonerKeepPolicySetting => BanditPrisonerKeepPolicyDropdown.SelectedValue.Value;

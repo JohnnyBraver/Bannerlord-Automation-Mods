@@ -149,21 +149,6 @@ namespace TradeOptimizer
         [SettingPropertyGroup("Price Margins", GroupOrder = 2)]
         public float SellPriceThresholdFactor { get; set; } = 1.30f;
 
-        [SettingPropertyFloatingInteger("Food Logistics Price Throttle Factor", 0.5f, 3.0f, "#0.00", RequireRestart = false,
-            HintText = "Postpone non-urgent food variety purchases if their price exceeds this multiplier of their average price. Range: 0.50 - 3.00. Default: 1.30 (130% - where red begins).", Order = 7)]
-        [SettingPropertyGroup("Price Margins", GroupOrder = 2)]
-        public float FoodLogisticsPriceThrottleFactor { get; set; } = 1.30f;
-
-        [SettingPropertyFloatingInteger("Mounts Logistics Price Throttle Factor", 0.5f, 3.0f, "#0.00", RequireRestart = false,
-            HintText = "Postpone speed mount purchases if their price exceeds this multiplier of their average price. Range: 0.50 - 3.00. Default: 1.50 (150% - mounts are harder to find cheap).", Order = 8)]
-        [SettingPropertyGroup("Price Margins", GroupOrder = 2)]
-        public float MountsLogisticsPriceThrottleFactor { get; set; } = 1.50f;
-
-        [SettingPropertyBool("Force Buy Critical Variety Food", RequireRestart = false,
-            HintText = "If current supply of a food type is under 1/10 of its target variety quantity (rounded up), force buy it regardless of price to prevent complete lack of that food type.", Order = 6)]
-        [SettingPropertyGroup("Price Margins", GroupOrder = 2)]
-        public bool ForceBuyMinVarietyFood { get; set; } = true;
-
         [SettingPropertyBool("Limit to Carry Capacity", RequireRestart = false,
             HintText = "Stop buying when your party's carry weight would be exceeded.", Order = 7)]
         [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
@@ -185,11 +170,6 @@ namespace TradeOptimizer
         public Dropdown<TradingModeOption> FoodTradingModeDropdown { get; set; } =
             new Dropdown<TradingModeOption>(TradingModeOptions, 3); // Default: Buy & Sell (index 3)
 
-        [SettingPropertyInteger("Party Food Days to Keep", 1, 100, RequireRestart = false,
-            HintText = "Keep at least this many days of food supply for the party before selling food items.", Order = 4)]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
-        public int PartyFoodDaysToKeep { get; set; } = 10;
-
         [SettingPropertyDropdown("Livestock Trading Policy", RequireRestart = false,
             HintText = "Control how livestock (animals) are auto-traded.", Order = 2)]
         [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
@@ -206,30 +186,6 @@ namespace TradeOptimizer
             HintText = "Never let your gold balance drop below this amount when buying. Default: 1000 denars.", Order = 1)]
         [SettingPropertyGroup("Budget Protection", GroupOrder = 0)]
         public int MinimumGoldReserve { get; set; } = 1000;
-
-        [SettingPropertyBool("Auto-Buy Food to Restock", RequireRestart = false, HintText = "Automatically buy food to maintain supply for soldiers.", Order = 5)]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
-        public bool AutoBuyFood { get; set; } = true;
-
-        [SettingPropertyInteger("Min Party Size for Variety", 1, 100, RequireRestart = false, HintText = "Minimum party size before the mod starts buying a variety of foods for Steward XP.", Order = 6)]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
-        public int MinPartySizeForVariety { get; set; } = 20;
-
-        [SettingPropertyInteger("Min Gold for Variety", 500, 20000, RequireRestart = false, HintText = "Minimum gold reserve required to buy food varieties.", Order = 7)]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
-        public int MinGoldForVariety { get; set; } = 3000;
-
-        [SettingPropertyBool("Auto-Buy Riding Mounts for Speed", RequireRestart = false, HintText = "Automatically buy mounts for foot soldiers to upgrade party speed.", Order = 8)]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
-        public bool AutoBuyMounts { get; set; } = true;
-
-        [SettingPropertyInteger("Min Gold for Mounts", 1000, 50000, RequireRestart = false, HintText = "Minimum gold reserve required to buy mounts.", Order = 9)]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
-        public int MinGoldForMounts { get; set; } = 10000;
-
-        [SettingPropertyInteger("Inventory Reservation Priority Threshold", 1, 100, RequireRestart = false, HintText = "Requests with priority higher than this will protect inventory items from being auto-sold.", Order = 10)]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
-        public int InventoryReservationPriorityThreshold { get; set; } = 30;
 
         [SettingPropertyInteger("Min Days of Expenses to Keep", 0, 100, RequireRestart = false,
             HintText = "Ensure you keep enough gold to cover this many days of party wages/expenses (excluding daily income).", Order = 2)]

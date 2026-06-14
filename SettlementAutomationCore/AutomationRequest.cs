@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
@@ -10,66 +12,162 @@ namespace SettlementAutomationCore
     {
         ItemCategory,    // E.g. Food, Horse, PackAnimal, Livestock
         SpecificItem,    // E.g. Hardwood, IronIngot
-        MarketItem,      // Exact merchant inventory entry selected from AutomationRequestContext
-        TroopFilter      // E.g. MeleeCavalry, Ranged, AnyRecruit
+        MarketItem       // Exact merchant inventory entry selected from AutomationRequestContext
+    }
+
+    public enum RequestProfile
+    {
+        Critical,
+        Essential,
+        Routine,
+        Opportunistic,
+        Luxury
+    }
+
+    public class RequestProfileOption
+    {
+        private readonly string _name;
+        public RequestProfile Value { get; }
+
+        public RequestProfileOption(string name, RequestProfile value)
+        {
+            _name = name;
+            Value = value;
+        }
+
+        public override string ToString() => _name;
+    }
+
+    public static class RequestProfileOptions
+    {
+        public static readonly IReadOnlyList<RequestProfileOption> All = new List<RequestProfileOption>
+        {
+            new RequestProfileOption("Critical - buy before everything", RequestProfile.Critical),
+            new RequestProfileOption("Essential - important party need", RequestProfile.Essential),
+            new RequestProfileOption("Routine - normal maintenance", RequestProfile.Routine),
+            new RequestProfileOption("Opportunistic - cheap only", RequestProfile.Opportunistic),
+            new RequestProfileOption("Luxury - want, but do not need", RequestProfile.Luxury)
+        };
+
+        public static int IndexOf(RequestProfile profile)
+        {
+            for (int i = 0; i < All.Count; i++)
+            {
+                if (All[i].Value == profile)
+                {
+                    return i;
+                }
+            }
+
+            return 0;
+        }
+    }
+
+    public enum RequestQuantityMode
+    {
+        DesiredInventoryCount,
+        PurchaseCount
+    }
+
+    public enum BudgetPolicyKind
+    {
+        CoreReserve,
+        ExplicitReserve
     }
 
     public class AutomationRequest
     {
         public string RequestorId { get; }
         public RequestType Type { get; }
-        public string TargetId { get; }         // Category name, Item string ID, or troop filter name
-        public int TargetQuantity { get; }      // Cumulative quantity we want to have in party/inventory
-        public int Priority { get; }            // 1 to 100
-        public int MinGoldReserve { get; }      // Threshold below which core skips this request
-        public float MaxPriceMultiplier { get; } // Max price we pay relative to standard value (e.g. 1.5 = 150%)
-        public InventoryItemView? TargetMarketItem { get; }
+        public string TargetId { get; }         // Category name, item string ID, or market request label
+        public int Quantity { get; }
+        public RequestQuantityMode QuantityMode { get; }
+        public RequestProfile Profile { get; }
+        public int Priority { get; }            // 1 to 9, default 5
+        public BudgetPolicyKind BudgetPolicy { get; }
+        public int ExplicitGoldReserve { get; }
+        public IReadOnlyList<InventoryItemView> MarketCandidates { get; }
 
-        public AutomationRequest(
+        private AutomationRequest(
             string requestorId,
             RequestType type,
             string targetId,
-            int targetQuantity,
+            int quantity,
+            RequestQuantityMode quantityMode,
+            RequestProfile profile,
             int priority,
-            int minGoldReserve = 1000,
-            float maxPriceMultiplier = 1.5f,
-            InventoryItemView? targetMarketItem = null)
+            BudgetPolicyKind budgetPolicy,
+            int explicitGoldReserve,
+            IReadOnlyList<InventoryItemView>? marketCandidates = null)
         {
             RequestorId = requestorId;
             Type = type;
             TargetId = targetId;
-            TargetQuantity = targetQuantity;
-            Priority = Math.Max(1, Math.Min(100, priority));
-            MinGoldReserve = minGoldReserve;
-            MaxPriceMultiplier = maxPriceMultiplier;
-            TargetMarketItem = targetMarketItem;
+            Quantity = Math.Max(0, quantity);
+            QuantityMode = quantityMode;
+            Profile = profile;
+            Priority = Math.Max(1, Math.Min(9, priority));
+            BudgetPolicy = budgetPolicy;
+            ExplicitGoldReserve = Math.Max(0, explicitGoldReserve);
+            MarketCandidates = marketCandidates ?? new List<InventoryItemView>();
         }
 
-        public static AutomationRequest ForMarketItem(
+        public static AutomationRequest ForInventoryTarget(
             string requestorId,
-            InventoryItemView marketItem,
-            int quantity,
-            int priority,
-            int minGoldReserve = 1000)
+            RequestType type,
+            string targetId,
+            int desiredCount,
+            RequestProfile profile,
+            int priority = 5,
+            BudgetPolicyKind budgetPolicy = BudgetPolicyKind.CoreReserve,
+            int explicitGoldReserve = 0)
         {
+            if (type != RequestType.ItemCategory && type != RequestType.SpecificItem)
+            {
+                throw new ArgumentException("Inventory targets must use ItemCategory or SpecificItem.", nameof(type));
+            }
+
+            return new AutomationRequest(
+                requestorId,
+                type,
+                targetId,
+                desiredCount,
+                RequestQuantityMode.DesiredInventoryCount,
+                profile,
+                priority,
+                budgetPolicy,
+                explicitGoldReserve);
+        }
+
+        public static AutomationRequest ForMarketItems(
+            string requestorId,
+            IEnumerable<InventoryItemView> candidates,
+            int purchaseCount,
+            RequestProfile profile = RequestProfile.Luxury,
+            int priority = 5,
+            int explicitGoldReserve = 0)
+        {
+            var orderedCandidates = candidates?.Where(c => c != null).ToList() ?? new List<InventoryItemView>();
             return new AutomationRequest(
                 requestorId,
                 RequestType.MarketItem,
-                marketItem.SnapshotId,
-                quantity,
+                orderedCandidates.Count > 0 ? orderedCandidates[0].SnapshotId : "MarketItems",
+                purchaseCount,
+                RequestQuantityMode.PurchaseCount,
+                profile,
                 priority,
-                minGoldReserve,
-                float.MaxValue,
-                marketItem);
+                explicitGoldReserve > 0 ? BudgetPolicyKind.ExplicitReserve : BudgetPolicyKind.CoreReserve,
+                explicitGoldReserve,
+                orderedCandidates);
         }
 
         public bool MatchesItem(ItemObject item)
         {
             if (item == null) return false;
 
-            if (Type == RequestType.MarketItem && TargetMarketItem != null)
+            if (Type == RequestType.MarketItem)
             {
-                return TargetMarketItem.Item.StringId == item.StringId;
+                return MarketCandidates.Any(c => c.Item.StringId == item.StringId);
             }
 
             if (Type == RequestType.SpecificItem)

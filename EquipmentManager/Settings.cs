@@ -3,6 +3,7 @@ using MCM.Abstractions.Attributes;
 using MCM.Abstractions.Attributes.v2;
 using MCM.Abstractions.Base.Global;
 using MCM.Common;
+using SettlementAutomationCore;
 
 namespace EquipmentManager
 {
@@ -220,6 +221,18 @@ namespace EquipmentManager
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public int MinimumGoldReserve { get; set; } = 10000;
 
+        [SettingPropertyDropdown("Top Armor Spend Mode", RequireRestart = false,
+            HintText = "Controls when premium armor upgrade requests run compared to other item requests.", Order = 7)]
+        [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
+        public Dropdown<RequestProfileOption> TopArmorSpendModeDropdown { get; set; } =
+            new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Luxury));
+
+        [SettingPropertyDropdown("Stealth Gear Spend Mode", RequireRestart = false,
+            HintText = "Controls when stealth gear upgrade requests run compared to other item requests.", Order = 8)]
+        [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
+        public Dropdown<RequestProfileOption> StealthGearSpendModeDropdown { get; set; } =
+            new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Luxury));
+
 
         // Compatibility wrappers
         public string MinQualityToKeep => MinQualityDropdown.SelectedValue;
@@ -228,5 +241,7 @@ namespace EquipmentManager
 
         public LoadoutPriority LoadoutPrioritySetting => LoadoutPriorityDropdown.SelectedValue.Value;
         public BuyEquipmentTarget BuyEquipmentTargetSetting => BuyEquipmentTargetDropdown.SelectedValue.Value;
+        public RequestProfile TopArmorRequestProfile => TopArmorSpendModeDropdown.SelectedValue.Value;
+        public RequestProfile StealthGearRequestProfile => StealthGearSpendModeDropdown.SelectedValue.Value;
     }
 }

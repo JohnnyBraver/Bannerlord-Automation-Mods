@@ -476,332 +476,43 @@ namespace SettlementAutomationCore
                 // ----------------------------------------------------
                 // Step 6: Priority Needs Phase (Need Fulfillment)
                 // ----------------------------------------------------
-                var activeRequests = AutomationRegistry.ActiveRequests.OrderByDescending(r => r.Priority).ToList();
+                var activeRequests = AutomationRegistry.ActiveRequests
+                    .OrderBy(r => GetProfileOrder(r.Profile))
+                    .ThenByDescending(r => r.Priority)
+                    .ToList();
+                LogRequestSummary(settlement, activeRequests);
+
                 if (activeRequests.Count > 0 && Hero.MainHero != null)
                 {
                     var needsLogic = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
                     if (needsLogic != null)
                     {
-                        bool executedAnyItemTransfers = false;
-                        var fulfilledItemParts = new List<string>();
+                        var state = new RequestExecutionState(
+                            needsLogic,
+                            Settings.Instance,
+                            settlement,
+                            Hero.MainHero.Gold,
+                            Helpers.InventoryHelper.GetRosterWeight(MobileParty.MainParty.ItemRoster),
+                            HerdingCalculator.GetRemainingAnimalSlots(MobileParty.MainParty));
 
-                        // Part A: Process Item Requests (ItemCategory, SpecificItem & exact MarketItem)
-                        var itemRequests = activeRequests.Where(r => r.Type == RequestType.ItemCategory || r.Type == RequestType.SpecificItem || r.Type == RequestType.MarketItem).ToList();
-                        
-                        var coreSettings = Settings.Instance;
-                        int projectedGold = Hero.MainHero.Gold;
-                        float projectedWeight = Helpers.InventoryHelper.GetRosterWeight(MobileParty.MainParty.ItemRoster);
-                        int projectedAnimalSlots = HerdingCalculator.GetRemainingAnimalSlots(MobileParty.MainParty);
-
-                        foreach (var req in itemRequests)
+                        foreach (var req in activeRequests)
                         {
-                            if (projectedGold < req.MinGoldReserve) continue;
-
-                            if (req.Type == RequestType.MarketItem)
-                            {
-                                var targetMarketItem = req.TargetMarketItem;
-                                if (targetMarketItem == null || targetMarketItem.Item == null) continue;
-
-                                var marketOtherElements = needsLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
-                                var matchingCandidates = new List<ItemRosterElement>();
-                                for (int i = 0; i < marketOtherElements.Count; i++)
-                                {
-                                    var el = marketOtherElements[i];
-                                    if (el.IsEmpty || el.Amount <= 0 || el.EquipmentElement.Item == null) continue;
-                                    if (targetMarketItem.MatchesEquipmentElement(el.EquipmentElement))
-                                    {
-                                        matchingCandidates.Add(el);
-                                    }
-                                }
-
-                                var marketSortedCandidates = matchingCandidates.Select(c => new {
-                                    Element = c,
-                                    Price = needsLogic.GetItemPrice(c.EquipmentElement, true)
-                                }).OrderBy(x => x.Price).ToList();
-
-                                int remainingToBuy = req.TargetQuantity;
-                                foreach (var candidate in marketSortedCandidates)
-                                {
-                                    if (remainingToBuy <= 0) break;
-                                    if (projectedGold < req.MinGoldReserve) break;
-
-                                    int toBuy = Math.Min(remainingToBuy, candidate.Element.Amount);
-                                    int maxAfford = (projectedGold - req.MinGoldReserve) / Math.Max(1, candidate.Price);
-                                    toBuy = Math.Min(toBuy, maxAfford);
-
-                                    var item = candidate.Element.EquipmentElement.Item;
-                                    bool isCargo = !item.IsAnimal && !item.IsMountable;
-                                    if (isCargo && coreSettings.LimitToInventoryCapacity)
-                                    {
-                                        float capacity = MobileParty.MainParty.InventoryCapacity;
-                                        float remainingCargoSpace = capacity - projectedWeight;
-                                        if (remainingCargoSpace < 0f) remainingCargoSpace = 0f;
-                                        if (item.Weight > 0f)
-                                        {
-                                            int maxWeightBuy = (int)(remainingCargoSpace / item.Weight);
-                                            toBuy = Math.Min(toBuy, maxWeightBuy);
-                                        }
-                                    }
-
-                                    bool isAnimalOrMount = item.IsAnimal || item.IsMountable;
-                                    if (isAnimalOrMount)
-                                    {
-                                        toBuy = Math.Min(toBuy, projectedAnimalSlots);
-                                    }
-
-                                    if (toBuy > 0)
-                                    {
-                                        var command = TransferCommand.Transfer(
-                                            toBuy,
-                                            InventoryLogic.InventorySide.OtherInventory,
-                                            InventoryLogic.InventorySide.PlayerInventory,
-                                            new ItemRosterElement(candidate.Element.EquipmentElement, toBuy),
-                                            EquipmentIndex.None,
-                                            EquipmentIndex.None,
-                                            Hero.MainHero.CharacterObject
-                                        );
-                                        needsLogic.AddTransferCommand(command);
-                                        executedAnyItemTransfers = true;
-                                        remainingToBuy -= toBuy;
-                                        projectedGold -= toBuy * candidate.Price;
-                                        if (isCargo)
-                                        {
-                                            projectedWeight += toBuy * item.Weight;
-                                        }
-                                        if (isAnimalOrMount)
-                                        {
-                                            projectedAnimalSlots -= toBuy;
-                                        }
-                                        fulfilledItemParts.Add($"{toBuy}x {item.Name}");
-                                    }
-                                }
-
-                                continue;
-                            }
-
-                            // 1. Get current inventory count for matching items (respecting previous transfers in Step 6)
-                            int currentHeld = 0;
-                            var playerElements = needsLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-                            for (int i = 0; i < playerElements.Count; i++)
-                            {
-                                var el = playerElements[i];
-                                if (el.EquipmentElement.Item != null && req.MatchesItem(el.EquipmentElement.Item))
-                                {
-                                    currentHeld += el.Amount;
-                                }
-                            }
-
-                            int deficit = req.TargetQuantity - currentHeld;
-                            if (deficit <= 0) continue;
-
-                            // 2. Locate candidates in settlement inventory
-                            var candidates = new List<ItemRosterElement>();
-                            var otherElements = needsLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
-                            for (int i = 0; i < otherElements.Count; i++)
-                            {
-                                var el = otherElements[i];
-                                if (el.EquipmentElement.Item != null && req.MatchesItem(el.EquipmentElement.Item) && el.Amount > 0)
-                                {
-                                    candidates.Add(el);
-                                }
-                            }
-
-                            // 3. Sort candidates by unit purchase price (cheapest first)
-                            var sortedCandidates = candidates.Select(c => new {
-                                Element = c,
-                                Price = needsLogic.GetItemPrice(c.EquipmentElement, true)
-                            }).OrderBy(x => x.Price).ToList();
-
-                            foreach (var candidate in sortedCandidates)
-                            {
-                                if (deficit <= 0) break;
-                                if (projectedGold < req.MinGoldReserve) break;
-
-                                // Price multiplier protection check
-                                float baseValue = candidate.Element.EquipmentElement.Item.Value;
-                                if (baseValue > 0)
-                                {
-                                    float mult = (float)candidate.Price / baseValue;
-                                    if (mult > req.MaxPriceMultiplier)
-                                    {
-                                        continue; // skip overpriced items
-                                    }
-                                }
-
-                                int toBuy = Math.Min(deficit, candidate.Element.Amount);
-                                int maxAfford = (projectedGold - req.MinGoldReserve) / Math.Max(1, candidate.Price);
-                                toBuy = Math.Min(toBuy, maxAfford);
-
-                                var item = candidate.Element.EquipmentElement.Item;
-                                bool isCargo = !item.IsAnimal && !item.IsMountable;
-                                if (isCargo && coreSettings.LimitToInventoryCapacity)
-                                {
-                                    float capacity = MobileParty.MainParty.InventoryCapacity;
-                                    float remainingCargoSpace = capacity - projectedWeight;
-                                    if (remainingCargoSpace < 0f) remainingCargoSpace = 0f;
-                                    if (item.Weight > 0f)
-                                    {
-                                        int maxWeightBuy = (int)(remainingCargoSpace / item.Weight);
-                                        toBuy = Math.Min(toBuy, maxWeightBuy);
-                                    }
-                                }
-
-                                bool isAnimalOrMount = item.IsAnimal || item.IsMountable;
-                                if (isAnimalOrMount)
-                                {
-                                    toBuy = Math.Min(toBuy, projectedAnimalSlots);
-                                }
-
-                                if (toBuy > 0)
-                                {
-                                    var command = TransferCommand.Transfer(
-                                        toBuy,
-                                        InventoryLogic.InventorySide.OtherInventory,
-                                        InventoryLogic.InventorySide.PlayerInventory,
-                                        new ItemRosterElement(candidate.Element.EquipmentElement, toBuy),
-                                        EquipmentIndex.None,
-                                        EquipmentIndex.None,
-                                        Hero.MainHero.CharacterObject
-                                    );
-                                    needsLogic.AddTransferCommand(command);
-                                    executedAnyItemTransfers = true;
-                                    deficit -= toBuy;
-                                    projectedGold -= toBuy * candidate.Price;
-                                    if (isCargo)
-                                    {
-                                        projectedWeight += toBuy * item.Weight;
-                                    }
-                                    if (isAnimalOrMount)
-                                    {
-                                        projectedAnimalSlots -= toBuy;
-                                    }
-                                    fulfilledItemParts.Add($"{toBuy}x {item.Name}");
-                                }
-                            }
+                            ExecuteItemRequest(req, state);
                         }
 
-                        if (executedAnyItemTransfers && needsLogic.IsThereAnyChanges())
+                        if (state.ExecutedAnyItemTransfers && needsLogic.IsThereAnyChanges())
                         {
                             int initialGold = Hero.MainHero?.Gold ?? 0;
                             needsLogic.DoneLogic();
                             int finalGold = Hero.MainHero?.Gold ?? 0;
                             int goldDiff = finalGold - initialGold;
                             string goldDiffSign = goldDiff >= 0 ? "+" : "";
-                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Prioritized items fulfilled at {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d). Purchased: {string.Join(", ", fulfilledItemParts)}");
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Prioritized items fulfilled at {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d). Purchased: {string.Join(", ", state.FulfilledItemParts)}");
                         }
                     }
-
-                    // Part B: Process Troop Requests (TroopFilter)
-                    var troopRequests = activeRequests.Where(r => r.Type == RequestType.TroopFilter).ToList();
-                    if (troopRequests.Count > 0 && settlement.Notables.Count > 0)
+                    else
                     {
-                        var priorityRecruitedMap = new Dictionary<CharacterObject, int>();
-                        int totalRecruited = 0;
-
-                        foreach (var req in troopRequests)
-                        {
-                            if (Hero.MainHero.Gold < req.MinGoldReserve) continue;
-
-                            int currentSize = MobileParty.MainParty.MemberRoster.TotalManCount;
-                            int limit = MobileParty.MainParty.Party.PartySizeLimit;
-
-                            bool canOverRecruit = false;
-                            try
-                            {
-                                foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
-                                {
-                                    if (assembly.GetName().Name == "PartyManager")
-                                    {
-                                        var settingsType = assembly.GetType("PartyManager.Settings");
-                                        if (settingsType != null)
-                                        {
-                                            var instanceProp = settingsType.GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-                                            var settingsInstance = instanceProp?.GetValue(null);
-                                            if (settingsInstance != null)
-                                            {
-                                                bool enableGarrisonDonation = (bool)(settingsType.GetProperty("EnableGarrisonDonation")?.GetValue(settingsInstance) ?? false);
-                                                int maxGarrisonSize = (int)(settingsType.GetProperty("MaxGarrisonSize")?.GetValue(settingsInstance) ?? 400);
-
-                                                canOverRecruit = enableGarrisonDonation && settlement.Town != null &&
-                                                                 settlement.Town.GarrisonParty != null &&
-                                                                 settlement.Town.GarrisonParty.MemberRoster.TotalManCount < maxGarrisonSize;
-                                            }
-                                        }
-                                        break;
-                                    }
-                                }
-                            }
-                            catch {}
-
-                            if (currentSize >= limit && !canOverRecruit) continue;
-
-                            int deficit = req.TargetQuantity - currentSize;
-                            if (deficit <= 0) continue;
-
-                            foreach (var notable in settlement.Notables)
-                            {
-                                if (deficit <= 0) break;
-                                if (notable == null || notable.VolunteerTypes == null) continue;
-
-                                int maxIndex = Campaign.Current.Models.VolunteerModel.MaximumIndexHeroCanRecruitFromHero(Hero.MainHero, notable, -101);
-                                for (int slot = 0; slot < notable.VolunteerTypes.Length; slot++)
-                                {
-                                    if (deficit <= 0) break;
-                                    if (slot > maxIndex) continue;
-
-                                    var troop = notable.VolunteerTypes[slot];
-                                    if (troop == null) continue;
-
-                                    bool isMatch = false;
-                                    if (string.Equals(req.TargetId, "AnyRecruit", StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        isMatch = true;
-                                    }
-                                    else if (string.Equals(req.TargetId, "MeleeCavalry", StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        isMatch = troop.IsMounted && !troop.IsRanged;
-                                    }
-                                    else if (string.Equals(req.TargetId, "Ranged", StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        isMatch = troop.IsRanged;
-                                    }
-                                    else if (string.Equals(req.TargetId, "Melee", StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        isMatch = !troop.IsRanged && !troop.IsMounted;
-                                    }
-
-                                    if (isMatch)
-                                    {
-                                        int cost = (int)Campaign.Current.Models.PartyWageModel.GetTroopRecruitmentCost(troop, Hero.MainHero, false).ResultNumber;
-                                        if (Hero.MainHero.Gold - cost >= req.MinGoldReserve)
-                                        {
-                                            notable.VolunteerTypes[slot] = null;
-                                            MobileParty.MainParty.MemberRoster.AddToCounts(troop, 1);
-                                            GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, notable, cost, false);
-                                            CampaignEventDispatcher.Instance.OnTroopRecruited(Hero.MainHero, settlement, notable, troop, 1);
-
-                                            deficit--;
-                                            totalRecruited++;
-                                            if (priorityRecruitedMap.ContainsKey(troop))
-                                                priorityRecruitedMap[troop]++;
-                                            else
-                                                priorityRecruitedMap[troop] = 1;
-
-                                            currentSize++;
-                                            if (currentSize >= limit && !canOverRecruit) break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if (totalRecruited > 0)
-                        {
-                            var troopParts = priorityRecruitedMap.Select(kvp => $"{kvp.Value}x {kvp.Key.Name}");
-                            string msg = $"Prioritized recruits fulfilled at {settlement.Name}: {string.Join(", ", troopParts)} (Total: {totalRecruited})";
-                            InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
-                            Helpers.Logger.WriteLog("SettlementAutomationCore", msg);
-                        }
+                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Skipped {activeRequests.Count} prioritized item requests at {settlement.Name}: inventory logic was unavailable.");
                     }
                 }
 
@@ -843,9 +554,14 @@ namespace SettlementAutomationCore
                         }
                         foreach (var req in activeRequests)
                         {
+                            if (req.QuantityMode == RequestQuantityMode.PurchaseCount)
+                            {
+                                continue;
+                            }
+
                             if (req.MatchesItem(item))
                             {
-                                reserved = Math.Max(reserved, req.TargetQuantity);
+                                reserved = Math.Max(reserved, req.Quantity);
                             }
                         }
                         int available = Math.Max(0, element.Amount - reserved);
@@ -854,12 +570,16 @@ namespace SettlementAutomationCore
                 }
 
                 var coreSettingsForTrade = Settings.Instance;
-                int dailyWage = MobileParty.MainParty?.TotalWage ?? 0;
-                int expenseReserve = Math.Max(coreSettingsForTrade.MinimumGoldReserve, dailyWage * coreSettingsForTrade.MinDaysExpensesToKeep);
-                int availableGold = Math.Max(0, Hero.MainHero.Gold - expenseReserve);
-                float currentWeightForTrade = Helpers.InventoryHelper.GetRosterWeight(MobileParty.MainParty.ItemRoster);
-                float freeCargo = Math.Max(0f, MobileParty.MainParty.InventoryCapacity - currentWeightForTrade);
-                int freeAnimalSlots = HerdingCalculator.GetRemainingAnimalSlots(MobileParty.MainParty);
+                var mainPartyForTrade = MobileParty.MainParty!;
+                var mainHeroForTrade = Hero.MainHero!;
+                int dailyWage = mainPartyForTrade.TotalWage;
+                int minimumGoldReserveForTrade = coreSettingsForTrade?.MinimumGoldReserve ?? 1000;
+                int minDaysExpensesForTrade = coreSettingsForTrade?.MinDaysExpensesToKeep ?? 10;
+                int expenseReserve = Math.Max(minimumGoldReserveForTrade, dailyWage * minDaysExpensesForTrade);
+                int availableGold = Math.Max(0, mainHeroForTrade.Gold - expenseReserve);
+                float currentWeightForTrade = Helpers.InventoryHelper.GetRosterWeight(mainPartyForTrade.ItemRoster);
+                float freeCargo = Math.Max(0f, mainPartyForTrade.InventoryCapacity - currentWeightForTrade);
+                int freeAnimalSlots = HerdingCalculator.GetRemainingAnimalSlots(mainPartyForTrade);
 
                 var logic8 = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
                 if (logic8 != null)
@@ -870,7 +590,7 @@ namespace SettlementAutomationCore
                         logic8,
                         availableGold,
                         freeCargo,
-                        coreSettingsForTrade.LimitToInventoryCapacity,
+                        coreSettingsForTrade?.LimitToInventoryCapacity ?? true,
                         freeAnimalSlots,
                         freeAnimalSlots,
                         sellableItems
@@ -936,9 +656,372 @@ namespace SettlementAutomationCore
             // Refresh active game menu UI if we are in one to show the updated gold, prisoners, etc.
             try
             {
-                Campaign.Current?.CurrentMenuContext?.Refresh();
+            Campaign.Current?.CurrentMenuContext?.Refresh();
             }
             catch {}
+        }
+
+        private sealed class RequestExecutionState
+        {
+            public InventoryLogic Logic { get; }
+            public Settings? Settings { get; }
+            public Settlement Settlement { get; }
+            public int ProjectedGold;
+            public float ProjectedWeight;
+            public int ProjectedAnimalSlots;
+            public bool ExecutedAnyItemTransfers;
+            public List<string> FulfilledItemParts { get; } = new List<string>();
+
+            public RequestExecutionState(
+                InventoryLogic logic,
+                Settings? settings,
+                Settlement settlement,
+                int projectedGold,
+                float projectedWeight,
+                int projectedAnimalSlots)
+            {
+                Logic = logic;
+                Settings = settings;
+                Settlement = settlement;
+                ProjectedGold = projectedGold;
+                ProjectedWeight = projectedWeight;
+                ProjectedAnimalSlots = projectedAnimalSlots;
+            }
+        }
+
+        private static int GetProfileOrder(RequestProfile profile)
+        {
+            return profile switch
+            {
+                RequestProfile.Critical => 0,
+                RequestProfile.Essential => 1,
+                RequestProfile.Routine => 2,
+                RequestProfile.Opportunistic => 3,
+                RequestProfile.Luxury => 4,
+                _ => 99
+            };
+        }
+
+        private static void LogRequestSummary(Settlement settlement, IReadOnlyList<AutomationRequest> requests)
+        {
+            if (requests.Count <= 0) return;
+
+            foreach (var request in requests)
+            {
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Request gathered at {settlement.Name}: {DescribeRequest(request)}");
+            }
+        }
+
+        private static void ExecuteItemRequest(AutomationRequest request, RequestExecutionState state)
+        {
+            if (request.Quantity <= 0)
+            {
+                LogRequestSkip(request, state, "quantity is zero");
+                return;
+            }
+
+            int goldReserve = GetGoldReserveForRequest(request, state.Settings);
+            if (state.ProjectedGold <= goldReserve)
+            {
+                LogRequestSkip(request, state, $"projected gold {state.ProjectedGold} is at or below reserve {goldReserve}");
+                return;
+            }
+
+            if (request.QuantityMode == RequestQuantityMode.PurchaseCount)
+            {
+                ExecuteMarketPurchaseRequest(request, state, goldReserve);
+                return;
+            }
+
+            if (request.QuantityMode == RequestQuantityMode.DesiredInventoryCount)
+            {
+                ExecuteInventoryTargetRequest(request, state, goldReserve);
+                return;
+            }
+
+            LogRequestSkip(request, state, $"unsupported quantity mode {request.QuantityMode}");
+        }
+
+        private static void ExecuteMarketPurchaseRequest(AutomationRequest request, RequestExecutionState state, int goldReserve)
+        {
+            if (request.MarketCandidates.Count <= 0)
+            {
+                LogRequestSkip(request, state, "no market candidates");
+                return;
+            }
+
+            var marketElements = state.Logic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
+            int remainingToBuy = request.Quantity;
+            bool purchasedAny = false;
+            string lastSkipReason = "no matching merchant stock";
+
+            foreach (var requestedCandidate in request.MarketCandidates)
+            {
+                if (remainingToBuy <= 0) break;
+                if (state.ProjectedGold <= goldReserve)
+                {
+                    lastSkipReason = $"projected gold {state.ProjectedGold} reached reserve {goldReserve}";
+                    break;
+                }
+
+                if (requestedCandidate.Side != InventoryLogic.InventorySide.OtherInventory)
+                {
+                    lastSkipReason = "candidate was not from merchant inventory";
+                    continue;
+                }
+
+                var matchingCandidates = new List<ItemRosterElement>();
+                for (int i = 0; i < marketElements.Count; i++)
+                {
+                    var element = marketElements[i];
+                    if (element.IsEmpty || element.Amount <= 0 || element.EquipmentElement.Item == null) continue;
+                    if (requestedCandidate.MatchesEquipmentElement(element.EquipmentElement))
+                    {
+                        matchingCandidates.Add(element);
+                    }
+                }
+
+                if (matchingCandidates.Count == 0)
+                {
+                    lastSkipReason = $"merchant no longer has {requestedCandidate.Item.Name}";
+                    continue;
+                }
+
+                foreach (var candidateElement in matchingCandidates)
+                {
+                    if (remainingToBuy <= 0) break;
+                    if (state.ProjectedGold <= goldReserve)
+                    {
+                        lastSkipReason = $"projected gold {state.ProjectedGold} reached reserve {goldReserve}";
+                        break;
+                    }
+
+                    if (TryAddPurchaseTransfer(request, candidateElement, remainingToBuy, goldReserve, state, out int purchasedCount, out string skipReason))
+                    {
+                        remainingToBuy -= purchasedCount;
+                        purchasedAny = true;
+                    }
+                    else
+                    {
+                        lastSkipReason = skipReason;
+                    }
+                }
+            }
+
+            if (!purchasedAny)
+            {
+                LogRequestSkip(request, state, lastSkipReason);
+            }
+            else if (remainingToBuy > 0)
+            {
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Request partially fulfilled at {state.Settlement.Name}: {DescribeRequest(request)} remaining={remainingToBuy}");
+            }
+        }
+
+        private static void ExecuteInventoryTargetRequest(AutomationRequest request, RequestExecutionState state, int goldReserve)
+        {
+            int currentHeld = 0;
+            var playerElements = state.Logic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+            for (int i = 0; i < playerElements.Count; i++)
+            {
+                var element = playerElements[i];
+                if (element.EquipmentElement.Item != null && request.MatchesItem(element.EquipmentElement.Item))
+                {
+                    currentHeld += element.Amount;
+                }
+            }
+
+            int inventoryDeficit = request.Quantity - currentHeld;
+            if (inventoryDeficit <= 0) return;
+
+            var candidates = new List<ItemRosterElement>();
+            var marketElements = state.Logic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
+            for (int i = 0; i < marketElements.Count; i++)
+            {
+                var element = marketElements[i];
+                if (element.EquipmentElement.Item != null && request.MatchesItem(element.EquipmentElement.Item) && element.Amount > 0)
+                {
+                    candidates.Add(element);
+                }
+            }
+
+            if (candidates.Count == 0)
+            {
+                LogRequestSkip(request, state, "no matching merchant stock");
+                return;
+            }
+
+            var sortedCandidates = candidates.Select(candidate => new
+            {
+                Element = candidate,
+                Price = state.Logic.GetItemPrice(candidate.EquipmentElement, true)
+            }).OrderBy(candidate => candidate.Price).ToList();
+
+            bool purchasedAny = false;
+            string lastSkipReason = "no affordable matching stock";
+            foreach (var candidate in sortedCandidates)
+            {
+                if (inventoryDeficit <= 0) break;
+                if (state.ProjectedGold <= goldReserve)
+                {
+                    lastSkipReason = $"projected gold {state.ProjectedGold} reached reserve {goldReserve}";
+                    break;
+                }
+
+                if (TryAddPurchaseTransfer(request, candidate.Element, inventoryDeficit, goldReserve, state, out int purchasedCount, out string skipReason))
+                {
+                    inventoryDeficit -= purchasedCount;
+                    purchasedAny = true;
+                }
+                else
+                {
+                    lastSkipReason = skipReason;
+                }
+            }
+
+            if (!purchasedAny)
+            {
+                LogRequestSkip(request, state, lastSkipReason);
+            }
+            else if (inventoryDeficit > 0)
+            {
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Request partially fulfilled at {state.Settlement.Name}: {DescribeRequest(request)} remaining={inventoryDeficit}");
+            }
+        }
+
+        private static bool TryAddPurchaseTransfer(
+            AutomationRequest request,
+            ItemRosterElement candidateElement,
+            int requestedCount,
+            int goldReserve,
+            RequestExecutionState state,
+            out int purchasedCount,
+            out string skipReason)
+        {
+            purchasedCount = 0;
+            skipReason = "";
+
+            var item = candidateElement.EquipmentElement.Item;
+            if (item == null)
+            {
+                skipReason = "candidate item was null";
+                return false;
+            }
+
+            int price = state.Logic.GetItemPrice(candidateElement.EquipmentElement, true);
+            if (!IsPriceAllowedForRequest(request, item, price, state.Settings))
+            {
+                skipReason = $"{item.Name} price {price} exceeded {request.Profile} price policy";
+                return false;
+            }
+
+            int toBuy = Math.Min(requestedCount, candidateElement.Amount);
+            int maxAfford = (state.ProjectedGold - goldReserve) / Math.Max(1, price);
+            toBuy = Math.Min(toBuy, maxAfford);
+            if (toBuy <= 0)
+            {
+                skipReason = $"{item.Name} would breach reserve {goldReserve}";
+                return false;
+            }
+
+            bool isCargo = !item.IsAnimal && !item.IsMountable;
+            if (isCargo && (state.Settings?.LimitToInventoryCapacity ?? true))
+            {
+                float capacity = MobileParty.MainParty.InventoryCapacity;
+                float remainingCargoSpace = capacity - state.ProjectedWeight;
+                if (remainingCargoSpace < 0f) remainingCargoSpace = 0f;
+                if (item.Weight > 0f)
+                {
+                    int maxWeightBuy = (int)(remainingCargoSpace / item.Weight);
+                    toBuy = Math.Min(toBuy, maxWeightBuy);
+                }
+            }
+
+            bool isAnimalOrMount = item.IsAnimal || item.IsMountable;
+            if (isAnimalOrMount)
+            {
+                toBuy = Math.Min(toBuy, state.ProjectedAnimalSlots);
+            }
+
+            if (toBuy <= 0)
+            {
+                skipReason = isAnimalOrMount ? $"{item.Name} would exceed herding allowance" : $"{item.Name} would exceed cargo capacity";
+                return false;
+            }
+
+            var command = TransferCommand.Transfer(
+                toBuy,
+                InventoryLogic.InventorySide.OtherInventory,
+                InventoryLogic.InventorySide.PlayerInventory,
+                new ItemRosterElement(candidateElement.EquipmentElement, toBuy),
+                EquipmentIndex.None,
+                EquipmentIndex.None,
+                Hero.MainHero.CharacterObject
+            );
+            state.Logic.AddTransferCommand(command);
+            state.ExecutedAnyItemTransfers = true;
+            state.ProjectedGold -= toBuy * price;
+            if (isCargo)
+            {
+                state.ProjectedWeight += toBuy * item.Weight;
+            }
+            if (isAnimalOrMount)
+            {
+                state.ProjectedAnimalSlots -= toBuy;
+            }
+
+            purchasedCount = toBuy;
+            state.FulfilledItemParts.Add($"{toBuy}x {item.Name}");
+            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Request purchased at {state.Settlement.Name}: {DescribeRequest(request)} -> {toBuy}x {item.Name} ({toBuy * price}d, {price}d each)");
+            return true;
+        }
+
+        private static void LogRequestSkip(AutomationRequest request, RequestExecutionState state, string reason)
+        {
+            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Request skipped at {state.Settlement.Name}: {DescribeRequest(request)} ({reason})");
+        }
+
+        private static string DescribeRequest(AutomationRequest request)
+        {
+            string target = request.QuantityMode == RequestQuantityMode.PurchaseCount
+                ? $"{request.MarketCandidates.Count} market candidates"
+                : request.TargetId;
+            string reserve = request.BudgetPolicy == BudgetPolicyKind.ExplicitReserve
+                ? $"explicitReserve={request.ExplicitGoldReserve}"
+                : "coreReserve";
+            return $"{request.RequestorId} {request.Profile}/{request.Priority} {request.QuantityMode} {request.Type}:{target} qty={request.Quantity} {reserve}";
+        }
+
+        private static int GetGoldReserveForRequest(AutomationRequest request, Settings? settings)
+        {
+            if (request.BudgetPolicy == BudgetPolicyKind.ExplicitReserve)
+            {
+                return request.ExplicitGoldReserve;
+            }
+
+            int dailyWage = MobileParty.MainParty?.TotalWage ?? 0;
+            int minimumGoldReserve = settings?.MinimumGoldReserve ?? 1000;
+            int daysToKeep = settings?.MinDaysExpensesToKeep ?? 10;
+            return Math.Max(minimumGoldReserve, dailyWage * daysToKeep);
+        }
+
+        private static bool IsPriceAllowedForRequest(AutomationRequest request, ItemObject item, int price, Settings? settings)
+        {
+            if (item == null) return false;
+
+            float? maxMultiplier = request.Profile switch
+            {
+                RequestProfile.Routine => settings?.RoutinePriceLimitMultiplier ?? 1.5f,
+                RequestProfile.Opportunistic => settings?.OpportunisticPriceLimitMultiplier ?? 1.1f,
+                _ => null
+            };
+
+            if (maxMultiplier == null || item.Value <= 0)
+            {
+                return true;
+            }
+
+            return price <= item.Value * maxMultiplier.Value;
         }
 
         private static void ExecuteTradeProposal(TradeProposal proposal, TradeContext context, InventoryLogic logic)

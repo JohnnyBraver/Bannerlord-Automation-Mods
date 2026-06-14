@@ -16,7 +16,8 @@ namespace EquipmentManager
         {
             public InventoryItemView Candidate;
             public int Price;
-            public int MinGoldReserve;
+            public int ExplicitGoldReserve;
+            public RequestProfile Profile;
             public float ScoreIncrease;
             public bool PrioritizeStealth;
             public Hero Hero;
@@ -290,7 +291,8 @@ namespace EquipmentManager
                             {
                                 Candidate = bestCandidate,
                                 Price = bestCandidate.UnitPrice,
-                                MinGoldReserve = requiredReserve,
+                                ExplicitGoldReserve = requiredReserve,
+                                Profile = prioritizeStealth ? settings.StealthGearRequestProfile : settings.TopArmorRequestProfile,
                                 ScoreIncrease = scoreIncrease,
                                 PrioritizeStealth = prioritizeStealth,
                                 Hero = hero,
@@ -301,17 +303,28 @@ namespace EquipmentManager
                 }
             }
 
-            // Select and request only the single best upgrade across all slots/heroes (Limit 1 per town)
+            // Submit candidates in preference order; Core buys the best affordable one.
             if (potentialOrders.Count > 0)
             {
-                var bestOrder = potentialOrders.OrderByDescending(o => o.ScoreIncrease).First();
-                AutomationRegistry.RegisterRequest(AutomationRequest.ForMarketItem(
-                    "EquipmentManager",
-                    bestOrder.Candidate,
-                    1,
-                    5,
-                    bestOrder.MinGoldReserve));
-                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Requested Auto-Buy (Limit 1 per town): {bestOrder.Candidate.Item.Name} as upgrade for {bestOrder.Hero.Name} ({bestOrder.Slot} slot). Price seen: {bestOrder.Price} denars. Score Increase: {bestOrder.ScoreIncrease:F1}");
+                var orderedOrders = potentialOrders
+                    .OrderByDescending(o => o.ScoreIncrease)
+                    .GroupBy(o => o.Candidate.SnapshotId)
+                    .Select(g => g.First())
+                    .ToList();
+
+                foreach (var reserveGroup in orderedOrders.GroupBy(o => new { o.ExplicitGoldReserve, o.Profile }).OrderByDescending(g => g.Max(o => o.ScoreIncrease)))
+                {
+                    var groupOrders = reserveGroup.ToList();
+                    var bestOrder = groupOrders[0];
+                    AutomationRegistry.RegisterRequest(AutomationRequest.ForMarketItems(
+                        "EquipmentManager",
+                        groupOrders.Select(o => o.Candidate),
+                        1,
+                        reserveGroup.Key.Profile,
+                        5,
+                        reserveGroup.Key.ExplicitGoldReserve));
+                    SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Requested Auto-Buy candidates (Limit 1 per profile/reserve group): top choice {bestOrder.Candidate.Item.Name} as upgrade for {bestOrder.Hero.Name} ({bestOrder.Slot} slot). Candidates: {groupOrders.Count}. Profile: {reserveGroup.Key.Profile}. Reserve: {reserveGroup.Key.ExplicitGoldReserve} denars. Price seen: {bestOrder.Price} denars. Score Increase: {bestOrder.ScoreIncrease:F1}");
+                }
             }
         }
 

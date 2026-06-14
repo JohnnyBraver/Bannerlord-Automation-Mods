@@ -6,7 +6,7 @@ using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Inventory;
 using TaleWorlds.Core;
-using System.Reflection;
+using TaleWorlds.ObjectSystem;
 using SettlementAutomationCore;
 
 namespace PartyManager.Helpers
@@ -99,168 +99,88 @@ namespace PartyManager.Helpers
         {
             if (settings == null || party == null || Hero.MainHero == null) return;
 
-            // 1. Gather settings from TradeOptimizer using reflection to avoid direct DLL dependency
-            bool optAutoBuyFood = true;
-            int optFoodDays = 10;
-            int optMinSizeVariety = 20;
-            int optMinGoldVariety = 3000;
-            bool optAutoBuyMounts = true;
-            int optMinGoldMounts = 10000;
-
-            try
-            {
-                foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    if (assembly.GetName().Name == "TradeOptimizer")
-                    {
-                        var settingsType = assembly.GetType("TradeOptimizer.Settings");
-                        if (settingsType != null)
-                        {
-                            var instanceProp = settingsType.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
-                            var settingsInstance = instanceProp?.GetValue(null);
-                            if (settingsInstance != null)
-                            {
-                                optAutoBuyFood = (bool)(settingsType.GetProperty("AutoBuyFood")?.GetValue(settingsInstance) ?? true);
-                                optFoodDays = (int)(settingsType.GetProperty("PartyFoodDaysToKeep")?.GetValue(settingsInstance) ?? 10);
-                                optMinSizeVariety = (int)(settingsType.GetProperty("MinPartySizeForVariety")?.GetValue(settingsInstance) ?? 20);
-                                optMinGoldVariety = (int)(settingsType.GetProperty("MinGoldForVariety")?.GetValue(settingsInstance) ?? 3000);
-                                optAutoBuyMounts = (bool)(settingsType.GetProperty("AutoBuyMounts")?.GetValue(settingsInstance) ?? true);
-                                optMinGoldMounts = (int)(settingsType.GetProperty("MinGoldForMounts")?.GetValue(settingsInstance) ?? 10000);
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
-            catch {}
-
             int partySize = party.MemberRoster.TotalManCount;
             if (partySize <= 0) return;
 
-            // 2. Submit Tiered Food Requests
-            if (optAutoBuyFood)
+            // 1. Submit layered food requests.
+            if (settings.AutoBuyFood)
             {
-                // Tier 1: Starvation/Survival (Keep 2 days of food at high priority)
-                int survivalTarget = (int)Math.Ceiling(partySize * 2 / 20.0f); // 20 man-days per unit of food
-                int dailyWage = party.TotalWage;
-                int survivalMinGold = Math.Max(1000, dailyWage * 2);
-                AutomationRegistry.RegisterRequest(new AutomationRequest(
+                int criticalTarget = CalculateFoodUnitsForDays(partySize, settings.CriticalFoodDays);
+                AutomationRegistry.RegisterRequest(AutomationRequest.ForInventoryTarget(
                     "PartyManager",
                     RequestType.ItemCategory,
                     "Food",
-                    survivalTarget,
-                    95, // Priority: Emergency
-                    survivalMinGold,
-                    3.0f // Max Price: Pay any price
+                    criticalTarget,
+                    settings.CriticalFoodRequestProfile,
+                    9
                 ));
 
-                // Tier 2: Stability (Keep 5 days of food at high/medium priority)
-                int stabilityTarget = (int)Math.Ceiling(partySize * 5 / 20.0f);
-                AutomationRegistry.RegisterRequest(new AutomationRequest(
-                    "PartyManager",
-                    RequestType.ItemCategory,
-                    "Food",
-                    stabilityTarget,
-                    70, // Priority: High
-                    2000,
-                    1.5f
-                ));
-
-                // Tier 3: Full Buffer & Variety (Keep optFoodDays of food variety)
-                if (partySize >= optMinSizeVariety)
+                int totalFoodTarget = CalculateFoodUnitsForDays(partySize, settings.PartyFoodDaysToKeep);
+                if (partySize >= settings.MinPartySizeForVariety)
                 {
-                    int varietyTarget = (int)Math.Ceiling(partySize * optFoodDays / 20.0f);
-                    AutomationRegistry.RegisterRequest(new AutomationRequest(
-                        "PartyManager",
-                        RequestType.ItemCategory,
-                        "Food",
-                        varietyTarget,
-                        35, // Priority: Low
-                        optMinGoldVariety,
-                        1.1f
-                    ));
+                    var knownFoodItems = GetKnownFoodItems();
+                    if (knownFoodItems.Count > 0)
+                    {
+                        int perFoodTarget = Math.Max(1, (int)Math.Ceiling(totalFoodTarget / (double)knownFoodItems.Count));
+                        foreach (var foodItem in knownFoodItems)
+                        {
+                            AutomationRegistry.RegisterRequest(AutomationRequest.ForInventoryTarget(
+                                "PartyManager",
+                                RequestType.SpecificItem,
+                                foodItem.StringId,
+                                perFoodTarget,
+                                settings.FoodVarietyRequestProfile,
+                                5
+                            ));
+                        }
+                    }
                 }
+
+                AutomationRegistry.RegisterRequest(AutomationRequest.ForInventoryTarget(
+                    "PartyManager",
+                    RequestType.ItemCategory,
+                    "Food",
+                    totalFoodTarget,
+                    settings.FoodBufferRequestProfile,
+                    5
+                ));
             }
 
-            // 3. Submit Mount Requests
-            if (optAutoBuyMounts)
+            // 2. Submit mount requests.
+            if (settings.AutoBuyMounts)
             {
                 AnimalCalculator.CalculatePartyAnimals(party, out int infantry, out _, out int riding, out _, out _, out _, out _, out _);
                 int missing = infantry - riding;
                 if (missing > 0)
                 {
-                    // Scale priority by percentage of infantry that is currently unmounted
-                    int scalePriority = (int)(30 + 50 * ((float)missing / infantry));
-                    AutomationRegistry.RegisterRequest(new AutomationRequest(
+                    // Scale priority by percentage of infantry that is currently unmounted.
+                    int scalePriority = Math.Max(1, Math.Min(9, (int)Math.Round(1 + 8 * ((float)missing / infantry))));
+                    AutomationRegistry.RegisterRequest(AutomationRequest.ForInventoryTarget(
                         "PartyManager",
                         RequestType.ItemCategory,
                         "Horse",
                         infantry, // Cumulative target is to reach fully mounted infantry
-                        scalePriority,
-                        optMinGoldMounts,
-                        1.2f
+                        settings.RidingMountRequestProfile,
+                        scalePriority
                     ));
                 }
             }
+        }
 
-            // 4. Submit Prioritized Recruit Requests
-            if (settings.AutoRecruitVolunteers)
-            {
-                int currentSize = party.MemberRoster.TotalManCount;
-                int limit = party.Party.PartySizeLimit;
-                if (currentSize < limit)
-                {
-                    bool wantsCavalry = settings.RecruitMeleeCavalry || settings.RecruitHorseArchers;
-                    bool wantsRanged = settings.RecruitFootArchers || settings.RecruitCrossbowmen || settings.RecruitHorseArchers;
-                    bool wantsMelee = settings.RecruitShieldInfantry || settings.RecruitShockInfantry || settings.RecruitSkirmishers;
+        private static int CalculateFoodUnitsForDays(int partySize, int days)
+        {
+            return Math.Max(1, (int)Math.Ceiling(partySize * Math.Max(1, days) / 20.0f));
+        }
 
-                    string recruitFilter = "AnyRecruit";
-                    if (wantsCavalry && !wantsRanged && !wantsMelee)
-                        recruitFilter = "MeleeCavalry";
-                    else if (wantsRanged && !wantsCavalry && !wantsMelee)
-                        recruitFilter = "Ranged";
-                    else if (wantsMelee && !wantsCavalry && !wantsRanged)
-                        recruitFilter = "Melee";
-
-                    // Tier 1: Emergency Hires (fill up to 30% capacity if extremely low)
-                    int emergencyTarget = (int)(limit * 0.3f);
-                    if (currentSize < emergencyTarget)
-                    {
-                        AutomationRegistry.RegisterRequest(new AutomationRequest(
-                            "PartyManager",
-                            RequestType.TroopFilter,
-                            "AnyRecruit", // Hire anyone in an emergency
-                            emergencyTarget,
-                            90, // Priority: Emergency
-                            500,
-                            1.0f
-                        ));
-                    }
-
-                    // Tier 2: Standard Recruit Hires (fill up to 80% capacity with filtered recruits)
-                    int normalTarget = (int)(limit * 0.8f);
-                    AutomationRegistry.RegisterRequest(new AutomationRequest(
-                        "PartyManager",
-                        RequestType.TroopFilter,
-                        recruitFilter,
-                        normalTarget,
-                        60, // Priority: Medium-High
-                        1000,
-                        1.0f
-                    ));
-
-                    // Tier 3: Optimization Fill (fill up to 100% capacity with filtered recruits)
-                    AutomationRegistry.RegisterRequest(new AutomationRequest(
-                        "PartyManager",
-                        RequestType.TroopFilter,
-                        recruitFilter,
-                        limit,
-                        30, // Priority: Low
-                        5000,
-                        1.0f
-                    ));
-                }
-            }
+        private static List<ItemObject> GetKnownFoodItems()
+        {
+            return MBObjectManager.Instance
+                .GetObjectTypeList<ItemObject>()
+                .Where(item => item != null && item.IsFood && !string.IsNullOrEmpty(item.StringId))
+                .GroupBy(item => item.StringId)
+                .Select(group => group.First())
+                .OrderBy(item => item.StringId)
+                .ToList();
         }
     }
 }
