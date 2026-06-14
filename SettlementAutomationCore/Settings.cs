@@ -6,7 +6,7 @@ namespace SettlementAutomationCore
 {
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "SettlementAutomationCore_v1";
+        public override string Id => "SettlementAutomationCore_v3";
         public override string DisplayName => "Settlement Automation Core";
         public override string FolderName => "SettlementAutomationCore";
         public override string FormatType => "json";
@@ -21,8 +21,8 @@ namespace SettlementAutomationCore
         [SettingPropertyGroup("Budget Protection", GroupOrder = 0)]
         public int MinDaysExpensesToKeep { get; set; } = 10;
 
-        [SettingPropertyBool("Limit to Carry Capacity", RequireRestart = false,
-            HintText = "Stop buying when your party's carry weight would be exceeded.", Order = 1)]
+        [SettingPropertyBool("Respect Carry Capacity", RequireRestart = false,
+            HintText = "If enabled, Core stops item purchases before they would exceed carry capacity. If disabled, automation may buy cargo even when it causes the overburdened speed penalty.", Order = 1)]
         [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public bool LimitToInventoryCapacity { get; set; } = true;
 

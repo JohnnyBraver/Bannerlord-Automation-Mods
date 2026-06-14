@@ -6,13 +6,23 @@ Settlement Automation Core owns market execution. Domain modules describe what t
 
 Settlement automation intentionally keeps "decide what we want" separate from "touch the game inventory."
 
-1. Core builds an `AutomationRequestContext` with categorized merchant and player inventory snapshots.
-2. Request providers submit item requests.
-3. Recruitment, garrison, ransom, dungeon, and fief phases run on their own provider interfaces.
-4. Core executes item requests against fresh `InventoryLogic`.
-5. Free trade runs afterward with request reservations applied.
+1. Preparation providers run before market decisions. This lets modules finish non-trading setup, such as EquipmentManager equipping the best available gear before anything decides what can be sold.
+2. Core builds an `AutomationRequestContext` with categorized merchant and player inventory snapshots.
+3. Request providers submit item requests.
+4. Pre-sell providers submit sell orders after preparation and request gathering.
+5. Recruitment, garrison, ransom, dungeon, and fief phases run on their own provider interfaces.
+6. Core executes item requests against fresh `InventoryLogic`.
+7. Free trade runs afterward with request reservations applied.
 
 Domain modules should inspect context and submit requests. They should not execute transfers directly.
+
+Modules that need to change party state before trade planning should implement `IAutomationPreparationProvider`. Preparation runs before the visibility snapshot, so later request providers and pre-sell providers see the prepared inventory state.
+
+EquipmentManager uses preparation for headless auto-equip. It tracks a virtual candidate pool during the single equip transaction, so gear freed by a combat upgrade can be handed down to civilian or stealth outfits before Core asks any provider what should be sold.
+
+EquipmentManager does not change item lock icons for its own keep rules. It builds a sale-protection plan and only submits sell orders for quantities that are not manually locked and not protected by the current settings.
+
+After battles, EquipmentManager does not equip immediately when the battle event ends. It waits for `ItemsLooted` to report equipment added to the main party, then runs headless auto-equip on the next campaign tick.
 
 ## Request Ordering
 
@@ -81,6 +91,25 @@ Market candidate requests are for exact visible merchant inventory entries. Prov
 Market candidate requests are advisory. If the item disappeared, changed modifier, became unaffordable, or would violate reserve/cargo/herding rules, Core skips it safely.
 
 Market candidate providers should pass candidates from `context.MerchantInventory`. Core rejects non-merchant candidates during execution.
+
+EquipmentManager owns equipment upgrade purchases, including stealth/blackened gear. TradeOptimizer does not buy equipment as a trade commodity.
+
+## Equipment Keep Rules
+
+EquipmentManager keep rules protect items from automatic sale only. They do not toggle the game's lock icon.
+
+- `Min Tier to Keep` protects high-tier equipment from automatic sale. The default is Tier 6.
+- `Keep Positive Modifiers` is optional and off by default.
+- The old modifier-quality keep gate is removed.
+- `Keep Donation Items` protects cheap perk-donation gear from sale without locking it.
+- `Additional Armor Sets to Keep` can reserve the best spare armor pieces per enabled outfit type.
+- Spare combat, civilian, and sneaking armor reserves are separate toggles and are off by default.
+
+## Market Reporting
+
+Core owns the in-game market activity summary for automation. Pre-sell orders, item-request purchases, and free-trade proposal actions are combined into one town-entry message that lists bought, sold, and slaughtered items plus the net gold change for those market phases.
+
+Detailed request gathering, skip reasons, price-cap decisions, cargo failures, reserve failures, and per-request purchase lines remain in the mod log files. The HUD message is intentionally compact so normal town visits do not become noisy.
 
 ## Settings Ownership
 

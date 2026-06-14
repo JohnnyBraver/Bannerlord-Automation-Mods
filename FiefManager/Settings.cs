@@ -23,7 +23,7 @@ namespace FiefManager
 
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "FiefManager_v1";
+        public override string Id => "FiefManager_v3";
         public override string DisplayName => "Fief Manager";
         public override string FolderName => "FiefManager";
         public override string FormatType => "json";
