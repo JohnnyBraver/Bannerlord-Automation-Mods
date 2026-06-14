@@ -79,7 +79,7 @@ namespace EquipmentManager
             {
                 _provider = new EquipmentManagerProvider();
                 AutomationRegistry.RegisterPreSellProvider(_provider);
-                AutomationRegistry.RegisterEquipmentUpgradeProvider(_provider);
+                AutomationRegistry.RegisterRequestProvider(_provider);
 
                 var campaignStarter = gameStarter as CampaignGameStarter;
                 if (campaignStarter != null)
@@ -95,7 +95,7 @@ namespace EquipmentManager
             if (_provider != null)
             {
                 AutomationRegistry.UnregisterPreSellProvider(_provider);
-                AutomationRegistry.UnregisterEquipmentUpgradeProvider(_provider);
+                AutomationRegistry.UnregisterRequestProvider(_provider);
                 _provider = null;
             }
         }
