@@ -190,11 +190,16 @@ namespace SettlementAutomationCore
     // ----------------------------------------------------
     // Provider Interfaces
     // ----------------------------------------------------
-    public interface ITradeOrderProvider
+    public interface IPreSellProvider
     {
         string ProviderName { get; }
         List<TradeOrder> GetPreSellOrders(MobileParty party, Settlement settlement);
-        List<TradeOrder> GetMainOrders(MobileParty party, Settlement settlement, InventoryLogic currentLogic);
+    }
+
+    public interface IFreeTradeAnalyzer
+    {
+        string ProviderName { get; }
+        TradeProposal AnalyzeMarket(TradeContext context);
     }
 
     public interface IRecruitOrderProvider
@@ -222,38 +227,10 @@ namespace SettlementAutomationCore
         List<DungeonOrder> GetDungeonOrders(MobileParty party, Settlement settlement);
     }
 
-    public enum LogisticsGoalType
-    {
-        FoodRestock,
-        SpeedMounts
-    }
-
-    public class LogisticsGoal
-    {
-        public LogisticsGoalType GoalType { get; }
-        public int TargetQuantity { get; }
-        public int MinGoldReserve { get; }
-        public bool IsSurvivalMode { get; }
-
-        public LogisticsGoal(LogisticsGoalType goalType, int targetQuantity, int minGoldReserve, bool isSurvivalMode = false)
-        {
-            GoalType = goalType;
-            TargetQuantity = targetQuantity;
-            MinGoldReserve = minGoldReserve;
-            IsSurvivalMode = isSurvivalMode;
-        }
-    }
-
-    public interface ILogisticsGoalProvider
-    {
-        string ProviderName { get; }
-        void SubmitLogisticsGoals(MobileParty party, Settlement settlement);
-    }
-
     public interface IFiefAutomationProvider
     {
         string ProviderName { get; }
-        void ProcessFiefAutomation(MobileParty party, Settlement settlement);
+        void ProcessFiefAutomation(MobileParty party, Settlement settlement, bool isSurplusPhase);
     }
 
     // ----------------------------------------------------
@@ -261,43 +238,78 @@ namespace SettlementAutomationCore
     // ----------------------------------------------------
     public static class AutomationRegistry
     {
-        private static readonly List<ProviderRegistration<ITradeOrderProvider>> TradeProviders = new();
+        private static readonly List<ProviderRegistration<IPreSellProvider>> PreSellProviders = new();
+        private static readonly List<ProviderRegistration<IFreeTradeAnalyzer>> FreeTradeAnalyzers = new();
         private static readonly List<ProviderRegistration<IRecruitOrderProvider>> RecruitProviders = new();
         private static readonly List<ProviderRegistration<IGarrisonOrderProvider>> GarrisonProviders = new();
         private static readonly List<ProviderRegistration<IRansomOrderProvider>> RansomProviders = new();
         private static readonly List<ProviderRegistration<IDungeonOrderProvider>> DungeonProviders = new();
         private static readonly List<ProviderRegistration<IFiefAutomationProvider>> FiefProviders = new();
-        private static readonly List<ProviderRegistration<ILogisticsGoalProvider>> GoalProviders = new();
-        private static readonly List<LogisticsGoal> CurrentGoals = new();
 
-        // --- Trade Providers ---
-        public static void RegisterTradeProvider(ITradeOrderProvider provider)
+        private static readonly List<ProviderRegistration<IAutomationRequestProvider>> RequestProviders = new();
+        private static readonly List<AutomationRequest> CurrentRequests = new();
+        private static readonly List<ItemReservation> CurrentReservations = new();
+
+        // --- Pre-Sell Providers ---
+        public static void RegisterPreSellProvider(IPreSellProvider provider)
         {
-            lock (TradeProviders)
+            lock (PreSellProviders)
             {
-                if (!TradeProviders.Any(r => EqualityComparer<ITradeOrderProvider>.Default.Equals(r.Provider, provider)))
+                if (!PreSellProviders.Any(r => EqualityComparer<IPreSellProvider>.Default.Equals(r.Provider, provider)))
                 {
                     string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
-                    TradeProviders.Add(new ProviderRegistration<ITradeOrderProvider>(provider, provider.ProviderName, callingAssembly));
+                    PreSellProviders.Add(new ProviderRegistration<IPreSellProvider>(provider, provider.ProviderName, callingAssembly));
                 }
             }
         }
 
-        public static void UnregisterTradeProvider(ITradeOrderProvider provider)
+        public static void UnregisterPreSellProvider(IPreSellProvider provider)
         {
-            lock (TradeProviders)
+            lock (PreSellProviders)
             {
-                TradeProviders.RemoveAll(r => EqualityComparer<ITradeOrderProvider>.Default.Equals(r.Provider, provider));
+                PreSellProviders.RemoveAll(r => EqualityComparer<IPreSellProvider>.Default.Equals(r.Provider, provider));
             }
         }
 
-        public static IReadOnlyList<ProviderRegistration<ITradeOrderProvider>> ActiveTradeProviders
+        public static IReadOnlyList<ProviderRegistration<IPreSellProvider>> ActivePreSellProviders
         {
             get
             {
-                lock (TradeProviders)
+                lock (PreSellProviders)
                 {
-                    return new List<ProviderRegistration<ITradeOrderProvider>>(TradeProviders);
+                    return new List<ProviderRegistration<IPreSellProvider>>(PreSellProviders);
+                }
+            }
+        }
+
+        // --- Free Trade Analyzers ---
+        public static void RegisterFreeTradeAnalyzer(IFreeTradeAnalyzer provider)
+        {
+            lock (FreeTradeAnalyzers)
+            {
+                if (!FreeTradeAnalyzers.Any(r => EqualityComparer<IFreeTradeAnalyzer>.Default.Equals(r.Provider, provider)))
+                {
+                    string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
+                    FreeTradeAnalyzers.Add(new ProviderRegistration<IFreeTradeAnalyzer>(provider, provider.ProviderName, callingAssembly));
+                }
+            }
+        }
+
+        public static void UnregisterFreeTradeAnalyzer(IFreeTradeAnalyzer provider)
+        {
+            lock (FreeTradeAnalyzers)
+            {
+                FreeTradeAnalyzers.RemoveAll(r => EqualityComparer<IFreeTradeAnalyzer>.Default.Equals(r.Provider, provider));
+            }
+        }
+
+        public static IReadOnlyList<ProviderRegistration<IFreeTradeAnalyzer>> ActiveFreeTradeAnalyzers
+        {
+            get
+            {
+                lock (FreeTradeAnalyzers)
+                {
+                    return new List<ProviderRegistration<IFreeTradeAnalyzer>>(FreeTradeAnalyzers);
                 }
             }
         }
@@ -462,30 +474,6 @@ namespace SettlementAutomationCore
             }
         }
 
-        // --- Goal Providers & Goals ---
-        public static void RegisterGoalProvider(ILogisticsGoalProvider provider)
-        {
-            lock (GoalProviders)
-            {
-                if (!GoalProviders.Any(r => EqualityComparer<ILogisticsGoalProvider>.Default.Equals(r.Provider, provider)))
-                {
-                    string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
-                    GoalProviders.Add(new ProviderRegistration<ILogisticsGoalProvider>(provider, provider.ProviderName, callingAssembly));
-                }
-            }
-        }
-
-        public static void UnregisterGoalProvider(ILogisticsGoalProvider provider)
-        {
-            lock (GoalProviders)
-            {
-                GoalProviders.RemoveAll(r => EqualityComparer<ILogisticsGoalProvider>.Default.Equals(r.Provider, provider));
-            }
-        }
-
-        private static readonly List<ProviderRegistration<IAutomationRequestProvider>> RequestProviders = new();
-        private static readonly List<AutomationRequest> CurrentRequests = new();
-
         // --- Request Providers ---
         public static void RegisterRequestProvider(IAutomationRequestProvider provider)
         {
@@ -545,49 +533,31 @@ namespace SettlementAutomationCore
             }
         }
 
-        public static IReadOnlyList<ProviderRegistration<ILogisticsGoalProvider>> ActiveGoalProviders
+        // --- Reservation Registries ---
+        public static void ClearReservations()
+        {
+            lock (CurrentReservations)
+            {
+                CurrentReservations.Clear();
+            }
+        }
+
+        public static void RegisterReservation(ItemReservation reservation)
+        {
+            lock (CurrentReservations)
+            {
+                CurrentReservations.Add(reservation);
+            }
+        }
+
+        public static IReadOnlyList<ItemReservation> ActiveReservations
         {
             get
             {
-                lock (GoalProviders)
+                lock (CurrentReservations)
                 {
-                    return new List<ProviderRegistration<ILogisticsGoalProvider>>(GoalProviders);
+                    return new List<ItemReservation>(CurrentReservations);
                 }
-            }
-        }
-
-        public static void ClearLogisticsGoals()
-        {
-            lock (CurrentGoals)
-            {
-                CurrentGoals.Clear();
-            }
-        }
-
-        public static void RegisterLogisticsGoal(LogisticsGoal goal)
-        {
-            lock (CurrentGoals)
-            {
-                CurrentGoals.Add(goal);
-            }
-        }
-
-        public static IReadOnlyList<LogisticsGoal> ActiveLogisticsGoals
-        {
-            get
-            {
-                lock (CurrentGoals)
-                {
-                    return new List<LogisticsGoal>(CurrentGoals);
-                }
-            }
-        }
-
-        public static bool IsTradeOptimizerActive()
-        {
-            lock (TradeProviders)
-            {
-                return TradeProviders.Any(p => p.ProviderName == "TradeOptimizer");
             }
         }
     }

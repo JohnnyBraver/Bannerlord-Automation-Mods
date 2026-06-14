@@ -131,5 +131,25 @@ namespace SettlementAutomationCore.Helpers
                 return null;
             }
         }
+
+        public static float GetRosterWeight(TaleWorlds.CampaignSystem.Roster.ItemRoster? roster)
+        {
+            if (roster == null) return 0f;
+            float weight = 0f;
+            for (int i = 0; i < roster.Count; i++)
+            {
+                var element = roster.GetElementCopyAtIndex(i);
+                if (element.EquipmentElement.Item != null)
+                {
+                    var item = element.EquipmentElement.Item;
+                    if (item.IsAnimal || item.IsMountable)
+                    {
+                        continue;
+                    }
+                    weight += item.Weight * element.Amount;
+                }
+            }
+            return weight;
+        }
     }
 }

@@ -74,9 +74,10 @@ namespace SettlementAutomationCore
             try
             {
                 // ----------------------------------------------------
-                // Step 0: Collect Prioritized Requests from active providers
+                // Step 0: Gather Prioritized Requests and Reservations
                 // ----------------------------------------------------
                 AutomationRegistry.ClearRequests();
+                AutomationRegistry.ClearReservations();
                 var requestProviders = AutomationRegistry.ActiveRequestProviders;
                 foreach (var reg in requestProviders)
                 {
@@ -93,21 +94,24 @@ namespace SettlementAutomationCore
                 // ----------------------------------------------------
                 // Step 1: Pre-Sell Phase (Revenue Generation)
                 // ----------------------------------------------------
-                var tradeRegistrations = AutomationRegistry.ActiveTradeProviders;
+                var preSellProviders = AutomationRegistry.ActivePreSellProviders;
                 var preSellOrders = new List<TradeOrder>();
-                foreach (var reg in tradeRegistrations)
+                foreach (var reg in preSellProviders)
                 {
                     try
                     {
                         var orders = reg.Provider.GetPreSellOrders(MobileParty.MainParty, settlement);
                         if (orders != null) preSellOrders.AddRange(orders);
                     }
-                    catch {}
+                    catch (Exception ex)
+                    {
+                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error gathering pre-sell orders from {reg.ProviderName}: {ex.Message}");
+                    }
                 }
 
                 if (preSellOrders.Count > 0)
                 {
-                    var logic1 = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
+                    var logic1 = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
                     if (logic1 != null)
                     {
                         bool executedAny = false;
@@ -341,9 +345,6 @@ namespace SettlementAutomationCore
                             order.Notable.VolunteerTypes[order.SlotIndex] = null;
                             MobileParty.MainParty.MemberRoster.AddToCounts(troop, 1);
                             GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, order.Notable, cost, false);
-                            // OnTroopRecruited handles Leadership XP, FamousCommander troop XP, and bandit Roguery XP.
-                            // Do NOT also fire OnUnitRecruited — it duplicates SkillLevelingManager.OnTroopRecruited,
-                            // which would award Leadership XP twice per recruit.
                             CampaignEventDispatcher.Instance.OnTroopRecruited(Hero.MainHero, settlement, order.Notable, troop, 1);
                             
                             if (recruitedMap.ContainsKey(troop))
@@ -367,6 +368,7 @@ namespace SettlementAutomationCore
                     InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
                     Helpers.Logger.WriteLog("SettlementAutomationCore", msg);
                 }
+
                 // ----------------------------------------------------
                 // Step 4: Garrison Donation Phase
                 // ----------------------------------------------------
@@ -461,107 +463,138 @@ namespace SettlementAutomationCore
                 }
 
                 // ----------------------------------------------------
-                // Step 5.5: Prioritized Order Fulfillment Engine
+                // Step 6: Priority Needs Phase (Need Fulfillment)
                 // ----------------------------------------------------
                 var activeRequests = AutomationRegistry.ActiveRequests.OrderByDescending(r => r.Priority).ToList();
                 if (activeRequests.Count > 0 && Hero.MainHero != null)
                 {
-                    var fulfillmentLogic = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
-                    if (fulfillmentLogic != null)
+                    var needsLogic = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
+                    if (needsLogic != null)
                     {
                         bool executedAnyItemTransfers = false;
                         var fulfilledItemParts = new List<string>();
 
                         // Part A: Process Item Requests (ItemCategory & SpecificItem)
-                        // If TradeOptimizer is active, it handles item purchases during the Main Trade Phase (Step 6) using its advanced pricing and herding logic.
-                        if (!AutomationRegistry.IsTradeOptimizerActive())
+                        var itemRequests = activeRequests.Where(r => r.Type == RequestType.ItemCategory || r.Type == RequestType.SpecificItem).ToList();
+                        
+                        var coreSettings = Settings.Instance;
+                        int projectedGold = Hero.MainHero.Gold;
+                        float projectedWeight = Helpers.InventoryHelper.GetRosterWeight(MobileParty.MainParty.ItemRoster);
+                        int projectedAnimalSlots = HerdingCalculator.GetRemainingAnimalSlots(MobileParty.MainParty);
+
+                        foreach (var req in itemRequests)
                         {
-                            var itemRequests = activeRequests.Where(r => r.Type == RequestType.ItemCategory || r.Type == RequestType.SpecificItem).ToList();
-                            foreach (var req in itemRequests)
+                            if (projectedGold < req.MinGoldReserve) continue;
+
+                            // 1. Get current inventory count for matching items (respecting previous transfers in Step 6)
+                            int currentHeld = 0;
+                            var playerElements = needsLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+                            for (int i = 0; i < playerElements.Count; i++)
                             {
-                                if (Hero.MainHero.Gold < req.MinGoldReserve) continue;
-
-                                // 1. Get current inventory count for matching items
-                                int currentHeld = 0;
-                                var playerElements = fulfillmentLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-                                for (int i = 0; i < playerElements.Count; i++)
+                                var el = playerElements[i];
+                                if (el.EquipmentElement.Item != null && req.MatchesItem(el.EquipmentElement.Item))
                                 {
-                                    var el = playerElements[i];
-                                    if (el.EquipmentElement.Item != null && req.MatchesItem(el.EquipmentElement.Item))
-                                    {
-                                        currentHeld += el.Amount;
-                                    }
-                                }
-
-                                int deficit = req.TargetQuantity - currentHeld;
-                                if (deficit <= 0) continue;
-
-                                // 2. Locate candidates in settlement inventory
-                                var candidates = new List<ItemRosterElement>();
-                                var otherElements = fulfillmentLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
-                                for (int i = 0; i < otherElements.Count; i++)
-                                {
-                                    var el = otherElements[i];
-                                    if (el.EquipmentElement.Item != null && req.MatchesItem(el.EquipmentElement.Item) && el.Amount > 0)
-                                    {
-                                        candidates.Add(el);
-                                    }
-                                }
-
-                                // 3. Sort candidates by unit purchase price (cheapest first)
-                                var sortedCandidates = candidates.Select(c => new {
-                                    Element = c,
-                                    Price = fulfillmentLogic.GetItemPrice(c.EquipmentElement, true)
-                                }).OrderBy(x => x.Price).ToList();
-
-                                foreach (var candidate in sortedCandidates)
-                                {
-                                    if (deficit <= 0) break;
-                                    if (Hero.MainHero.Gold < req.MinGoldReserve) break;
-
-                                    // Price multiplier protection check
-                                    float baseValue = candidate.Element.EquipmentElement.Item.Value;
-                                    if (baseValue > 0)
-                                    {
-                                        float mult = (float)candidate.Price / baseValue;
-                                        if (mult > req.MaxPriceMultiplier)
-                                        {
-                                            continue; // skip overpriced items
-                                        }
-                                    }
-
-                                    int toBuy = Math.Min(deficit, candidate.Element.Amount);
-                                    int maxAfford = (Hero.MainHero.Gold - req.MinGoldReserve) / Math.Max(1, candidate.Price);
-                                    toBuy = Math.Min(toBuy, maxAfford);
-
-                                    if (toBuy > 0)
-                                    {
-                                        var command = TransferCommand.Transfer(
-                                            toBuy,
-                                            InventoryLogic.InventorySide.OtherInventory,
-                                            InventoryLogic.InventorySide.PlayerInventory,
-                                            new ItemRosterElement(candidate.Element.EquipmentElement, toBuy),
-                                            EquipmentIndex.None,
-                                            EquipmentIndex.None,
-                                            Hero.MainHero.CharacterObject
-                                        );
-                                        fulfillmentLogic.AddTransferCommand(command);
-                                        executedAnyItemTransfers = true;
-                                        deficit -= toBuy;
-                                        fulfilledItemParts.Add($"{toBuy}x {candidate.Element.EquipmentElement.Item.Name}");
-                                    }
+                                    currentHeld += el.Amount;
                                 }
                             }
 
-                            if (executedAnyItemTransfers && fulfillmentLogic.IsThereAnyChanges())
+                            int deficit = req.TargetQuantity - currentHeld;
+                            if (deficit <= 0) continue;
+
+                            // 2. Locate candidates in settlement inventory
+                            var candidates = new List<ItemRosterElement>();
+                            var otherElements = needsLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
+                            for (int i = 0; i < otherElements.Count; i++)
                             {
-                                int initialGold = Hero.MainHero?.Gold ?? 0;
-                                fulfillmentLogic.DoneLogic();
-                                int finalGold = Hero.MainHero?.Gold ?? 0;
-                                int goldDiff = finalGold - initialGold;
-                                string goldDiffSign = goldDiff >= 0 ? "+" : "";
-                                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Prioritized items fulfilled at {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d). Purchased: {string.Join(", ", fulfilledItemParts)}");
+                                var el = otherElements[i];
+                                if (el.EquipmentElement.Item != null && req.MatchesItem(el.EquipmentElement.Item) && el.Amount > 0)
+                                {
+                                    candidates.Add(el);
+                                }
                             }
+
+                            // 3. Sort candidates by unit purchase price (cheapest first)
+                            var sortedCandidates = candidates.Select(c => new {
+                                Element = c,
+                                Price = needsLogic.GetItemPrice(c.EquipmentElement, true)
+                            }).OrderBy(x => x.Price).ToList();
+
+                            foreach (var candidate in sortedCandidates)
+                            {
+                                if (deficit <= 0) break;
+                                if (projectedGold < req.MinGoldReserve) break;
+
+                                // Price multiplier protection check
+                                float baseValue = candidate.Element.EquipmentElement.Item.Value;
+                                if (baseValue > 0)
+                                {
+                                    float mult = (float)candidate.Price / baseValue;
+                                    if (mult > req.MaxPriceMultiplier)
+                                    {
+                                        continue; // skip overpriced items
+                                    }
+                                }
+
+                                int toBuy = Math.Min(deficit, candidate.Element.Amount);
+                                int maxAfford = (projectedGold - req.MinGoldReserve) / Math.Max(1, candidate.Price);
+                                toBuy = Math.Min(toBuy, maxAfford);
+
+                                var item = candidate.Element.EquipmentElement.Item;
+                                bool isCargo = !item.IsAnimal && !item.IsMountable;
+                                if (isCargo && coreSettings.LimitToInventoryCapacity)
+                                {
+                                    float capacity = MobileParty.MainParty.InventoryCapacity;
+                                    float remainingCargoSpace = capacity - projectedWeight;
+                                    if (remainingCargoSpace < 0f) remainingCargoSpace = 0f;
+                                    if (item.Weight > 0f)
+                                    {
+                                        int maxWeightBuy = (int)(remainingCargoSpace / item.Weight);
+                                        toBuy = Math.Min(toBuy, maxWeightBuy);
+                                    }
+                                }
+
+                                bool isAnimalOrMount = item.IsAnimal || item.IsMountable;
+                                if (isAnimalOrMount)
+                                {
+                                    toBuy = Math.Min(toBuy, projectedAnimalSlots);
+                                }
+
+                                if (toBuy > 0)
+                                {
+                                    var command = TransferCommand.Transfer(
+                                        toBuy,
+                                        InventoryLogic.InventorySide.OtherInventory,
+                                        InventoryLogic.InventorySide.PlayerInventory,
+                                        new ItemRosterElement(candidate.Element.EquipmentElement, toBuy),
+                                        EquipmentIndex.None,
+                                        EquipmentIndex.None,
+                                        Hero.MainHero.CharacterObject
+                                    );
+                                    needsLogic.AddTransferCommand(command);
+                                    executedAnyItemTransfers = true;
+                                    deficit -= toBuy;
+                                    projectedGold -= toBuy * candidate.Price;
+                                    if (isCargo)
+                                    {
+                                        projectedWeight += toBuy * item.Weight;
+                                    }
+                                    if (isAnimalOrMount)
+                                    {
+                                        projectedAnimalSlots -= toBuy;
+                                    }
+                                    fulfilledItemParts.Add($"{toBuy}x {item.Name}");
+                                }
+                            }
+                        }
+
+                        if (executedAnyItemTransfers && needsLogic.IsThereAnyChanges())
+                        {
+                            int initialGold = Hero.MainHero?.Gold ?? 0;
+                            needsLogic.DoneLogic();
+                            int finalGold = Hero.MainHero?.Gold ?? 0;
+                            int goldDiff = finalGold - initialGold;
+                            string goldDiffSign = goldDiff >= 0 ? "+" : "";
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Prioritized items fulfilled at {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d). Purchased: {string.Join(", ", fulfilledItemParts)}");
                         }
                     }
 
@@ -680,135 +713,117 @@ namespace SettlementAutomationCore
                 }
 
                 // ----------------------------------------------------
-                // Step 6: Main Trade Phase (Reconciliation & Purchases)
-                // ----------------------------------------------------
-                var logic2 = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
-                if (logic2 != null)
-                {
-                    var mainOrders = new List<TradeOrder>();
-                    foreach (var reg in tradeRegistrations)
-                    {
-                        try
-                        {
-                            var orders = reg.Provider.GetMainOrders(MobileParty.MainParty, settlement, logic2);
-                            if (orders != null) mainOrders.AddRange(orders);
-                        }
-                        catch {}
-                    }
-
-                    if (mainOrders.Count > 0)
-                    {
-                        var slaughters = mainOrders.Where(o => o.IsSlaughter).ToList();
-                        var normalOrders = mainOrders.Where(o => !o.IsSlaughter).ToList();
-
-                        bool executedAny = false;
-                        var soldList = new List<string>();
-                        var boughtList = new List<string>();
-                        var slaughteredList = new List<string>();
-
-                        // Execute Normal Trades first (so arbitrage buys are in player inventory before slaughtering)
-                        if (normalOrders.Count > 0)
-                        {
-                            var itemOrderNetMap = new Dictionary<ItemObject, int>();
-                            var eqElementMap = new Dictionary<ItemObject, EquipmentElement>();
-
-                            foreach (var order in normalOrders)
-                            {
-                                if (order.EquipmentElement.Item == null) continue;
-                                var item = order.EquipmentElement.Item;
-                                eqElementMap[item] = order.EquipmentElement;
-
-                                int netChange = order.IsBuy ? order.Amount : -order.Amount;
-                                if (itemOrderNetMap.ContainsKey(item))
-                                {
-                                    itemOrderNetMap[item] += netChange;
-                                }
-                                else
-                                {
-                                    itemOrderNetMap[item] = netChange;
-                                }
-                            }
-
-                            foreach (var pair in itemOrderNetMap)
-                            {
-                                var item = pair.Key;
-                                int netAmount = pair.Value;
-                                if (netAmount == 0) continue;
-
-                                bool isBuy = netAmount > 0;
-                                int absAmount = Math.Abs(netAmount);
-
-                                var sideFrom = isBuy ? InventoryLogic.InventorySide.OtherInventory : InventoryLogic.InventorySide.PlayerInventory;
-                                var sideTo = isBuy ? InventoryLogic.InventorySide.PlayerInventory : InventoryLogic.InventorySide.OtherInventory;
-
-                                var command = TransferCommand.Transfer(
-                                    absAmount,
-                                    sideFrom,
-                                    sideTo,
-                                    new ItemRosterElement(eqElementMap[item], absAmount),
-                                    EquipmentIndex.None,
-                                    EquipmentIndex.None,
-                                    Hero.MainHero.CharacterObject
-                                );
-                                logic2.AddTransferCommand(command);
-                                executedAny = true;
-
-                                if (isBuy)
-                                {
-                                    boughtList.Add($"{absAmount}x {item.Name}");
-                                }
-                                else
-                                {
-                                    soldList.Add($"{absAmount}x {item.Name}");
-                                }
-                            }
-                        }
-
-                        // Execute Slaughters
-                        foreach (var order in slaughters)
-                        {
-                            if (order.EquipmentElement.Item != null && order.Amount > 0)
-                            {
-                                var itemRosterEl = new ItemRosterElement(order.EquipmentElement, order.Amount);
-                                if (logic2.CanSlaughterItem(itemRosterEl, InventoryLogic.InventorySide.PlayerInventory))
-                                {
-                                    logic2.SlaughterItem(itemRosterEl);
-                                    executedAny = true;
-                                    slaughteredList.Add($"{order.Amount}x {order.EquipmentElement.Item.Name}");
-                                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Slaughtered {order.Amount}x {order.EquipmentElement.Item.Name}"));
-                                }
-                            }
-                        }
-                        if (executedAny && logic2.IsThereAnyChanges())
-                        {
-                            int initialGold = Hero.MainHero?.Gold ?? 0;
-                            logic2.DoneLogic();
-                            int finalGold = Hero.MainHero?.Gold ?? 0;
-                            int goldDiff = finalGold - initialGold;
-
-                            var logParts = new List<string>();
-                            if (soldList.Count > 0) logParts.Add($"Sold: {string.Join(", ", soldList)}");
-                            if (boughtList.Count > 0) logParts.Add($"Bought: {string.Join(", ", boughtList)}");
-                            if (slaughteredList.Count > 0) logParts.Add($"Slaughtered: {string.Join(", ", slaughteredList)}");
-
-                            string goldDiffSign = goldDiff >= 0 ? "+" : "";
-                            string logMsg = $"Auto-traded in {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d). {string.Join(" | ", logParts)}";
-                            Helpers.Logger.WriteLog("SettlementAutomationCore", logMsg);
-                        }
-                    }
-                }
-
-                // ----------------------------------------------------
-                // Step 7: Fief Management Phase
+                // Step 7: Fief Minimum Phase
                 // ----------------------------------------------------
                 var fiefRegistrations = AutomationRegistry.ActiveFiefProviders;
                 foreach (var reg in fiefRegistrations)
                 {
                     try
                     {
-                        reg.Provider.ProcessFiefAutomation(MobileParty.MainParty, settlement);
+                        reg.Provider.ProcessFiefAutomation(MobileParty.MainParty, settlement, false);
                     }
-                    catch {}
+                    catch (Exception ex)
+                    {
+                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error in Fief Minimum Phase from {reg.ProviderName}: {ex.Message}");
+                    }
+                }
+
+                // ----------------------------------------------------
+                // Step 8: Free Trade Phase
+                // ----------------------------------------------------
+                var explicitReservations = AutomationRegistry.ActiveReservations;
+                var sellableItems = new List<SellableItem>();
+                var playerRoster = MobileParty.MainParty.ItemRoster;
+                for (int i = 0; i < playerRoster.Count; i++)
+                {
+                    var element = playerRoster.GetElementCopyAtIndex(i);
+                    if (element.EquipmentElement.Item != null)
+                    {
+                        var item = element.EquipmentElement.Item;
+                        int reserved = 0;
+                        foreach (var res in explicitReservations)
+                        {
+                            if (res.MatchesItem(item))
+                            {
+                                reserved = Math.Max(reserved, res.Quantity);
+                            }
+                        }
+                        foreach (var req in activeRequests)
+                        {
+                            if (req.MatchesItem(item))
+                            {
+                                reserved = Math.Max(reserved, req.TargetQuantity);
+                            }
+                        }
+                        int available = Math.Max(0, element.Amount - reserved);
+                        sellableItems.Add(new SellableItem(element.EquipmentElement, available));
+                    }
+                }
+
+                var coreSettingsForTrade = Settings.Instance;
+                int dailyWage = MobileParty.MainParty?.TotalWage ?? 0;
+                int expenseReserve = Math.Max(coreSettingsForTrade.MinimumGoldReserve, dailyWage * coreSettingsForTrade.MinDaysExpensesToKeep);
+                int availableGold = Math.Max(0, Hero.MainHero.Gold - expenseReserve);
+                float currentWeightForTrade = Helpers.InventoryHelper.GetRosterWeight(MobileParty.MainParty.ItemRoster);
+                float freeCargo = Math.Max(0f, MobileParty.MainParty.InventoryCapacity - currentWeightForTrade);
+                int freeAnimalSlots = HerdingCalculator.GetRemainingAnimalSlots(MobileParty.MainParty);
+
+                var logic8 = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
+                if (logic8 != null)
+                {
+                    var context = new TradeContext(
+                        settlement,
+                        MobileParty.MainParty,
+                        logic8,
+                        availableGold,
+                        freeCargo,
+                        coreSettingsForTrade.LimitToInventoryCapacity,
+                        freeAnimalSlots,
+                        freeAnimalSlots,
+                        sellableItems
+                    );
+
+                    var analyzers = AutomationRegistry.ActiveFreeTradeAnalyzers;
+                    foreach (var reg in analyzers)
+                    {
+                        try
+                        {
+                            var proposal = reg.Provider.AnalyzeMarket(context);
+                            if (proposal != null && proposal.Actions != null && proposal.Actions.Count > 0)
+                            {
+                                ExecuteTradeProposal(proposal, context, logic8);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error executing free trade analyzer {reg.ProviderName}: {ex.Message}");
+                        }
+                    }
+
+                    if (logic8.IsThereAnyChanges())
+                    {
+                        int initialGold = Hero.MainHero?.Gold ?? 0;
+                        logic8.DoneLogic();
+                        int finalGold = Hero.MainHero?.Gold ?? 0;
+                        int goldDiff = finalGold - initialGold;
+                        string goldDiffSign = goldDiff >= 0 ? "+" : "";
+                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Free trade execution completed in {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d)");
+                    }
+                }
+
+                // ----------------------------------------------------
+                // Step 9: Fief Surplus Phase
+                // ----------------------------------------------------
+                foreach (var reg in fiefRegistrations)
+                {
+                    try
+                    {
+                        reg.Provider.ProcessFiefAutomation(MobileParty.MainParty, settlement, true);
+                    }
+                    catch (Exception ex)
+                    {
+                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error in Fief Surplus Phase from {reg.ProviderName}: {ex.Message}");
+                    }
                 }
             }
             catch (Exception ex)
@@ -831,6 +846,125 @@ namespace SettlementAutomationCore
                 Campaign.Current?.CurrentMenuContext?.Refresh();
             }
             catch {}
+        }
+
+        private static void ExecuteTradeProposal(TradeProposal proposal, TradeContext context, InventoryLogic logic)
+        {
+            var sells = proposal.Actions.Where(a => a.ActionType == TradeActionType.Sell).ToList();
+            var slaughters = proposal.Actions.Where(a => a.ActionType == TradeActionType.Slaughter).ToList();
+            var buys = proposal.Actions.Where(a => a.ActionType == TradeActionType.Buy).ToList();
+
+            int availableGold = context.AvailableGold;
+            float freeCargo = context.FreeCargoCapacity;
+            int freeAnimalSlots = context.FreeAnimalSlots;
+            bool enforceCargo = context.EnforceCargoLimit;
+
+            // 1. Sells
+            foreach (var action in sells)
+            {
+                if (action.EquipmentElement.Item == null) continue;
+                var sellable = context.SellableItems.FirstOrDefault(s => s.EquipmentElement.Item == action.EquipmentElement.Item);
+                if (sellable == null || sellable.AvailableQuantity <= 0) continue;
+
+                int toSell = Math.Min(action.Quantity, sellable.AvailableQuantity);
+                if (toSell > 0)
+                {
+                    int price = logic.GetItemPrice(action.EquipmentElement, false); // false = sell price
+                    var command = TransferCommand.Transfer(
+                        toSell,
+                        InventoryLogic.InventorySide.PlayerInventory,
+                        InventoryLogic.InventorySide.OtherInventory,
+                        new ItemRosterElement(action.EquipmentElement, toSell),
+                        EquipmentIndex.None,
+                        EquipmentIndex.None,
+                        Hero.MainHero.CharacterObject
+                    );
+                    logic.AddTransferCommand(command);
+
+                    availableGold += toSell * price;
+                    if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
+                    {
+                        freeCargo += toSell * action.EquipmentElement.Item.Weight;
+                    }
+                    else
+                    {
+                        freeAnimalSlots += toSell;
+                    }
+                }
+            }
+
+            // 2. Slaughters
+            foreach (var action in slaughters)
+            {
+                if (action.EquipmentElement.Item != null && action.Quantity > 0)
+                {
+                    var itemRosterEl = new ItemRosterElement(action.EquipmentElement, action.Quantity);
+                    if (logic.CanSlaughterItem(itemRosterEl, InventoryLogic.InventorySide.PlayerInventory))
+                    {
+                        logic.SlaughterItem(itemRosterEl);
+                        if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
+                        {
+                            freeCargo += action.Quantity * action.EquipmentElement.Item.Weight;
+                        }
+                        else
+                        {
+                            freeAnimalSlots += action.Quantity;
+                        }
+                    }
+                }
+            }
+
+            // 3. Buys
+            foreach (var action in buys)
+            {
+                if (action.EquipmentElement.Item == null) continue;
+                int price = logic.GetItemPrice(action.EquipmentElement, true); // true = buy price
+
+                int toBuy = action.Quantity;
+                int maxAfford = availableGold / Math.Max(1, price);
+                toBuy = Math.Min(toBuy, maxAfford);
+
+                bool isCargo = !action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable;
+                if (isCargo && enforceCargo)
+                {
+                    float itemWeight = action.EquipmentElement.Item.Weight;
+                    if (itemWeight > 0)
+                    {
+                        int maxWeightBuy = (int)(freeCargo / itemWeight);
+                        toBuy = Math.Min(toBuy, maxWeightBuy);
+                    }
+                }
+
+                bool isAnimalOrMount = action.EquipmentElement.Item.IsAnimal || action.EquipmentElement.Item.IsMountable;
+                if (isAnimalOrMount)
+                {
+                    toBuy = Math.Min(toBuy, freeAnimalSlots);
+                }
+
+                if (toBuy > 0)
+                {
+                    var command = TransferCommand.Transfer(
+                        toBuy,
+                        InventoryLogic.InventorySide.OtherInventory,
+                        InventoryLogic.InventorySide.PlayerInventory,
+                        new ItemRosterElement(action.EquipmentElement, toBuy),
+                        EquipmentIndex.None,
+                        EquipmentIndex.None,
+                        Hero.MainHero.CharacterObject
+                    );
+                    logic.AddTransferCommand(command);
+
+                    availableGold -= toBuy * price;
+                    if (isCargo)
+                    {
+                        freeCargo -= toBuy * action.EquipmentElement.Item.Weight;
+                    }
+                    else
+                    {
+                        freeAnimalSlots -= toBuy;
+                    }
+                }
+            }
         }
     }
 
