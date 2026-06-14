@@ -6,9 +6,11 @@ using HarmonyLib;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Inventory;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
+using SettlementAutomationCore;
 
 namespace TradeOptimizer
 {
@@ -43,11 +45,27 @@ namespace TradeOptimizer
                     return;
                 }
 
+                var logic = ActiveInventoryVM.GetInventoryLogic();
+                var settlement = logic?.CurrentSettlementComponent?.Settlement;
+                if (logic == null || settlement == null || MobileParty.MainParty == null)
+                {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        "[TradeOptimizer] Manual trade requires an active settlement inventory context."
+                    ));
+                    return;
+                }
+
+                var sellableItems = ActiveInventoryVM.RightItemListVM?
+                    .Where(item => item?.ItemRosterElement.EquipmentElement.Item != null)
+                    .Select(item => new SellableItem(item.ItemRosterElement.EquipmentElement, item.ItemCount))
+                    .ToList() ?? new System.Collections.Generic.List<SellableItem>();
+                var tradeContext = TradeContextFactory.Create(MobileParty.MainParty, settlement, logic, sellableItems);
+
                 int initialGold = Hero.MainHero?.Gold ?? 0;
-                var report = TradingEngine.RunOptimization(ActiveInventoryVM, isSellPhase: true, isBuyPhase: true);
+                var report = TradingEngine.RunOptimization(ActiveInventoryVM, isSellPhase: true, isBuyPhase: true, tradeContext);
                 
                 int finalGold = Hero.MainHero?.Gold ?? 0;
-                string traderName = ActiveInventoryVM.GetInventoryLogic()?.OtherParty?.Name?.ToString() ?? "Trader";
+                string traderName = logic.OtherParty?.Name?.ToString() ?? "Trader";
                 
                 // Show TLDR in-game
                 PrintTradeReport(finalGold, initialGold, report, traderName);

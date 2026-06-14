@@ -54,6 +54,7 @@ namespace PartyManager
             int maxRecruitableSize = GetMaxRecruitablePartySize(party, settlement, settings);
             int remainingRecruitSlots = Math.Max(0, maxRecruitableSize - currentSize);
             if (remainingRecruitSlots <= 0) return orders;
+            int normalRecruitSlots = Math.Max(0, party.Party.PartySizeLimit - currentSize);
 
             // Cycle through settlement notables
             foreach (var notable in settlement.Notables)
@@ -78,7 +79,8 @@ namespace PartyManager
 
                     if (RecruitmentFilter.MatchTroopFilter(troop, settings))
                     {
-                        orders.Add(new RecruitOrder(notable, slot));
+                        bool allowOverPartySize = orders.Count >= normalRecruitSlots;
+                        orders.Add(new RecruitOrder(notable, slot, allowOverPartySize));
                         remainingRecruitSlots--;
                         if (remainingRecruitSlots <= 0) break;
                     }
@@ -225,25 +227,22 @@ namespace PartyManager
         private static int GetMaxRecruitablePartySize(MobileParty party, Settlement settlement, Settings settings)
         {
             int partyLimit = party.Party.PartySizeLimit;
-            int normalLimit = (int)Math.Ceiling(partyLimit * Math.Max(1, Math.Min(100, settings.RecruitUpToPartySizePercent)) / 100.0);
-            normalLimit = Math.Min(partyLimit, normalLimit);
-            if (normalLimit < partyLimit)
-            {
-                return normalLimit;
-            }
-
-            return partyLimit + GetAvailableGarrisonDonationSpace(settlement, settings);
+            int currentGarrisonSize = settlement.Town?.GarrisonParty?.MemberRoster.TotalManCount ?? 0;
+            return RecruitmentCapacityPlanner.GetMaxRecruitablePartySize(
+                partyLimit,
+                settings.RecruitUpToPartySizePercent,
+                settings.EnableGarrisonDonation && settlement.Town?.GarrisonParty != null,
+                currentGarrisonSize,
+                settings.MaxGarrisonSize);
         }
 
         private static int GetAvailableGarrisonDonationSpace(Settlement settlement, Settings settings)
         {
-            if (!settings.EnableGarrisonDonation || settlement.Town?.GarrisonParty == null)
-            {
-                return 0;
-            }
-
-            int garrisonSize = settlement.Town.GarrisonParty.MemberRoster.TotalManCount;
-            return Math.Max(0, settings.MaxGarrisonSize - garrisonSize);
+            int garrisonSize = settlement.Town?.GarrisonParty?.MemberRoster.TotalManCount ?? 0;
+            return RecruitmentCapacityPlanner.GetAvailableGarrisonDonationSpace(
+                settings.EnableGarrisonDonation && settlement.Town?.GarrisonParty != null,
+                garrisonSize,
+                settings.MaxGarrisonSize);
         }
     }
 }

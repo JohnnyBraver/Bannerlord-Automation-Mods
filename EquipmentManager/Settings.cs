@@ -57,7 +57,7 @@ namespace EquipmentManager
         public override string ToString() => _name;
     }
 
-    public enum LockDonationCategory
+    public enum KeepDonationCategory
     {
         None,
         WeaponsOnly,
@@ -65,30 +65,20 @@ namespace EquipmentManager
         WeaponsAndArmor
     }
 
-    public class LockDonationCategoryOption
+    public class KeepDonationCategoryOption
     {
         private readonly string _name;
-        public LockDonationCategory Value { get; }
-        public LockDonationCategoryOption(string name, LockDonationCategory value) { _name = name; Value = value; }
+        public KeepDonationCategory Value { get; }
+        public KeepDonationCategoryOption(string name, KeepDonationCategory value) { _name = name; Value = value; }
         public override string ToString() => _name;
     }
 
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "EquipmentManager_v1";
+        public override string Id => "EquipmentManager_v3";
         public override string DisplayName => "Equipment Manager";
         public override string FolderName => "EquipmentManager";
         public override string FormatType => "json";
-
-        private static readonly IReadOnlyList<string> QualityOptions = new List<string>
-        {
-            "Poor",
-            "Inferior",
-            "Common",
-            "Fine",
-            "Masterwork",
-            "Legendary"
-        };
 
         private static readonly IReadOnlyList<AutoEquipCategoryOption> AutoEquipCategoryOptions = new List<AutoEquipCategoryOption>
         {
@@ -116,12 +106,12 @@ namespace EquipmentManager
             new BuyEquipmentTargetOption("Player & Companions (Buy Direct)", BuyEquipmentTarget.PlayerAndCompanions)
         };
 
-        private static readonly IReadOnlyList<LockDonationCategoryOption> LockDonationCategoryOptions = new List<LockDonationCategoryOption>
+        private static readonly IReadOnlyList<KeepDonationCategoryOption> KeepDonationCategoryOptions = new List<KeepDonationCategoryOption>
         {
-            new LockDonationCategoryOption("None", LockDonationCategory.None),
-            new LockDonationCategoryOption("Weapons Only", LockDonationCategory.WeaponsOnly),
-            new LockDonationCategoryOption("Armor Only", LockDonationCategory.ArmorOnly),
-            new LockDonationCategoryOption("Weapons & Armor", LockDonationCategory.WeaponsAndArmor)
+            new KeepDonationCategoryOption("None", KeepDonationCategory.None),
+            new KeepDonationCategoryOption("Weapons Only", KeepDonationCategory.WeaponsOnly),
+            new KeepDonationCategoryOption("Armor Only", KeepDonationCategory.ArmorOnly),
+            new KeepDonationCategoryOption("Weapons & Armor", KeepDonationCategory.WeaponsAndArmor)
         };
 
         [SettingPropertyBool("Auto-Equip Companions", RequireRestart = false,
@@ -144,25 +134,40 @@ namespace EquipmentManager
             new Dropdown<LoadoutPriorityOption>(LoadoutPriorityOptions, 0); // Default: Sneaking > Civilian > Combat (index 0)
 
         [SettingPropertyInteger("Min Tier to Keep", 0, 6, "0", RequireRestart = false,
-            HintText = "Items at or above this tier will be locked/kept in your inventory and not donated/sold.", Order = 2)]
-        [SettingPropertyGroup("Keep & Lock Rules", GroupOrder = 1)]
-        public int MinTierToKeep { get; set; } = 4;
-
-        [SettingPropertyDropdown("Min Quality to Keep", RequireRestart = false,
-            HintText = "Items with modifiers at or above this quality level will be locked/kept.", Order = 3)]
-        [SettingPropertyGroup("Keep & Lock Rules", GroupOrder = 1)]
-        public Dropdown<string> MinQualityDropdown { get; set; } = new Dropdown<string>(QualityOptions, 3); // Default: Fine (index 3)
+            HintText = "Equipment at or above this tier is protected from automatic sale. The mod does not change item lock icons.", Order = 1)]
+        [SettingPropertyGroup("Keep & Sale Protection", GroupOrder = 1)]
+        public int MinTierToKeep { get; set; } = 6;
 
         [SettingPropertyBool("Keep Positive Modifiers", RequireRestart = false,
-            HintText = "Keep any items that have positive stat modifiers regardless of quality level.", Order = 1)]
-        [SettingPropertyGroup("Keep & Lock Rules", GroupOrder = 1)]
-        public bool KeepPositiveModifiers { get; set; } = true;
+            HintText = "Protect items with positive price/stat modifiers from automatic sale, even when they are below the tier threshold.", Order = 2)]
+        [SettingPropertyGroup("Keep & Sale Protection", GroupOrder = 1)]
+        public bool KeepPositiveModifiers { get; set; } = false;
 
-        [SettingPropertyDropdown("Lock Donation Items", RequireRestart = false,
-            HintText = "Keep donation weapons or armor locked in inventory instead of donating them for XP.", Order = 4)]
-        [SettingPropertyGroup("Keep & Lock Rules", GroupOrder = 1)]
-        public Dropdown<LockDonationCategoryOption> LockDonationCategoryDropdown { get; set; } =
-            new Dropdown<LockDonationCategoryOption>(LockDonationCategoryOptions, 3); // Default: Weapons & Armor
+        [SettingPropertyDropdown("Keep Donation Items", RequireRestart = false,
+            HintText = "Protect cheap perk-donation weapons or armor from automatic sale. This does not change item lock icons.", Order = 3)]
+        [SettingPropertyGroup("Keep & Sale Protection", GroupOrder = 1)]
+        public Dropdown<KeepDonationCategoryOption> KeepDonationCategoryDropdown { get; set; } =
+            new Dropdown<KeepDonationCategoryOption>(KeepDonationCategoryOptions, 3); // Default: Weapons & Armor
+
+        [SettingPropertyInteger("Additional Armor Sets to Keep", 0, 10, "0", RequireRestart = false,
+            HintText = "Keep the best spare armor pieces per enabled outfit type for future companions or family members. 0 disables this reserve.", Order = 4)]
+        [SettingPropertyGroup("Keep & Sale Protection", GroupOrder = 1)]
+        public int AdditionalArmorSetsToKeep { get; set; } = 0;
+
+        [SettingPropertyBool("Keep Spare Combat Armor Sets", RequireRestart = false,
+            HintText = "Protect the best spare combat armor pieces from automatic sale.", Order = 5)]
+        [SettingPropertyGroup("Keep & Sale Protection", GroupOrder = 1)]
+        public bool KeepSpareCombatArmorSets { get; set; } = false;
+
+        [SettingPropertyBool("Keep Spare Civilian Armor Sets", RequireRestart = false,
+            HintText = "Protect the best spare civilian armor pieces from automatic sale.", Order = 6)]
+        [SettingPropertyGroup("Keep & Sale Protection", GroupOrder = 1)]
+        public bool KeepSpareCivilianArmorSets { get; set; } = false;
+
+        [SettingPropertyBool("Keep Spare Sneaking Armor Sets", RequireRestart = false,
+            HintText = "Protect the best spare stealth/sneaking armor pieces from automatic sale.", Order = 7)]
+        [SettingPropertyGroup("Keep & Sale Protection", GroupOrder = 1)]
+        public bool KeepSpareSneakingArmorSets { get; set; } = false;
 
         [SettingPropertyFloatingInteger("Max Cost per XP", 0.1f, 10.0f, "#0.0", RequireRestart = false,
             HintText = "Maximum denar value of gear to discard per XP point gained from donation perks.", Order = 2)]
@@ -170,7 +175,7 @@ namespace EquipmentManager
         public float MaxCostPerXp { get; set; } = 1.0f;
 
         [SettingPropertyBool("Sell Unlocked Equipment", RequireRestart = false,
-            HintText = "Sell any non-locked equipment that isn't chosen for party use.", Order = 1)]
+            HintText = "Sell equipment that is not manually locked and is not protected by the keep rules.", Order = 1)]
         [SettingPropertyGroup("Economy & Auto-Sell", GroupOrder = 0)]
         public bool SellUnlockedEquipment { get; set; } = true;
 
@@ -184,14 +189,8 @@ namespace EquipmentManager
         [SettingPropertyGroup("Economy & Auto-Sell", GroupOrder = 0)]
         public bool PrioritizeHeavyTrash { get; set; } = true;
 
-
-        [SettingPropertyBool("Limit to Carry Capacity", RequireRestart = false,
-            HintText = "Stop actions if they would cause party to exceed carry capacity.", Order = 5)]
-        [SettingPropertyGroup("Economy & Auto-Sell", GroupOrder = 0)]
-        public bool LimitToInventoryCapacity { get; set; } = true;
-
-        [SettingPropertyBool("Buy Stealth Gear Upgrades", RequireRestart = false,
-            HintText = "Automatically buy 'Blackened' stealth items from merchants if they upgrade your sneaking slots.", Order = 2)]
+        [SettingPropertyBool("Buy Stealth/Blackened Gear Upgrades", RequireRestart = false,
+            HintText = "Automatically buy stealth or blackened armor from merchants if it upgrades your sneaking slots.", Order = 2)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public bool BuyStealthGear { get; set; } = false;
 
@@ -235,9 +234,8 @@ namespace EquipmentManager
 
 
         // Compatibility wrappers
-        public string MinQualityToKeep => MinQualityDropdown.SelectedValue;
         public AutoEquipCategory AutoEquipCategorySetting => AutoEquipCategoryDropdown.SelectedValue.Value;
-        public LockDonationCategory LockDonationCategorySetting => LockDonationCategoryDropdown.SelectedValue.Value;
+        public KeepDonationCategory KeepDonationCategorySetting => KeepDonationCategoryDropdown.SelectedValue.Value;
 
         public LoadoutPriority LoadoutPrioritySetting => LoadoutPriorityDropdown.SelectedValue.Value;
         public BuyEquipmentTarget BuyEquipmentTargetSetting => BuyEquipmentTargetDropdown.SelectedValue.Value;

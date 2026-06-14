@@ -102,6 +102,11 @@ namespace TradeOptimizer
                         eqElementMap[el.EquipmentElement.Item.StringId] = el.EquipmentElement;
                     }
                 }
+                var sellableItems = playerElements
+                    .Where(el => el.EquipmentElement.Item != null)
+                    .Select(el => new SellableItem(el.EquipmentElement, el.Amount))
+                    .ToList();
+                var tradeContext = TradeContextFactory.Create(party, settlement, tempLogic, sellableItems);
                 var otherElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
                 for (int i = 0; i < otherElements.Count; i++)
                 {
@@ -113,7 +118,7 @@ namespace TradeOptimizer
                 }
 
                 // Run the actual optimization on the temp logic (mutates tempLogic, which mutates real rosters)
-                var report = TradingEngine.RunOptimization(vm, runSell, runBuy, excludedItems);
+                var report = TradingEngine.RunOptimization(vm, runSell, runBuy, tradeContext, excludedItems);
 
                 // Compute net difference to determine what actually got traded in the simulation
                 var finalPlayerCounts = new Dictionary<string, int>();
@@ -334,7 +339,7 @@ namespace TradeOptimizer
                     excludedSellItems = new HashSet<string>(preSellOrders.Where(o => !o.IsBuy).Select(o => o.EquipmentElement.Item?.Name.ToString() ?? ""));
                 }
 
-                var report = TradingEngine.RunOptimization(vm, runSell, runBuy, excludedSellItems, context);
+                var report = TradingEngine.RunOptimization(vm, runSell, runBuy, context, excludedSellItems);
 
                 // Compute net changes
                 var finalPlayerCounts = new Dictionary<string, int>();

@@ -102,74 +102,17 @@ namespace PartyManager.Helpers
             int partySize = party.MemberRoster.TotalManCount;
             if (partySize <= 0) return;
 
-            // 1. Submit layered food requests.
-            if (settings.AutoBuyFood)
+            AnimalCalculator.CalculatePartyAnimals(party, out int infantry, out _, out int riding, out _, out _, out _, out _, out _);
+            var snapshot = new PartyNeedsSnapshot(
+                partySize,
+                infantry,
+                riding,
+                GetKnownFoodItems().Select(item => item.StringId));
+            var requests = PartyNeedsPlanner.BuildRequests(snapshot, PartyNeedsOptions.FromSettings(settings));
+            foreach (var request in requests)
             {
-                int criticalTarget = CalculateFoodUnitsForDays(partySize, settings.CriticalFoodDays);
-                AutomationRegistry.RegisterRequest(AutomationRequest.ForInventoryTarget(
-                    "PartyManager",
-                    RequestType.ItemCategory,
-                    "Food",
-                    criticalTarget,
-                    settings.CriticalFoodRequestProfile,
-                    9
-                ));
-
-                int totalFoodTarget = CalculateFoodUnitsForDays(partySize, settings.PartyFoodDaysToKeep);
-                if (partySize >= settings.MinPartySizeForVariety)
-                {
-                    var knownFoodItems = GetKnownFoodItems();
-                    if (knownFoodItems.Count > 0)
-                    {
-                        int perFoodTarget = Math.Max(1, (int)Math.Ceiling(totalFoodTarget / (double)knownFoodItems.Count));
-                        foreach (var foodItem in knownFoodItems)
-                        {
-                            AutomationRegistry.RegisterRequest(AutomationRequest.ForInventoryTarget(
-                                "PartyManager",
-                                RequestType.SpecificItem,
-                                foodItem.StringId,
-                                perFoodTarget,
-                                settings.FoodVarietyRequestProfile,
-                                5
-                            ));
-                        }
-                    }
-                }
-
-                AutomationRegistry.RegisterRequest(AutomationRequest.ForInventoryTarget(
-                    "PartyManager",
-                    RequestType.ItemCategory,
-                    "Food",
-                    totalFoodTarget,
-                    settings.FoodBufferRequestProfile,
-                    5
-                ));
+                AutomationRegistry.RegisterRequest(request);
             }
-
-            // 2. Submit mount requests.
-            if (settings.AutoBuyMounts)
-            {
-                AnimalCalculator.CalculatePartyAnimals(party, out int infantry, out _, out int riding, out _, out _, out _, out _, out _);
-                int missing = infantry - riding;
-                if (missing > 0)
-                {
-                    // Scale priority by percentage of infantry that is currently unmounted.
-                    int scalePriority = Math.Max(1, Math.Min(9, (int)Math.Round(1 + 8 * ((float)missing / infantry))));
-                    AutomationRegistry.RegisterRequest(AutomationRequest.ForInventoryTarget(
-                        "PartyManager",
-                        RequestType.ItemCategory,
-                        "Horse",
-                        infantry, // Cumulative target is to reach fully mounted infantry
-                        settings.RidingMountRequestProfile,
-                        scalePriority
-                    ));
-                }
-            }
-        }
-
-        private static int CalculateFoodUnitsForDays(int partySize, int days)
-        {
-            return Math.Max(1, (int)Math.Ceiling(partySize * Math.Max(1, days) / 20.0f));
         }
 
         private static List<ItemObject> GetKnownFoodItems()

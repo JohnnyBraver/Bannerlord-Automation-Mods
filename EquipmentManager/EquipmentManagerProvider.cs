@@ -10,7 +10,7 @@ using SettlementAutomationCore;
 
 namespace EquipmentManager
 {
-    public class EquipmentManagerProvider : IPreSellProvider, IAutomationRequestProvider
+    public class EquipmentManagerProvider : IAutomationPreparationProvider, IPreSellProvider, IAutomationRequestProvider
     {
         private struct PotentialBuyOrder
         {
@@ -26,10 +26,9 @@ namespace EquipmentManager
 
         public string ProviderName => "EquipmentManager";
 
-        public List<TradeOrder> GetPreSellOrders(MobileParty party, Settlement settlement)
+        public void PrepareForAutomation(MobileParty party, Settlement settlement)
         {
-            var orders = new List<TradeOrder>();
-            if (party == null || settlement == null) return orders;
+            if (party == null || settlement == null) return;
 
             try
             {
@@ -38,8 +37,14 @@ namespace EquipmentManager
             }
             catch (Exception ex)
             {
-                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error in GetPreSellOrders AutoEquipHeadless: {ex}");
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error in PrepareForAutomation AutoEquipHeadless: {ex}");
             }
+        }
+
+        public List<TradeOrder> GetPreSellOrders(MobileParty party, Settlement settlement)
+        {
+            var orders = new List<TradeOrder>();
+            if (party == null || settlement == null) return orders;
 
             var settings = Settings.Instance;
             if (settings == null || !settings.SellUnlockedEquipment) return orders;
@@ -55,11 +60,6 @@ namespace EquipmentManager
 
                 bool hasWeaponPerk = Hero.MainHero?.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Steward.PaidInPromise) ?? false;
                 bool hasArmorPerk = Hero.MainHero?.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Steward.GivingHands) ?? false;
-
-                if (!Enum.TryParse<ItemQuality>(settings.MinQualityToKeep, true, out var minQuality))
-                {
-                    minQuality = ItemQuality.Fine;
-                }
 
                 var targets = new List<Hero>();
                 if (Hero.MainHero != null)
@@ -78,6 +78,25 @@ namespace EquipmentManager
                 }
 
                 var playerElements = currentLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+                var protectionItems = new List<EquipmentProtectionItem>();
+                for (int i = 0; i < playerElements.Count; i++)
+                {
+                    var rosterElement = playerElements[i];
+                    if (rosterElement.IsEmpty || rosterElement.Amount <= 0) continue;
+
+                    var eqEl = rosterElement.EquipmentElement;
+                    var item = eqEl.Item;
+                    if (item == null) continue;
+
+                    bool isEquipment = item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null;
+                    if (!isEquipment) continue;
+
+                    float sellPrice = currentLogic.GetItemPrice(eqEl, false);
+                    protectionItems.Add(new EquipmentProtectionItem(eqEl, rosterElement.Amount, sellPrice));
+                }
+
+                var protectionPlan = EquipmentSaleProtector.BuildProtectionPlan(protectionItems, targets, settings, hasWeaponPerk, hasArmorPerk);
+
                 for (int i = 0; i < playerElements.Count; i++)
                 {
                     var rosterElement = playerElements[i];
@@ -93,65 +112,10 @@ namespace EquipmentManager
                     string key = item.StringId + (eqEl.ItemModifier != null ? eqEl.ItemModifier.StringId : "");
                     if (locks.Contains(key)) continue;
 
-                    bool shouldLock = false;
-
-                    if ((int)item.Tier >= settings.MinTierToKeep)
+                    int sellQuantity = protectionPlan.GetSellableQuantity(eqEl, rosterElement.Amount);
+                    if (sellQuantity > 0)
                     {
-                        shouldLock = true;
-                    }
-
-                    var modifier = eqEl.ItemModifier;
-                    if (modifier != null)
-                    {
-                        if (modifier.ItemQuality == ItemQuality.Legendary)
-                        {
-                            shouldLock = true;
-                        }
-                        else if (modifier.ItemQuality >= minQuality)
-                        {
-                            shouldLock = true;
-                        }
-                        else if (settings.KeepPositiveModifiers && modifier.PriceMultiplier > 1.0f)
-                        {
-                            shouldLock = true;
-                        }
-                    }
-
-                    if (!shouldLock)
-                    {
-                        float sellPrice = currentLogic.GetItemPrice(eqEl, false);
-                        float baseValue = item.Value;
-                        float costPerXp = baseValue > 0 ? (sellPrice / baseValue) : 9999f;
-
-                        if (costPerXp <= settings.MaxCostPerXp)
-                        {
-                            if (item.HasArmorComponent && hasArmorPerk && 
-                                (settings.LockDonationCategorySetting == LockDonationCategory.ArmorOnly || 
-                                 settings.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
-                            {
-                                shouldLock = true;
-                            }
-                            else if ((item.WeaponComponent != null || item.PrimaryWeapon != null) && hasWeaponPerk && 
-                                     (settings.LockDonationCategorySetting == LockDonationCategory.WeaponsOnly || 
-                                      settings.LockDonationCategorySetting == LockDonationCategory.WeaponsAndArmor))
-                            {
-                                shouldLock = true;
-                            }
-                        }
-                    }
-
-                    if (!shouldLock && item.HasArmorComponent)
-                    {
-                        if (IsUpgradeForAnyTarget(eqEl, targets, settings))
-                        {
-                            shouldLock = true;
-                            SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"[Lock Rules] Preserving unequipped upgrade/side-grade in inventory: {item.Name} (Tier {item.Tier}, Armor Score: {GetArmorScore(eqEl):F1})");
-                        }
-                    }
-
-                    if (!shouldLock)
-                    {
-                        orders.Add(new TradeOrder(eqEl, rosterElement.Amount, false));
+                        orders.Add(new TradeOrder(eqEl, sellQuantity, false));
                     }
                 }
 
@@ -306,24 +270,24 @@ namespace EquipmentManager
             // Submit candidates in preference order; Core buys the best affordable one.
             if (potentialOrders.Count > 0)
             {
-                var orderedOrders = potentialOrders
-                    .OrderByDescending(o => o.ScoreIncrease)
-                    .GroupBy(o => o.Candidate.SnapshotId)
-                    .Select(g => g.First())
-                    .ToList();
+                var requestGroups = EquipmentMarketRequestPlanner.BuildRequestGroups(
+                    potentialOrders.Select(o => new EquipmentMarketCandidateOrder(
+                        o.Candidate,
+                        o.ExplicitGoldReserve,
+                        o.Profile,
+                        o.ScoreIncrease)),
+                    "EquipmentManager",
+                    1);
 
-                foreach (var reserveGroup in orderedOrders.GroupBy(o => new { o.ExplicitGoldReserve, o.Profile }).OrderByDescending(g => g.Max(o => o.ScoreIncrease)))
+                foreach (var requestGroup in requestGroups)
                 {
-                    var groupOrders = reserveGroup.ToList();
-                    var bestOrder = groupOrders[0];
-                    AutomationRegistry.RegisterRequest(AutomationRequest.ForMarketItems(
-                        "EquipmentManager",
-                        groupOrders.Select(o => o.Candidate),
-                        1,
-                        reserveGroup.Key.Profile,
-                        5,
-                        reserveGroup.Key.ExplicitGoldReserve));
-                    SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Requested Auto-Buy candidates (Limit 1 per profile/reserve group): top choice {bestOrder.Candidate.Item.Name} as upgrade for {bestOrder.Hero.Name} ({bestOrder.Slot} slot). Candidates: {groupOrders.Count}. Profile: {reserveGroup.Key.Profile}. Reserve: {reserveGroup.Key.ExplicitGoldReserve} denars. Price seen: {bestOrder.Price} denars. Score Increase: {bestOrder.ScoreIncrease:F1}");
+                    var bestOrder = potentialOrders
+                        .Where(o => o.Candidate.SnapshotId == requestGroup.TopCandidate.SnapshotId)
+                        .OrderByDescending(o => o.ScoreIncrease)
+                        .First();
+
+                    AutomationRegistry.RegisterRequest(requestGroup.Request);
+                    SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Requested Auto-Buy candidates (Limit 1 per profile/reserve group): top choice {bestOrder.Candidate.Item.Name} as upgrade for {bestOrder.Hero.Name} ({bestOrder.Slot} slot). Candidates: {requestGroup.CandidateCount}. Profile: {requestGroup.Profile}. Reserve: {requestGroup.ExplicitGoldReserve} denars. Price seen: {bestOrder.Price} denars. Score Increase: {requestGroup.TopScoreIncrease:F1}");
                 }
             }
         }

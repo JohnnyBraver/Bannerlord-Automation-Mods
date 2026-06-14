@@ -50,10 +50,16 @@ namespace TradeOptimizer
             SettlementAutomationCore.Helpers.Logger.WriteLog("TradeOptimizer", message);
         }
 
-        public static TradeTransactionReport RunOptimization(SPInventoryVM vm, bool isSellPhase, bool isBuyPhase, HashSet<string>? excludedItems = null, SettlementAutomationCore.TradeContext? tradeContext = null)
+        public static TradeTransactionReport RunOptimization(
+            SPInventoryVM vm,
+            bool isSellPhase,
+            bool isBuyPhase,
+            SettlementAutomationCore.TradeContext tradeContext,
+            HashSet<string>? excludedItems = null)
         {
             var report = new TradeTransactionReport();
             if (vm == null) return report;
+            if (tradeContext == null) throw new ArgumentNullException(nameof(tradeContext));
 
             var settings = Settings.Instance;
             if (settings == null) return report;
@@ -65,11 +71,8 @@ namespace TradeOptimizer
             int partySize = MobileParty.MainParty?.MemberRoster?.TotalManCount ?? 1;
             float netWeightAdded = 0f;
 
-            // When a TradeContext is provided, use its pre-computed limits instead of re-deriving them.
-            // The Core has already accounted for reservations and budget reserves.
-            int currentBalance = tradeContext != null
-                ? tradeContext.AvailableGold
-                : (Hero.MainHero?.Gold ?? 0) + (logic != null ? logic.TotalAmount : 0);
+            // The Core-owned context has already accounted for reserves and cargo policy.
+            int currentBalance = tradeContext.AvailableGold;
             WriteLog($"Initial Balance: {currentBalance} (Hero Gold: {Hero.MainHero?.Gold ?? 0}, Logic TotalAmount: {logic?.TotalAmount ?? 0})");
 
             // Query perks once at the start
@@ -125,33 +128,19 @@ namespace TradeOptimizer
 
                     var itemObj = item.ItemRosterElement.EquipmentElement.Item;
 
-                    // Only sell trade goods (commodities)
-                    if (!itemObj.IsTradeGood) continue;
-
-                    if (itemObj.IsFood)
+                    if (!TradeCandidatePolicy.CanTradeByMode(
+                            itemObj,
+                            settings.FoodTradingMode,
+                            settings.LivestockTradingMode,
+                            settings.MountsTradingMode,
+                            false))
                     {
-                        var mode = settings.FoodTradingMode;
-                        if (mode == TradingMode.None || mode == TradingMode.BuyOnly) continue;
-                    }
-                    else if (itemObj.IsAnimal && !itemObj.IsMountable)
-                    {
-                        var mode = settings.LivestockTradingMode;
-                        if (mode == TradingMode.None || mode == TradingMode.BuyOnly) continue;
-                    }
-                    else if (itemObj.IsMountable)
-                    {
-                        var mode = settings.MountsTradingMode;
-                        if (mode == TradingMode.None || mode == TradingMode.BuyOnly) continue;
+                        continue;
                     }
 
-                    // Reservations are now enforced by the Core via ItemReservation; here we sell the full available quantity.
-                    // When a context is provided, SellableItems already have reservations applied.
-                    int maxSellable = item.ItemCount;
-                    if (tradeContext != null)
-                    {
-                        var sellableEntry = tradeContext.SellableItems.FirstOrDefault(s => s.EquipmentElement.Item?.StringId == itemObj.StringId);
-                        maxSellable = sellableEntry?.AvailableQuantity ?? 0;
-                    }
+                    // Reservations are enforced by Core through the TradeContext sellable snapshot.
+                    var sellableEntry = tradeContext.SellableItems.FirstOrDefault(s => s.EquipmentElement.Item?.StringId == itemObj.StringId);
+                    int maxSellable = sellableEntry?.AvailableQuantity ?? 0;
                     if (maxSellable <= 0) continue;
 
                     int sold = 0;
@@ -360,26 +349,15 @@ namespace TradeOptimizer
 
                         var itemObj = item.ItemRosterElement.EquipmentElement.Item;
 
-                        bool isBlackenedStealthItem = settings.BuyBlackenedStealthGear && 
-                            (itemObj.Name != null && itemObj.Name.ToString().IndexOf("blackened", StringComparison.OrdinalIgnoreCase) >= 0);
-
-                        // Only buy trade goods unless it's a blackened stealth item we want to buy
-                        if (!itemObj.IsTradeGood && !isBlackenedStealthItem) continue;
-
-                        if (itemObj.IsFood)
+                        // Equipment upgrades are owned by EquipmentManager. TradeOptimizer only buys commodities.
+                        if (!TradeCandidatePolicy.CanTradeByMode(
+                                itemObj,
+                                settings.FoodTradingMode,
+                                settings.LivestockTradingMode,
+                                settings.MountsTradingMode,
+                                true))
                         {
-                            var mode = settings.FoodTradingMode;
-                            if (mode == TradingMode.None || mode == TradingMode.SellOnly) continue;
-                        }
-                        else if (itemObj.IsAnimal && !itemObj.IsMountable)
-                        {
-                            var mode = settings.LivestockTradingMode;
-                            if (mode == TradingMode.None || mode == TradingMode.SellOnly) continue;
-                        }
-                        else if (itemObj.IsMountable)
-                        {
-                            var mode = settings.MountsTradingMode;
-                            if (mode == TradingMode.None || mode == TradingMode.SellOnly) continue;
+                            continue;
                         }
 
                         int boughtSoFar = boughtQuantities[item];
@@ -408,37 +386,26 @@ namespace TradeOptimizer
 
                         if (skipReason == "" && MobileParty.MainParty != null)
                         {
-                            bool shouldEnforceCargo = tradeContext != null ? tradeContext.EnforceCargoLimit : settings.LimitToInventoryCapacity;
-                            if (shouldEnforceCargo)
+                            if (tradeContext.EnforceCargoLimit)
                             {
-                                float freeCargo = tradeContext != null
-                                    ? tradeContext.FreeCargoCapacity - netWeightAdded
-                                    : MobileParty.MainParty.InventoryCapacity - SettlementAutomationCore.Helpers.InventoryHelper.GetRosterWeight(MobileParty.MainParty.ItemRoster) - netWeightAdded;
+                                float freeCargo = tradeContext.FreeCargoCapacity - netWeightAdded;
                                 if (freeCargo < itemWeight)
                                 {
                                     skipReason = "Overburdened";
                                 }
                             }
                         }
-                        if (skipReason == "" && !isBlackenedStealthItem && currentlyOwned >= settings.MaxStackSizeToBuy)
+                        if (skipReason == "" && currentlyOwned >= settings.MaxStackSizeToBuy)
                         {
                             skipReason = $"StackLimitExceeded (owned={currentlyOwned}, max={settings.MaxStackSizeToBuy})";
                         }
-                        if (skipReason == "" && !isBlackenedStealthItem && currentlyOwned * currentPrice >= settings.MaxStackValueToBuy)
+                        if (skipReason == "" && currentlyOwned * currentPrice >= settings.MaxStackValueToBuy)
                         {
                             skipReason = $"StackValueLimitExceeded (value={currentlyOwned * currentPrice}, max={settings.MaxStackValueToBuy})";
                         }
-                        // When a TradeContext is provided, AvailableGold is already net of reserves (the Core computed it).
-                        // For standalone use (simulation), derive the reserve from local settings.
-                        if (skipReason == "" && tradeContext == null)
+                        if (skipReason == "" && currentBalance < currentPrice)
                         {
-                            int dailyWage = MobileParty.MainParty?.TotalWage ?? 0;
-                            int expenseReserve = dailyWage * settings.MinDaysExpensesToKeep;
-                            int minRequiredBalance = Math.Max(settings.MinimumGoldReserve, expenseReserve);
-                            if (currentBalance - currentPrice < minRequiredBalance)
-                            {
-                                skipReason = $"BudgetProtectionActive (projectedBalance={currentBalance - currentPrice}, required={minRequiredBalance})";
-                            }
+                            skipReason = $"BudgetProtectionActive (available={currentBalance}, price={currentPrice})";
                         }
                         if (skipReason == "" && itemObj.Name != null && localExcludedItems.Contains(itemObj.Name.ToString()))
                         {
@@ -446,7 +413,7 @@ namespace TradeOptimizer
                         }
 
                         float avgPrice = 0f;
-                        if (skipReason == "" && !isBlackenedStealthItem)
+                        if (skipReason == "")
                         {
                             var refMode = settings.PricingReference;
                             if (refMode == PricingReferenceMode.AlwaysGlobal)
@@ -470,43 +437,31 @@ namespace TradeOptimizer
                             }
                         }
 
-                        if (skipReason == "" && !isBlackenedStealthItem && avgPrice <= 0f)
+                        if (skipReason == "" && avgPrice <= 0f)
                         {
                             skipReason = "AveragePriceUndetermined";
                         }
-                        if (skipReason == "" && !isBlackenedStealthItem && currentPrice > avgPrice * settings.BuyPriceThresholdFactor)
+                        if (skipReason == "" && !TradeCandidatePolicy.PassesBuyPriceThreshold(currentPrice, avgPrice, settings.BuyPriceThresholdFactor))
                         {
                             skipReason = $"PriceCheckFailed (price={currentPrice}, limit={avgPrice * settings.BuyPriceThresholdFactor:F1}, ratio={(float)currentPrice/avgPrice:P1}, threshold={settings.BuyPriceThresholdFactor:P1})";
                         }
-                        if (skipReason == "" && !isBlackenedStealthItem && avgPrice - currentPrice <= 0f)
+                        if (skipReason == "" && avgPrice - currentPrice <= 0f)
                         {
                             skipReason = "NoProfitExpected";
                         }
 
                         if (skipReason != "")
                         {
-                            if (!isBlackenedStealthItem && currentPrice < avgPrice)
+                            if (currentPrice < avgPrice)
                             {
                                 WriteLog($"[Buy Skip Diagnostic] {itemObj.Name}: {skipReason}");
-                            }
-                            else if (isBlackenedStealthItem)
-                            {
-                                WriteLog($"[Buy Skip Diagnostic] Blackened Stealth Item {itemObj.Name}: {skipReason}");
                             }
                             continue;
                         }
 
-                        float profitDensity = 0f;
-                        if (isBlackenedStealthItem)
-                        {
-                            profitDensity = 100000f - currentPrice; // Cheaper blackened items first
-                        }
-                        else
-                        {
-                            float unitProfit = avgPrice - currentPrice;
-                            float itemWeightDivisor = itemWeight > 0.01f ? itemWeight : 0.01f;
-                            profitDensity = unitProfit / itemWeightDivisor;
-                        }
+                        float unitProfit = avgPrice - currentPrice;
+                        float itemWeightDivisor = itemWeight > 0.01f ? itemWeight : 0.01f;
+                        float profitDensity = unitProfit / itemWeightDivisor;
 
                         if (profitDensity > bestProfitDensity)
                         {
@@ -550,9 +505,6 @@ namespace TradeOptimizer
                     totalGoldSpentMap[bestItem] = (totalGoldSpentMap.TryGetValue(bestItem, out int tg) ? tg : 0) + price;
                     currentBalance -= price;
                     netWeightAdded += bestItemObj.Weight;
-
-                    bool isBestItemBlackened = settings.BuyBlackenedStealthGear && 
-                        (bestItemObj.Name != null && bestItemObj.Name.ToString().IndexOf("blackened", StringComparison.OrdinalIgnoreCase) >= 0);
 
                     float dbgAvg = 0f;
                     if (settings.PricingReference == PricingReferenceMode.AlwaysGlobal)

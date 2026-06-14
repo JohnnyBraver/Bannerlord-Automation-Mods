@@ -40,23 +40,19 @@ namespace FiefManager
                  {
                     if (town.BuildingsInProgress != null && town.BuildingsInProgress.Count == 0)
                     {
-                        var candidates = town.Buildings.Where(b => b != null && !b.IsCurrentlyDefault && b.CurrentLevel < 3);
-
-                        var priority = settings.Priority;
-                        if (priority == BuildingPriorityCategory.MilitaryFirst)
-                        {
-                            candidates = candidates.OrderByDescending(b => b.BuildingType.IsMilitaryProject);
-                        }
-                        else if (priority == BuildingPriorityCategory.EconomicFirst)
-                        {
-                            candidates = candidates.OrderBy(b => b.BuildingType.IsMilitaryProject);
-                        }
-
-                        var nextBuilding = candidates.FirstOrDefault();
+                        var buildings = town.Buildings.ToList();
+                        var nextBuildingIndex = FiefAutomationPlanner.ChooseNextBuildingIndex(
+                            buildings.Select((b, index) => new BuildingProjectCandidate(
+                                index,
+                                b == null || b.IsCurrentlyDefault,
+                                b?.CurrentLevel ?? 3,
+                                b?.BuildingType?.IsMilitaryProject ?? false)),
+                            settings.Priority);
+                        var nextBuilding = nextBuildingIndex.HasValue ? buildings[nextBuildingIndex.Value] : null;
                         if (nextBuilding != null)
                         {
                             town.BuildingsInProgress.Enqueue(nextBuilding);
-                            string priorityLabel = priority == BuildingPriorityCategory.MilitaryFirst ? " [Military]" : (priority == BuildingPriorityCategory.EconomicFirst ? " [Economic]" : "");
+                            string priorityLabel = settings.Priority == BuildingPriorityCategory.MilitaryFirst ? " [Military]" : (settings.Priority == BuildingPriorityCategory.EconomicFirst ? " [Economic]" : "");
                             string msg = $"Auto-queued project '{nextBuilding.BuildingType.Name}'{priorityLabel} at {settlement.Name}.";
                             InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
                             SettlementAutomationCore.Helpers.Logger.WriteLog("FiefManager", msg);
@@ -74,29 +70,24 @@ namespace FiefManager
             {
                 try
                 {
-                    int dailyCost = settlement.IsCastle ? 250 : 500;
-                    int maxLimit = settlement.IsTown ? settings.MaxReserveLimitTown : settings.MaxReserveLimitCastle;
-                    int targetReserve = Math.Min(settings.DaysOfFunding * dailyCost, maxLimit);
                     int currentReserve = town.BoostBuildingProcess;
-                    int needed = targetReserve - currentReserve;
-                    if (needed > 0)
+                    int playerGold = Hero.MainHero.Gold;
+                    var depositPlan = FiefAutomationPlanner.CalculateBoostDeposit(
+                        settlement.IsTown,
+                        settings.DaysOfFunding,
+                        currentReserve,
+                        settings.MaxReserveLimitTown,
+                        settings.MaxReserveLimitCastle,
+                        settings.MinPlayerGoldReserve,
+                        playerGold);
+                    if (depositPlan.AmountToDeposit > 0)
                     {
-                        int playerGold = Hero.MainHero.Gold;
-                        int maxAllowedToSpend = playerGold - settings.MinPlayerGoldReserve;
-                        if (maxAllowedToSpend > 0)
-                        {
-                            int toDeposit = Math.Min(needed, maxAllowedToSpend);
+                        Hero.MainHero.Gold -= depositPlan.AmountToDeposit;
+                        town.BoostBuildingProcess += depositPlan.AmountToDeposit;
 
-                            if (toDeposit > 0)
-                            {
-                                Hero.MainHero.Gold -= toDeposit;
-                                town.BoostBuildingProcess += toDeposit;
-
-                                string msg = $"Deposited {toDeposit} denars to project boost reserve at {settlement.Name} (Reserve: {town.BoostBuildingProcess}/{targetReserve}, Daily Cost: {dailyCost}).";
-                                InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
-                                SettlementAutomationCore.Helpers.Logger.WriteLog("FiefManager", msg);
-                            }
-                        }
+                        string msg = $"Deposited {depositPlan.AmountToDeposit} denars to project boost reserve at {settlement.Name} (Reserve: {town.BoostBuildingProcess}/{depositPlan.TargetReserve}, Daily Cost: {depositPlan.DailyCost}).";
+                        InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
+                        SettlementAutomationCore.Helpers.Logger.WriteLog("FiefManager", msg);
                     }
                 }
                 catch (Exception ex)

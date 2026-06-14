@@ -68,7 +68,7 @@ namespace TradeOptimizer
 
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "TradeOptimizer_v1";
+        public override string Id => "TradeOptimizer_v3";
         public override string DisplayName => "Trade Optimizer";
         public override string FolderName => "TradeOptimizer";
         public override string FormatType => "json";
@@ -106,18 +106,13 @@ namespace TradeOptimizer
         [SettingPropertyGroup("General", GroupOrder = 3)]
         public bool AutoTradeOnEnterSettlement { get; set; } = true;
 
-        [SettingPropertyBool("Buy Blackened Stealth Gear", RequireRestart = false,
-            HintText = "Automatically buy any available 'Blackened' armor/stealth items from merchants, regardless of standard trade restrictions.", Order = 2)]
-        [SettingPropertyGroup("General", GroupOrder = 3)]
-        public bool BuyBlackenedStealthGear { get; set; } = false;
-
         [SettingPropertyBool("Simulation Mode (Dry Run)", RequireRestart = false,
-            HintText = "Show what the mod WOULD buy/sell without making real trades. Great for tuning thresholds.", Order = 3)]
+            HintText = "Show what the mod WOULD buy/sell without making real trades. Great for tuning thresholds.", Order = 2)]
         [SettingPropertyGroup("General", GroupOrder = 3)]
         public bool SimulationMode { get; set; } = false;
 
         [SettingPropertyInteger("Initial Economy Settling Days", 0, 200, RequireRestart = false,
-            HintText = "Number of campaign days to wait on a new game/save before auto-trading starts to let the initial economy stabilize (e.g., 50 days).", Order = 4)]
+            HintText = "Number of campaign days to wait on a new game/save before auto-trading starts to let the initial economy stabilize (e.g., 50 days).", Order = 3)]
         [SettingPropertyGroup("General", GroupOrder = 3)]
         public int InitialSettlementDaysDelay { get; set; } = 50;
 
@@ -148,11 +143,6 @@ namespace TradeOptimizer
             HintText = "Sell items priced at or above this fraction of their average price. Starts at 1.30 (30% above average - where red begins).", Order = 5)]
         [SettingPropertyGroup("Price Margins", GroupOrder = 2)]
         public float SellPriceThresholdFactor { get; set; } = 1.30f;
-
-        [SettingPropertyBool("Limit to Carry Capacity", RequireRestart = false,
-            HintText = "Stop buying when your party's carry weight would be exceeded.", Order = 7)]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
-        public bool LimitToInventoryCapacity { get; set; } = true;
 
         [SettingPropertyInteger("Max Stack Size to Buy", 1, 500, RequireRestart = false,
             HintText = "Maximum number of any single item type to buy per trade stop.", Order = 5)]

@@ -8,6 +8,8 @@ using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using Bannerlord.UIExtenderEx;
 using SettlementAutomationCore;
 using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
 using TaleWorlds.Core;
 
 namespace EquipmentManager
@@ -78,6 +80,7 @@ namespace EquipmentManager
             if (game.GameType is Campaign)
             {
                 _provider = new EquipmentManagerProvider();
+                AutomationRegistry.RegisterPreparationProvider(_provider);
                 AutomationRegistry.RegisterPreSellProvider(_provider);
                 AutomationRegistry.RegisterRequestProvider(_provider);
 
@@ -94,6 +97,7 @@ namespace EquipmentManager
             base.OnGameEnd(game);
             if (_provider != null)
             {
+                AutomationRegistry.UnregisterPreparationProvider(_provider);
                 AutomationRegistry.UnregisterPreSellProvider(_provider);
                 AutomationRegistry.UnregisterRequestProvider(_provider);
                 _provider = null;
@@ -103,9 +107,13 @@ namespace EquipmentManager
 
     public class EquipmentManagerCampaignBehavior : CampaignBehaviorBase
     {
+        private readonly PostLootAutoEquipTrigger _postLootTrigger = new PostLootAutoEquipTrigger();
+
         public override void RegisterEvents()
         {
             CampaignEvents.MapEventEnded.AddNonSerializedListener(this, OnMapEventEnded);
+            CampaignEvents.ItemsLooted.AddNonSerializedListener(this, OnItemsLooted);
+            CampaignEvents.TickEvent.AddNonSerializedListener(this, OnTick);
         }
 
         private void OnMapEventEnded(MapEvent mapEvent)
@@ -113,18 +121,65 @@ namespace EquipmentManager
             if (mapEvent == null) return;
             try
             {
-                if (mapEvent.PlayerSide == BattleSideEnum.None) return;
-                if (mapEvent.WinningSide != mapEvent.PlayerSide) return;
-
-                if (TaleWorlds.CampaignSystem.Party.MobileParty.MainParty != null)
-                {
-                    EquipmentEngine.AutoEquipHeadless(TaleWorlds.CampaignSystem.Party.MobileParty.MainParty);
-                }
+                _postLootTrigger.OnBattleEnded(
+                    mapEvent.PlayerSide != BattleSideEnum.None &&
+                    mapEvent.WinningSide == mapEvent.PlayerSide);
             }
             catch (Exception ex)
             {
                 SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error in EquipmentManagerCampaignBehavior.OnMapEventEnded: {ex}");
             }
+        }
+
+        private void OnItemsLooted(MobileParty party, ItemRoster items)
+        {
+            try
+            {
+                if (party == null || party != MobileParty.MainParty) return;
+                if (!_postLootTrigger.OnItemsLooted(true, ContainsEquipment(items))) return;
+
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", "Post-battle equipment loot detected. Auto-equip queued for the next campaign tick.");
+            }
+            catch (Exception ex)
+            {
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error in EquipmentManagerCampaignBehavior.OnItemsLooted: {ex}");
+            }
+        }
+
+        private void OnTick(float dt)
+        {
+            try
+            {
+                if (!_postLootTrigger.ShouldRunOnTick()) return;
+                var party = MobileParty.MainParty;
+                if (party == null) return;
+
+                EquipmentEngine.AutoEquipHeadless(party, "Post-Loot");
+            }
+            catch (Exception ex)
+            {
+                _postLootTrigger.ClearPending();
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error in EquipmentManagerCampaignBehavior.OnTick: {ex}");
+            }
+        }
+
+        private static bool ContainsEquipment(ItemRoster items)
+        {
+            if (items == null) return false;
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                var element = items.GetElementCopyAtIndex(i);
+                var item = element.EquipmentElement.Item;
+                if (item == null || element.Amount <= 0) continue;
+
+                if (item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public override void SyncData(IDataStore dataStore) { }
