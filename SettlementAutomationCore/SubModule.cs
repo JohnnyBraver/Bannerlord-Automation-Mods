@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using HarmonyLib;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
@@ -74,7 +73,25 @@ namespace SettlementAutomationCore
             try
             {
                 // ----------------------------------------------------
-                // Step 0: Gather Prioritized Requests and Reservations
+                // Step 0: Preparation Phase
+                // ----------------------------------------------------
+                var preparationProviders = AutomationRegistry.ActivePreparationProviders;
+                foreach (var reg in preparationProviders)
+                {
+                    try
+                    {
+                        reg.Provider.PrepareForAutomation(MobileParty.MainParty, settlement);
+                    }
+                    catch (Exception ex)
+                    {
+                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error preparing automation from {reg.ProviderName}: {ex.Message}");
+                    }
+                }
+
+                var marketReport = new AutomationMarketReport();
+
+                // ----------------------------------------------------
+                // Step 1: Gather Prioritized Requests and Reservations
                 // ----------------------------------------------------
                 AutomationRegistry.ClearRequests();
                 AutomationRegistry.ClearReservations();
@@ -103,7 +120,7 @@ namespace SettlementAutomationCore
                 }
 
                 // ----------------------------------------------------
-                // Step 1: Pre-Sell Phase (Revenue Generation)
+                // Step 2: Pre-Sell Phase (Revenue Generation)
                 // ----------------------------------------------------
                 var preSellProviders = AutomationRegistry.ActivePreSellProviders;
                 var preSellOrders = new List<TradeOrder>();
@@ -143,6 +160,7 @@ namespace SettlementAutomationCore
                                 logic1.AddTransferCommand(command);
                                 executedAny = true;
                                 preSoldList.Add($"{order.Amount}x {order.EquipmentElement.Item.Name}");
+                                marketReport.AddSold(order.EquipmentElement, order.Amount);
                             }
                         }
                         if (executedAny && logic1.IsThereAnyChanges())
@@ -152,13 +170,14 @@ namespace SettlementAutomationCore
                             int finalGold = Hero.MainHero?.Gold ?? 0;
                             int goldDiff = finalGold - initialGold;
                             string goldDiffSign = goldDiff >= 0 ? "+" : "";
+                            marketReport.AddGoldDelta(goldDiff);
                             Helpers.Logger.WriteLog("SettlementAutomationCore", $"Auto-pre-sold in {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d). Sold: {string.Join(", ", preSoldList)}");
                         }
                     }
                 }
 
                 // ----------------------------------------------------
-                // Step 2: Tavern / Ransom & Mercenaries Phase
+                // Step 3: Tavern / Ransom & Mercenaries Phase
                 // ----------------------------------------------------
                 var ransomRegistrations = AutomationRegistry.ActiveRansomProviders;
                 var ransomOrders = new List<RansomOrder>();
@@ -290,7 +309,7 @@ namespace SettlementAutomationCore
                 }
 
                 // ----------------------------------------------------
-                // Step 3: Notable Recruitment Phase
+                // Step 4: Notable Recruitment Phase
                 // ----------------------------------------------------
                 var recruitRegistrations = AutomationRegistry.ActiveRecruitProviders;
                 var recruitOrders = new List<RecruitOrder>();
@@ -316,39 +335,12 @@ namespace SettlementAutomationCore
                         var troop = order.Notable.VolunteerTypes[order.SlotIndex];
                         if (troop == null) continue;
 
-                        // Check party size limit before recruiting
+                        // Check party size limit before recruiting. Providers decide whether a
+                        // specific order may overfill for their own follow-up automation.
                         int currentSize = MobileParty.MainParty.MemberRoster.TotalManCount;
                         int limit = MobileParty.MainParty.Party.PartySizeLimit;
 
-                        bool canOverRecruit = false;
-                        try
-                        {
-                            foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
-                            {
-                                if (assembly.GetName().Name == "PartyManager")
-                                {
-                                    var settingsType = assembly.GetType("PartyManager.Settings");
-                                    if (settingsType != null)
-                                    {
-                                        var instanceProp = settingsType.GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-                                        var settingsInstance = instanceProp?.GetValue(null);
-                                        if (settingsInstance != null)
-                                        {
-                                            bool enableGarrisonDonation = (bool)(settingsType.GetProperty("EnableGarrisonDonation")?.GetValue(settingsInstance) ?? false);
-                                            int maxGarrisonSize = (int)(settingsType.GetProperty("MaxGarrisonSize")?.GetValue(settingsInstance) ?? 400);
-
-                                            canOverRecruit = enableGarrisonDonation && settlement.Town != null &&
-                                                             settlement.Town.GarrisonParty != null &&
-                                                             settlement.Town.GarrisonParty.MemberRoster.TotalManCount < maxGarrisonSize;
-                                        }
-                                    }
-                                    break;
-                                }
-                            }
-                        }
-                        catch {}
-
-                        if (currentSize >= limit && !canOverRecruit) continue;
+                        if (currentSize >= limit && !order.AllowOverPartySize) continue;
 
                         int cost = (int)Campaign.Current.Models.PartyWageModel.GetTroopRecruitmentCost(troop, Hero.MainHero, false).ResultNumber;
                         if (Hero.MainHero.Gold >= cost)
@@ -381,7 +373,7 @@ namespace SettlementAutomationCore
                 }
 
                 // ----------------------------------------------------
-                // Step 4: Garrison Donation Phase
+                // Step 5: Garrison Donation Phase
                 // ----------------------------------------------------
                 var garrisonRegistrations = AutomationRegistry.ActiveGarrisonProviders;
                 var garrisonOrders = new List<GarrisonOrder>();
@@ -428,7 +420,7 @@ namespace SettlementAutomationCore
                 }
 
                 // ----------------------------------------------------
-                // Step 5: Dungeon Donation Phase
+                // Step 6: Dungeon Donation Phase
                 // ----------------------------------------------------
                 var dungeonRegistrations = AutomationRegistry.ActiveDungeonProviders;
                 var dungeonOrders = new List<DungeonOrder>();
@@ -474,12 +466,9 @@ namespace SettlementAutomationCore
                 }
 
                 // ----------------------------------------------------
-                // Step 6: Priority Needs Phase (Need Fulfillment)
+                // Step 7: Priority Needs Phase (Need Fulfillment)
                 // ----------------------------------------------------
-                var activeRequests = AutomationRegistry.ActiveRequests
-                    .OrderBy(r => GetProfileOrder(r.Profile))
-                    .ThenByDescending(r => r.Priority)
-                    .ToList();
+                var activeRequests = RequestPolicy.SortRequests(AutomationRegistry.ActiveRequests).ToList();
                 LogRequestSummary(settlement, activeRequests);
 
                 if (activeRequests.Count > 0 && Hero.MainHero != null)
@@ -491,6 +480,7 @@ namespace SettlementAutomationCore
                             needsLogic,
                             Settings.Instance,
                             settlement,
+                            marketReport,
                             Hero.MainHero.Gold,
                             Helpers.InventoryHelper.GetRosterWeight(MobileParty.MainParty.ItemRoster),
                             HerdingCalculator.GetRemainingAnimalSlots(MobileParty.MainParty));
@@ -507,6 +497,7 @@ namespace SettlementAutomationCore
                             int finalGold = Hero.MainHero?.Gold ?? 0;
                             int goldDiff = finalGold - initialGold;
                             string goldDiffSign = goldDiff >= 0 ? "+" : "";
+                            marketReport.AddGoldDelta(goldDiff);
                             Helpers.Logger.WriteLog("SettlementAutomationCore", $"Prioritized items fulfilled at {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d). Purchased: {string.Join(", ", state.FulfilledItemParts)}");
                         }
                     }
@@ -517,7 +508,7 @@ namespace SettlementAutomationCore
                 }
 
                 // ----------------------------------------------------
-                // Step 7: Fief Minimum Phase
+                // Step 8: Fief Minimum Phase
                 // ----------------------------------------------------
                 var fiefRegistrations = AutomationRegistry.ActiveFiefProviders;
                 foreach (var reg in fiefRegistrations)
@@ -533,7 +524,7 @@ namespace SettlementAutomationCore
                 }
 
                 // ----------------------------------------------------
-                // Step 8: Free Trade Phase
+                // Step 9: Free Trade Phase
                 // ----------------------------------------------------
                 var explicitReservations = AutomationRegistry.ActiveReservations;
                 var sellableItems = new List<SellableItem>();
@@ -554,7 +545,7 @@ namespace SettlementAutomationCore
                         }
                         foreach (var req in activeRequests)
                         {
-                            if (req.QuantityMode == RequestQuantityMode.PurchaseCount)
+                            if (!RequestPolicy.CreatesImplicitSellReservation(req))
                             {
                                 continue;
                             }
@@ -569,32 +560,10 @@ namespace SettlementAutomationCore
                     }
                 }
 
-                var coreSettingsForTrade = Settings.Instance;
-                var mainPartyForTrade = MobileParty.MainParty!;
-                var mainHeroForTrade = Hero.MainHero!;
-                int dailyWage = mainPartyForTrade.TotalWage;
-                int minimumGoldReserveForTrade = coreSettingsForTrade?.MinimumGoldReserve ?? 1000;
-                int minDaysExpensesForTrade = coreSettingsForTrade?.MinDaysExpensesToKeep ?? 10;
-                int expenseReserve = Math.Max(minimumGoldReserveForTrade, dailyWage * minDaysExpensesForTrade);
-                int availableGold = Math.Max(0, mainHeroForTrade.Gold - expenseReserve);
-                float currentWeightForTrade = Helpers.InventoryHelper.GetRosterWeight(mainPartyForTrade.ItemRoster);
-                float freeCargo = Math.Max(0f, mainPartyForTrade.InventoryCapacity - currentWeightForTrade);
-                int freeAnimalSlots = HerdingCalculator.GetRemainingAnimalSlots(mainPartyForTrade);
-
                 var logic8 = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
                 if (logic8 != null)
                 {
-                    var context = new TradeContext(
-                        settlement,
-                        MobileParty.MainParty,
-                        logic8,
-                        availableGold,
-                        freeCargo,
-                        coreSettingsForTrade?.LimitToInventoryCapacity ?? true,
-                        freeAnimalSlots,
-                        freeAnimalSlots,
-                        sellableItems
-                    );
+                    var context = TradeContextFactory.Create(MobileParty.MainParty, settlement, logic8, sellableItems);
 
                     var analyzers = AutomationRegistry.ActiveFreeTradeAnalyzers;
                     foreach (var reg in analyzers)
@@ -604,7 +573,7 @@ namespace SettlementAutomationCore
                             var proposal = reg.Provider.AnalyzeMarket(context);
                             if (proposal != null && proposal.Actions != null && proposal.Actions.Count > 0)
                             {
-                                ExecuteTradeProposal(proposal, context, logic8);
+                                ExecuteTradeProposal(proposal, context, logic8, marketReport);
                             }
                         }
                         catch (Exception ex)
@@ -620,12 +589,15 @@ namespace SettlementAutomationCore
                         int finalGold = Hero.MainHero?.Gold ?? 0;
                         int goldDiff = finalGold - initialGold;
                         string goldDiffSign = goldDiff >= 0 ? "+" : "";
+                        marketReport.AddGoldDelta(goldDiff);
                         Helpers.Logger.WriteLog("SettlementAutomationCore", $"Free trade execution completed in {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d)");
                     }
                 }
 
+                ReportMarketActivity(settlement, marketReport);
+
                 // ----------------------------------------------------
-                // Step 9: Fief Surplus Phase
+                // Step 10: Fief Surplus Phase
                 // ----------------------------------------------------
                 foreach (var reg in fiefRegistrations)
                 {
@@ -661,11 +633,56 @@ namespace SettlementAutomationCore
             catch {}
         }
 
+        private sealed class AutomationMarketReport
+        {
+            private readonly MarketActivitySummary _summary = new MarketActivitySummary();
+
+            public bool HasActivity => _summary.HasActivity;
+
+            public void AddBought(EquipmentElement equipmentElement, int quantity)
+            {
+                _summary.AddBought(GetItemName(equipmentElement), quantity);
+            }
+
+            public void AddSold(EquipmentElement equipmentElement, int quantity)
+            {
+                _summary.AddSold(GetItemName(equipmentElement), quantity);
+            }
+
+            public void AddSlaughtered(EquipmentElement equipmentElement, int quantity)
+            {
+                _summary.AddSlaughtered(GetItemName(equipmentElement), quantity);
+            }
+
+            public void AddGoldDelta(int goldDelta)
+            {
+                _summary.AddGoldDelta(goldDelta);
+            }
+
+            public string BuildInGameSummary(Settlement settlement)
+            {
+                return _summary.BuildInGameSummary(settlement.Name.ToString());
+            }
+
+            public string BuildLogSummary(Settlement settlement)
+            {
+                return _summary.BuildLogSummary(settlement.Name.ToString());
+            }
+
+            private static string GetItemName(EquipmentElement equipmentElement)
+            {
+                return equipmentElement.Item?.Name?.ToString() ??
+                       equipmentElement.Item?.StringId ??
+                       "Unknown item";
+            }
+        }
+
         private sealed class RequestExecutionState
         {
             public InventoryLogic Logic { get; }
             public Settings? Settings { get; }
             public Settlement Settlement { get; }
+            public AutomationMarketReport MarketReport { get; }
             public int ProjectedGold;
             public float ProjectedWeight;
             public int ProjectedAnimalSlots;
@@ -676,6 +693,7 @@ namespace SettlementAutomationCore
                 InventoryLogic logic,
                 Settings? settings,
                 Settlement settlement,
+                AutomationMarketReport marketReport,
                 int projectedGold,
                 float projectedWeight,
                 int projectedAnimalSlots)
@@ -683,6 +701,7 @@ namespace SettlementAutomationCore
                 Logic = logic;
                 Settings = settings;
                 Settlement = settlement;
+                MarketReport = marketReport;
                 ProjectedGold = projectedGold;
                 ProjectedWeight = projectedWeight;
                 ProjectedAnimalSlots = projectedAnimalSlots;
@@ -691,15 +710,7 @@ namespace SettlementAutomationCore
 
         private static int GetProfileOrder(RequestProfile profile)
         {
-            return profile switch
-            {
-                RequestProfile.Critical => 0,
-                RequestProfile.Essential => 1,
-                RequestProfile.Routine => 2,
-                RequestProfile.Opportunistic => 3,
-                RequestProfile.Luxury => 4,
-                _ => 99
-            };
+            return RequestPolicy.GetProfileOrder(profile);
         }
 
         private static void LogRequestSummary(Settlement settlement, IReadOnlyList<AutomationRequest> requests)
@@ -708,7 +719,7 @@ namespace SettlementAutomationCore
 
             foreach (var request in requests)
             {
-                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Request gathered at {settlement.Name}: {DescribeRequest(request)}");
+            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Request gathered at {settlement.Name}: {DescribeRequest(request)}");
             }
         }
 
@@ -972,6 +983,7 @@ namespace SettlementAutomationCore
 
             purchasedCount = toBuy;
             state.FulfilledItemParts.Add($"{toBuy}x {item.Name}");
+            state.MarketReport.AddBought(candidateElement.EquipmentElement, toBuy);
             Helpers.Logger.WriteLog("SettlementAutomationCore", $"Request purchased at {state.Settlement.Name}: {DescribeRequest(request)} -> {toBuy}x {item.Name} ({toBuy * price}d, {price}d each)");
             return true;
         }
@@ -983,48 +995,37 @@ namespace SettlementAutomationCore
 
         private static string DescribeRequest(AutomationRequest request)
         {
-            string target = request.QuantityMode == RequestQuantityMode.PurchaseCount
-                ? $"{request.MarketCandidates.Count} market candidates"
-                : request.TargetId;
-            string reserve = request.BudgetPolicy == BudgetPolicyKind.ExplicitReserve
-                ? $"explicitReserve={request.ExplicitGoldReserve}"
-                : "coreReserve";
-            return $"{request.RequestorId} {request.Profile}/{request.Priority} {request.QuantityMode} {request.Type}:{target} qty={request.Quantity} {reserve}";
+            return RequestPolicy.DescribeRequest(request);
         }
 
         private static int GetGoldReserveForRequest(AutomationRequest request, Settings? settings)
         {
-            if (request.BudgetPolicy == BudgetPolicyKind.ExplicitReserve)
-            {
-                return request.ExplicitGoldReserve;
-            }
-
             int dailyWage = MobileParty.MainParty?.TotalWage ?? 0;
             int minimumGoldReserve = settings?.MinimumGoldReserve ?? 1000;
             int daysToKeep = settings?.MinDaysExpensesToKeep ?? 10;
-            return Math.Max(minimumGoldReserve, dailyWage * daysToKeep);
+            return RequestPolicy.GetGoldReserveForRequest(request, minimumGoldReserve, daysToKeep, dailyWage);
         }
 
         private static bool IsPriceAllowedForRequest(AutomationRequest request, ItemObject item, int price, Settings? settings)
         {
-            if (item == null) return false;
-
-            float? maxMultiplier = request.Profile switch
-            {
-                RequestProfile.Routine => settings?.RoutinePriceLimitMultiplier ?? 1.5f,
-                RequestProfile.Opportunistic => settings?.OpportunisticPriceLimitMultiplier ?? 1.1f,
-                _ => null
-            };
-
-            if (maxMultiplier == null || item.Value <= 0)
-            {
-                return true;
-            }
-
-            return price <= item.Value * maxMultiplier.Value;
+            return RequestPolicy.IsPriceAllowedForRequest(
+                request,
+                item,
+                price,
+                settings?.RoutinePriceLimitMultiplier ?? 1.5f,
+                settings?.OpportunisticPriceLimitMultiplier ?? 1.1f);
         }
 
-        private static void ExecuteTradeProposal(TradeProposal proposal, TradeContext context, InventoryLogic logic)
+        private static void ReportMarketActivity(Settlement settlement, AutomationMarketReport marketReport)
+        {
+            if (!marketReport.HasActivity) return;
+
+            string inGameSummary = marketReport.BuildInGameSummary(settlement);
+            InformationManager.DisplayMessage(new InformationMessage(inGameSummary));
+            Helpers.Logger.WriteLog("SettlementAutomationCore", marketReport.BuildLogSummary(settlement));
+        }
+
+        private static void ExecuteTradeProposal(TradeProposal proposal, TradeContext context, InventoryLogic logic, AutomationMarketReport marketReport)
         {
             var sells = proposal.Actions.Where(a => a.ActionType == TradeActionType.Sell).ToList();
             var slaughters = proposal.Actions.Where(a => a.ActionType == TradeActionType.Slaughter).ToList();
@@ -1058,6 +1059,7 @@ namespace SettlementAutomationCore
                     logic.AddTransferCommand(command);
 
                     availableGold += toSell * price;
+                    marketReport.AddSold(action.EquipmentElement, toSell);
                     if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
                     {
                         freeCargo += toSell * action.EquipmentElement.Item.Weight;
@@ -1078,6 +1080,7 @@ namespace SettlementAutomationCore
                     if (logic.CanSlaughterItem(itemRosterEl, InventoryLogic.InventorySide.PlayerInventory))
                     {
                         logic.SlaughterItem(itemRosterEl);
+                        marketReport.AddSlaughtered(action.EquipmentElement, action.Quantity);
                         if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
                         {
                             freeCargo += action.Quantity * action.EquipmentElement.Item.Weight;
@@ -1131,6 +1134,7 @@ namespace SettlementAutomationCore
                     logic.AddTransferCommand(command);
 
                     availableGold -= toBuy * price;
+                    marketReport.AddBought(action.EquipmentElement, toBuy);
                     if (isCargo)
                     {
                         freeCargo -= toBuy * action.EquipmentElement.Item.Weight;

@@ -130,11 +130,13 @@ namespace SettlementAutomationCore
     {
         public Hero Notable { get; }
         public int SlotIndex { get; }
+        public bool AllowOverPartySize { get; }
         
-        public RecruitOrder(Hero notable, int slotIndex)
+        public RecruitOrder(Hero notable, int slotIndex, bool allowOverPartySize = false)
         {
             Notable = notable;
             SlotIndex = slotIndex;
+            AllowOverPartySize = allowOverPartySize;
         }
     }
 
@@ -189,6 +191,12 @@ namespace SettlementAutomationCore
     // ----------------------------------------------------
     // Provider Interfaces
     // ----------------------------------------------------
+    public interface IAutomationPreparationProvider
+    {
+        string ProviderName { get; }
+        void PrepareForAutomation(MobileParty party, Settlement settlement);
+    }
+
     public interface IPreSellProvider
     {
         string ProviderName { get; }
@@ -237,6 +245,7 @@ namespace SettlementAutomationCore
     // ----------------------------------------------------
     public static class AutomationRegistry
     {
+        private static readonly List<ProviderRegistration<IAutomationPreparationProvider>> PreparationProviders = new();
         private static readonly List<ProviderRegistration<IPreSellProvider>> PreSellProviders = new();
         private static readonly List<ProviderRegistration<IFreeTradeAnalyzer>> FreeTradeAnalyzers = new();
         private static readonly List<ProviderRegistration<IRecruitOrderProvider>> RecruitProviders = new();
@@ -248,6 +257,38 @@ namespace SettlementAutomationCore
         private static readonly List<ProviderRegistration<IAutomationRequestProvider>> RequestProviders = new();
         private static readonly List<AutomationRequest> CurrentRequests = new();
         private static readonly List<ItemReservation> CurrentReservations = new();
+
+        // --- Preparation Providers ---
+        public static void RegisterPreparationProvider(IAutomationPreparationProvider provider)
+        {
+            lock (PreparationProviders)
+            {
+                if (!PreparationProviders.Any(r => EqualityComparer<IAutomationPreparationProvider>.Default.Equals(r.Provider, provider)))
+                {
+                    string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
+                    PreparationProviders.Add(new ProviderRegistration<IAutomationPreparationProvider>(provider, provider.ProviderName, callingAssembly));
+                }
+            }
+        }
+
+        public static void UnregisterPreparationProvider(IAutomationPreparationProvider provider)
+        {
+            lock (PreparationProviders)
+            {
+                PreparationProviders.RemoveAll(r => EqualityComparer<IAutomationPreparationProvider>.Default.Equals(r.Provider, provider));
+            }
+        }
+
+        public static IReadOnlyList<ProviderRegistration<IAutomationPreparationProvider>> ActivePreparationProviders
+        {
+            get
+            {
+                lock (PreparationProviders)
+                {
+                    return new List<ProviderRegistration<IAutomationPreparationProvider>>(PreparationProviders);
+                }
+            }
+        }
 
         // --- Pre-Sell Providers ---
         public static void RegisterPreSellProvider(IPreSellProvider provider)
