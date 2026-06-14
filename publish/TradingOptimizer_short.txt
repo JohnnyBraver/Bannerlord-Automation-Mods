@@ -1,1 +1,1 @@
-Automate trading and cargo liquidation. Purchases logistics supplies and evaluates profit margins dynamically.
+Automate profit trading and cargo liquidation with configurable commodity category policies.

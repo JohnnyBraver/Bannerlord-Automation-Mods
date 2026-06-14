@@ -1,5 +1,5 @@
 [size=4][b]Description[/b][/size]
-[size=3][color=#D4D4D8]Party Manager is an all-in-one party management and automation tool. It automates troop recruitment from town and village notables (supporting detailed culture and role filters), handles prisoner keeping, ransoming, and donations, and synchronizes logistics goals for food variety and mount upgrades.[/color][/size]
+[size=3][color=#D4D4D8]Party Manager is an all-in-one party management and automation tool. It automates troop recruitment from town and village notables (supporting detailed culture and role filters), handles prisoner keeping, ransoming, and donations, and owns party logistics needs such as food restocking, food variety, and riding mounts.[/color][/size]
 
 [size=4][b]Installation instructions[/b][/size]
 [size=3][color=#D4D4D8]1. Extract the downloaded archive into your Mount & Blade II Bannerlord game directory (inside the Modules folder).
@@ -11,7 +11,8 @@
 - Dropdown Recruitment Policies: Explicit policies for regular, noble, and mercenary recruitment (None, MatchFilters, Any, AnyIgnoreTier).
 - Consolidated Prisoner Management: Policies to ransom all, keep all, or keep selected prisoners matching your recruitment filters. Supports minor faction keep policies and recruitment policy bypasses.
 - Post-Automation Alerts: Real-time warnings when your party is near prisoner capacity or single stacks grow too large.
-- Logistics Integration: Automatically registers speed mount and variety food requirements with the core registry.[/color][/size]
+- Party Needs: Maintains critical food days, requests a variety of known food types, fills the total food buffer, and buys riding mounts for infantry.
+- Spend Modes: Choose how food and mount requests compete with other automation requests, from Critical through Luxury.[/color][/size]
 
 [size=4][b]Requirements[/b][/size]
 [size=3][color=#D4D4D8]- Settlement Automation Core
