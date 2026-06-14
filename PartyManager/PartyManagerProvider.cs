@@ -29,12 +29,12 @@ namespace PartyManager
         // ----------------------------------------------------
         // IAutomationRequestProvider
         // ----------------------------------------------------
-        public void SubmitAutomationRequests(MobileParty party, Settlement settlement)
+        public void SubmitAutomationRequests(AutomationRequestContext context)
         {
             var settings = Settings.Instance;
             if (settings != null)
             {
-                TradeHelper.SubmitAutomationRequests(party, settings);
+                TradeHelper.SubmitAutomationRequests(context.Party, settings);
             }
         }
 

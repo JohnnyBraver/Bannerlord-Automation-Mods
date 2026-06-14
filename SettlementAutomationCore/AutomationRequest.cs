@@ -10,6 +10,7 @@ namespace SettlementAutomationCore
     {
         ItemCategory,    // E.g. Food, Horse, PackAnimal, Livestock
         SpecificItem,    // E.g. Hardwood, IronIngot
+        MarketItem,      // Exact merchant inventory entry selected from AutomationRequestContext
         TroopFilter      // E.g. MeleeCavalry, Ranged, AnyRecruit
     }
 
@@ -22,6 +23,7 @@ namespace SettlementAutomationCore
         public int Priority { get; }            // 1 to 100
         public int MinGoldReserve { get; }      // Threshold below which core skips this request
         public float MaxPriceMultiplier { get; } // Max price we pay relative to standard value (e.g. 1.5 = 150%)
+        public InventoryItemView? TargetMarketItem { get; }
 
         public AutomationRequest(
             string requestorId,
@@ -30,7 +32,8 @@ namespace SettlementAutomationCore
             int targetQuantity,
             int priority,
             int minGoldReserve = 1000,
-            float maxPriceMultiplier = 1.5f)
+            float maxPriceMultiplier = 1.5f,
+            InventoryItemView? targetMarketItem = null)
         {
             RequestorId = requestorId;
             Type = type;
@@ -39,11 +42,35 @@ namespace SettlementAutomationCore
             Priority = Math.Max(1, Math.Min(100, priority));
             MinGoldReserve = minGoldReserve;
             MaxPriceMultiplier = maxPriceMultiplier;
+            TargetMarketItem = targetMarketItem;
+        }
+
+        public static AutomationRequest ForMarketItem(
+            string requestorId,
+            InventoryItemView marketItem,
+            int quantity,
+            int priority,
+            int minGoldReserve = 1000)
+        {
+            return new AutomationRequest(
+                requestorId,
+                RequestType.MarketItem,
+                marketItem.SnapshotId,
+                quantity,
+                priority,
+                minGoldReserve,
+                float.MaxValue,
+                marketItem);
         }
 
         public bool MatchesItem(ItemObject item)
         {
             if (item == null) return false;
+
+            if (Type == RequestType.MarketItem && TargetMarketItem != null)
+            {
+                return TargetMarketItem.Item.StringId == item.StringId;
+            }
 
             if (Type == RequestType.SpecificItem)
             {
@@ -77,6 +104,6 @@ namespace SettlementAutomationCore
     public interface IAutomationRequestProvider
     {
         string ProviderName { get; }
-        void SubmitAutomationRequests(MobileParty party, Settlement settlement);
+        void SubmitAutomationRequests(AutomationRequestContext context);
     }
 }

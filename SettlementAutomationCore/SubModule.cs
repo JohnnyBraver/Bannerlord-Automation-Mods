@@ -78,12 +78,23 @@ namespace SettlementAutomationCore
                 // ----------------------------------------------------
                 AutomationRegistry.ClearRequests();
                 AutomationRegistry.ClearReservations();
+                AutomationRequestContext requestContext;
+                var visibilityLogic = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement, true);
+                if (visibilityLogic != null)
+                {
+                    requestContext = AutomationRequestContext.FromInventoryLogic(MobileParty.MainParty, settlement, visibilityLogic);
+                }
+                else
+                {
+                    requestContext = AutomationRequestContext.Empty(MobileParty.MainParty, settlement);
+                }
+
                 var requestProviders = AutomationRegistry.ActiveRequestProviders;
                 foreach (var reg in requestProviders)
                 {
                     try
                     {
-                        reg.Provider.SubmitAutomationRequests(MobileParty.MainParty, settlement);
+                        reg.Provider.SubmitAutomationRequests(requestContext);
                     }
                     catch (Exception ex)
                     {
@@ -474,8 +485,8 @@ namespace SettlementAutomationCore
                         bool executedAnyItemTransfers = false;
                         var fulfilledItemParts = new List<string>();
 
-                        // Part A: Process Item Requests (ItemCategory & SpecificItem)
-                        var itemRequests = activeRequests.Where(r => r.Type == RequestType.ItemCategory || r.Type == RequestType.SpecificItem).ToList();
+                        // Part A: Process Item Requests (ItemCategory, SpecificItem & exact MarketItem)
+                        var itemRequests = activeRequests.Where(r => r.Type == RequestType.ItemCategory || r.Type == RequestType.SpecificItem || r.Type == RequestType.MarketItem).ToList();
                         
                         var coreSettings = Settings.Instance;
                         int projectedGold = Hero.MainHero.Gold;
@@ -485,6 +496,88 @@ namespace SettlementAutomationCore
                         foreach (var req in itemRequests)
                         {
                             if (projectedGold < req.MinGoldReserve) continue;
+
+                            if (req.Type == RequestType.MarketItem)
+                            {
+                                var targetMarketItem = req.TargetMarketItem;
+                                if (targetMarketItem == null || targetMarketItem.Item == null) continue;
+
+                                var marketOtherElements = needsLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
+                                var matchingCandidates = new List<ItemRosterElement>();
+                                for (int i = 0; i < marketOtherElements.Count; i++)
+                                {
+                                    var el = marketOtherElements[i];
+                                    if (el.IsEmpty || el.Amount <= 0 || el.EquipmentElement.Item == null) continue;
+                                    if (targetMarketItem.MatchesEquipmentElement(el.EquipmentElement))
+                                    {
+                                        matchingCandidates.Add(el);
+                                    }
+                                }
+
+                                var marketSortedCandidates = matchingCandidates.Select(c => new {
+                                    Element = c,
+                                    Price = needsLogic.GetItemPrice(c.EquipmentElement, true)
+                                }).OrderBy(x => x.Price).ToList();
+
+                                int remainingToBuy = req.TargetQuantity;
+                                foreach (var candidate in marketSortedCandidates)
+                                {
+                                    if (remainingToBuy <= 0) break;
+                                    if (projectedGold < req.MinGoldReserve) break;
+
+                                    int toBuy = Math.Min(remainingToBuy, candidate.Element.Amount);
+                                    int maxAfford = (projectedGold - req.MinGoldReserve) / Math.Max(1, candidate.Price);
+                                    toBuy = Math.Min(toBuy, maxAfford);
+
+                                    var item = candidate.Element.EquipmentElement.Item;
+                                    bool isCargo = !item.IsAnimal && !item.IsMountable;
+                                    if (isCargo && coreSettings.LimitToInventoryCapacity)
+                                    {
+                                        float capacity = MobileParty.MainParty.InventoryCapacity;
+                                        float remainingCargoSpace = capacity - projectedWeight;
+                                        if (remainingCargoSpace < 0f) remainingCargoSpace = 0f;
+                                        if (item.Weight > 0f)
+                                        {
+                                            int maxWeightBuy = (int)(remainingCargoSpace / item.Weight);
+                                            toBuy = Math.Min(toBuy, maxWeightBuy);
+                                        }
+                                    }
+
+                                    bool isAnimalOrMount = item.IsAnimal || item.IsMountable;
+                                    if (isAnimalOrMount)
+                                    {
+                                        toBuy = Math.Min(toBuy, projectedAnimalSlots);
+                                    }
+
+                                    if (toBuy > 0)
+                                    {
+                                        var command = TransferCommand.Transfer(
+                                            toBuy,
+                                            InventoryLogic.InventorySide.OtherInventory,
+                                            InventoryLogic.InventorySide.PlayerInventory,
+                                            new ItemRosterElement(candidate.Element.EquipmentElement, toBuy),
+                                            EquipmentIndex.None,
+                                            EquipmentIndex.None,
+                                            Hero.MainHero.CharacterObject
+                                        );
+                                        needsLogic.AddTransferCommand(command);
+                                        executedAnyItemTransfers = true;
+                                        remainingToBuy -= toBuy;
+                                        projectedGold -= toBuy * candidate.Price;
+                                        if (isCargo)
+                                        {
+                                            projectedWeight += toBuy * item.Weight;
+                                        }
+                                        if (isAnimalOrMount)
+                                        {
+                                            projectedAnimalSlots -= toBuy;
+                                        }
+                                        fulfilledItemParts.Add($"{toBuy}x {item.Name}");
+                                    }
+                                }
+
+                                continue;
+                            }
 
                             // 1. Get current inventory count for matching items (respecting previous transfers in Step 6)
                             int currentHeld = 0;
@@ -708,57 +801,6 @@ namespace SettlementAutomationCore
                             string msg = $"Prioritized recruits fulfilled at {settlement.Name}: {string.Join(", ", troopParts)} (Total: {totalRecruited})";
                             InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
                             Helpers.Logger.WriteLog("SettlementAutomationCore", msg);
-                        }
-                    }
-                }
-
-                // ----------------------------------------------------
-                // Step 6.5: Equipment Upgrade Phase (low-priority, limit 1 per settlement)
-                // ----------------------------------------------------
-                var equipmentUpgradeRegistrations = AutomationRegistry.ActiveEquipmentUpgradeProviders;
-                if (equipmentUpgradeRegistrations.Count > 0 && (settlement.IsTown || settlement.IsVillage))
-                {
-                    var upgradeLogic = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement, true);
-                    if (upgradeLogic != null)
-                    {
-                        bool executedUpgrade = false;
-                        foreach (var reg in equipmentUpgradeRegistrations)
-                        {
-                            if (executedUpgrade) break;
-                            try
-                            {
-                                var upgradeOrders = reg.Provider.GetUpgradeOrders(MobileParty.MainParty, settlement, upgradeLogic);
-                                foreach (var order in upgradeOrders)
-                                {
-                                    if (order == null || order.EquipmentElement.Item == null || order.Amount <= 0) continue;
-                                    if (!order.IsBuy) continue; // upgrades are buy-only
-
-                                    int price = upgradeLogic.GetItemPrice(order.EquipmentElement, true);
-                                    if (Hero.MainHero.Gold - price < 0) continue;
-
-                                    var command = TransferCommand.Transfer(
-                                        1,
-                                        InventoryLogic.InventorySide.OtherInventory,
-                                        InventoryLogic.InventorySide.PlayerInventory,
-                                        new ItemRosterElement(order.EquipmentElement, 1),
-                                        EquipmentIndex.None,
-                                        EquipmentIndex.None,
-                                        Hero.MainHero.CharacterObject
-                                    );
-                                    upgradeLogic.AddTransferCommand(command);
-                                    executedUpgrade = true;
-                                    break;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error in Equipment Upgrade Phase from {reg.ProviderName}: {ex.Message}");
-                            }
-                        }
-
-                        if (executedUpgrade && upgradeLogic.IsThereAnyChanges())
-                        {
-                            upgradeLogic.DoneLogic();
                         }
                     }
                 }

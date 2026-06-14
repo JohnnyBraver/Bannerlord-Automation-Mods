@@ -6,7 +6,6 @@ using TaleWorlds.Core;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
-using TaleWorlds.CampaignSystem.Inventory;
 
 namespace SettlementAutomationCore
 {
@@ -233,16 +232,6 @@ namespace SettlementAutomationCore
         void ProcessFiefAutomation(MobileParty party, Settlement settlement, bool isSurplusPhase);
     }
 
-    /// <summary>
-    /// Provides targeted equipment upgrade buy orders that require access to the merchant's InventoryLogic.
-    /// Called in Step 6 (Priority Needs) after item requests. Limit: 1 upgrade per settlement.
-    /// </summary>
-    public interface IEquipmentUpgradeProvider
-    {
-        string ProviderName { get; }
-        List<TradeOrder> GetUpgradeOrders(MobileParty party, Settlement settlement, InventoryLogic currentLogic);
-    }
-
     // ----------------------------------------------------
     // Automation Registry
     // ----------------------------------------------------
@@ -255,7 +244,6 @@ namespace SettlementAutomationCore
         private static readonly List<ProviderRegistration<IRansomOrderProvider>> RansomProviders = new();
         private static readonly List<ProviderRegistration<IDungeonOrderProvider>> DungeonProviders = new();
         private static readonly List<ProviderRegistration<IFiefAutomationProvider>> FiefProviders = new();
-        private static readonly List<ProviderRegistration<IEquipmentUpgradeProvider>> EquipmentUpgradeProviders = new();
 
         private static readonly List<ProviderRegistration<IAutomationRequestProvider>> RequestProviders = new();
         private static readonly List<AutomationRequest> CurrentRequests = new();
@@ -481,38 +469,6 @@ namespace SettlementAutomationCore
                 lock (FiefProviders)
                 {
                     return new List<ProviderRegistration<IFiefAutomationProvider>>(FiefProviders);
-                }
-            }
-        }
-
-        // --- Equipment Upgrade Providers ---
-        public static void RegisterEquipmentUpgradeProvider(IEquipmentUpgradeProvider provider)
-        {
-            lock (EquipmentUpgradeProviders)
-            {
-                if (!EquipmentUpgradeProviders.Any(r => EqualityComparer<IEquipmentUpgradeProvider>.Default.Equals(r.Provider, provider)))
-                {
-                    string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
-                    EquipmentUpgradeProviders.Add(new ProviderRegistration<IEquipmentUpgradeProvider>(provider, provider.ProviderName, callingAssembly));
-                }
-            }
-        }
-
-        public static void UnregisterEquipmentUpgradeProvider(IEquipmentUpgradeProvider provider)
-        {
-            lock (EquipmentUpgradeProviders)
-            {
-                EquipmentUpgradeProviders.RemoveAll(r => EqualityComparer<IEquipmentUpgradeProvider>.Default.Equals(r.Provider, provider));
-            }
-        }
-
-        public static IReadOnlyList<ProviderRegistration<IEquipmentUpgradeProvider>> ActiveEquipmentUpgradeProviders
-        {
-            get
-            {
-                lock (EquipmentUpgradeProviders)
-                {
-                    return new List<ProviderRegistration<IEquipmentUpgradeProvider>>(EquipmentUpgradeProviders);
                 }
             }
         }
