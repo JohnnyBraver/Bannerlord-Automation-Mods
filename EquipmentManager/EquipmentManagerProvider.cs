@@ -10,7 +10,7 @@ using SettlementAutomationCore;
 
 namespace EquipmentManager
 {
-    public class EquipmentManagerProvider : ITradeOrderProvider
+    public class EquipmentManagerProvider : IPreSellProvider, IEquipmentUpgradeProvider
     {
         private struct PotentialBuyOrder
         {
@@ -171,7 +171,8 @@ namespace EquipmentManager
             return orders;
         }
 
-        public List<TradeOrder> GetMainOrders(MobileParty party, Settlement settlement, InventoryLogic currentLogic)
+        // IEquipmentUpgradeProvider: scan merchant inventory for best armor upgrade (limit 1 per settlement)
+        public List<TradeOrder> GetUpgradeOrders(MobileParty party, Settlement settlement, InventoryLogic currentLogic)
         {
             var orders = new List<TradeOrder>();
             var settings = Settings.Instance;

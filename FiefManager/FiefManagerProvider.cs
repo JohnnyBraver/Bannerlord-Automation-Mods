@@ -16,8 +16,12 @@ namespace FiefManager
     {
         public string ProviderName => "FiefManager";
 
-        public void ProcessFiefAutomation(MobileParty party, Settlement settlement)
+        public void ProcessFiefAutomation(MobileParty party, Settlement settlement, bool isSurplusPhase)
         {
+            // FiefManager fief tasks (build queue, boost deposit) run in the surplus phase,
+            // after trade has completed and the party's gold is at its post-trade state.
+            if (!isSurplusPhase) return;
+
             if (settlement == null || party == null || Hero.MainHero == null) return;
 
             // Only automate fiefs owned by the player's clan

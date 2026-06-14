@@ -34,7 +34,7 @@ namespace PartyManager
                 }
 
                 _provider = new PartyManagerProvider();
-                AutomationRegistry.RegisterTradeProvider(_provider);
+                AutomationRegistry.RegisterPreSellProvider(_provider);
                 AutomationRegistry.RegisterRecruitProvider(_provider);
                 AutomationRegistry.RegisterGarrisonProvider(_provider);
                 AutomationRegistry.RegisterRansomProvider(_provider);
@@ -50,7 +50,7 @@ namespace PartyManager
             base.OnGameEnd(game);
             if (_provider != null)
             {
-                AutomationRegistry.UnregisterTradeProvider(_provider);
+                AutomationRegistry.UnregisterPreSellProvider(_provider);
                 AutomationRegistry.UnregisterRecruitProvider(_provider);
                 AutomationRegistry.UnregisterGarrisonProvider(_provider);
                 AutomationRegistry.UnregisterRansomProvider(_provider);

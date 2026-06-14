@@ -12,23 +12,18 @@ using PartyManager.Helpers;
 
 namespace PartyManager
 {
-    public class PartyManagerProvider : ITradeOrderProvider, IRecruitOrderProvider, IGarrisonOrderProvider, IRansomOrderProvider, IDungeonOrderProvider, IAutomationRequestProvider
+    public class PartyManagerProvider : IPreSellProvider, IRecruitOrderProvider, IGarrisonOrderProvider, IRansomOrderProvider, IDungeonOrderProvider, IAutomationRequestProvider
     {
         public string ProviderName => "PartyManager";
 
         // ----------------------------------------------------
-        // ITradeOrderProvider (Mount & Herding Management)
+        // IPreSellProvider (Pack Animal Pre-Sell for XP farm split transactions)
         // ----------------------------------------------------
         public List<TradeOrder> GetPreSellOrders(MobileParty party, Settlement settlement)
         {
             var settings = Settings.Instance;
             if (settings == null) return new List<TradeOrder>();
             return TradeHelper.GetPreSellOrders(party, settings);
-        }
-
-        public List<TradeOrder> GetMainOrders(MobileParty party, Settlement settlement, InventoryLogic currentLogic)
-        {
-            return new List<TradeOrder>(); // Buying is handled by core priority engine now
         }
 
         // ----------------------------------------------------

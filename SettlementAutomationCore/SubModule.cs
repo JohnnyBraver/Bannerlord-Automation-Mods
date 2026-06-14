@@ -713,6 +713,57 @@ namespace SettlementAutomationCore
                 }
 
                 // ----------------------------------------------------
+                // Step 6.5: Equipment Upgrade Phase (low-priority, limit 1 per settlement)
+                // ----------------------------------------------------
+                var equipmentUpgradeRegistrations = AutomationRegistry.ActiveEquipmentUpgradeProviders;
+                if (equipmentUpgradeRegistrations.Count > 0 && (settlement.IsTown || settlement.IsVillage))
+                {
+                    var upgradeLogic = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement, true);
+                    if (upgradeLogic != null)
+                    {
+                        bool executedUpgrade = false;
+                        foreach (var reg in equipmentUpgradeRegistrations)
+                        {
+                            if (executedUpgrade) break;
+                            try
+                            {
+                                var upgradeOrders = reg.Provider.GetUpgradeOrders(MobileParty.MainParty, settlement, upgradeLogic);
+                                foreach (var order in upgradeOrders)
+                                {
+                                    if (order == null || order.EquipmentElement.Item == null || order.Amount <= 0) continue;
+                                    if (!order.IsBuy) continue; // upgrades are buy-only
+
+                                    int price = upgradeLogic.GetItemPrice(order.EquipmentElement, true);
+                                    if (Hero.MainHero.Gold - price < 0) continue;
+
+                                    var command = TransferCommand.Transfer(
+                                        1,
+                                        InventoryLogic.InventorySide.OtherInventory,
+                                        InventoryLogic.InventorySide.PlayerInventory,
+                                        new ItemRosterElement(order.EquipmentElement, 1),
+                                        EquipmentIndex.None,
+                                        EquipmentIndex.None,
+                                        Hero.MainHero.CharacterObject
+                                    );
+                                    upgradeLogic.AddTransferCommand(command);
+                                    executedUpgrade = true;
+                                    break;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error in Equipment Upgrade Phase from {reg.ProviderName}: {ex.Message}");
+                            }
+                        }
+
+                        if (executedUpgrade && upgradeLogic.IsThereAnyChanges())
+                        {
+                            upgradeLogic.DoneLogic();
+                        }
+                    }
+                }
+
+                // ----------------------------------------------------
                 // Step 7: Fief Minimum Phase
                 // ----------------------------------------------------
                 var fiefRegistrations = AutomationRegistry.ActiveFiefProviders;
