@@ -248,7 +248,7 @@ namespace PartyManager
         public int PartyFoodDaysToKeep { get; set; } = 10;
 
         [SettingPropertyInteger("Min Party Size for Variety", 1, 100, RequireRestart = false,
-            HintText = "Minimum party size before the mod requests one stack of each known food type.", Order = 4)]
+            HintText = "Minimum party size before the mod requests specific food items for variety. Each food type targets a fair share of the total food buffer.", Order = 4)]
         [SettingPropertyGroup("Party Needs", GroupOrder = 6)]
         public int MinPartySizeForVariety { get; set; } = 20;
 

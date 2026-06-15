@@ -15,43 +15,6 @@ namespace TradeOptimizer
     {
         public string ProviderName => "TradeOptimizer";
 
-        private static Settlement? _currentTradeSettlement = null;
-        private static int _initialGold = 0;
-        private static TradeTransactionReport? _accumulatedReport = null;
-
-        public TradeOptimizerProvider()
-        {
-            SettlementAutomationCore.SubModule.OnAutomationCycleCompleted += OnAutomationCycleCompleted;
-        }
-
-        private void OnAutomationCycleCompleted(Settlement settlement)
-        {
-            try
-            {
-                if (_currentTradeSettlement == settlement && _accumulatedReport != null)
-                {
-                    int finalGold = Hero.MainHero?.Gold ?? 0;
-                    bool anythingTraded = _accumulatedReport.SoldItems.Count > 0 || _accumulatedReport.BoughtItems.Count > 0;
-                    TradingPatches.PrintTradeReport(finalGold, _initialGold, _accumulatedReport, settlement.Name.ToString());
-                    // Print cargo only after ALL phases have completed so the weight is accurate
-                    if (anythingTraded)
-                    {
-                        bool isSim = Settings.Instance?.SimulationMode ?? false;
-                        TradingPatches.PrintCargoStatus(isSim);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                TradingEngine.WriteLog($"Error printing final trade report: {ex}");
-            }
-            finally
-            {
-                _currentTradeSettlement = null;
-                _accumulatedReport = null;
-            }
-        }
-
         private List<TradeOrder> SimulateAndCollectOrders(MobileParty party, Settlement settlement, bool runSell, bool runBuy, HashSet<string>? excludedItems = null, bool isMainCall = true)
         {
             var orders = new List<TradeOrder>();
@@ -182,71 +145,6 @@ namespace TradeOptimizer
                     orders.Add(new TradeOrder(slaughter.EqElement, slaughter.Amount, false, true));
                 }
 
-                // Accumulate transaction report for final printing
-                if (isMainCall && orders.Count > 0 && Hero.MainHero != null)
-                {
-                    if (_currentTradeSettlement != settlement)
-                    {
-                        _currentTradeSettlement = settlement;
-                        _initialGold = Hero.MainHero.Gold;
-                        _accumulatedReport = new TradeTransactionReport();
-                    }
-
-                    if (_accumulatedReport != null)
-                    {
-                        // Merge sold items
-                        foreach (var s in report.SoldItems)
-                        {
-                            int existingIdx = _accumulatedReport.SoldItems.FindIndex(x => x.Name == s.Name);
-                            if (existingIdx >= 0)
-                            {
-                                var old = _accumulatedReport.SoldItems[existingIdx];
-                                old.Count += s.Count;
-                                old.Gold += s.Gold;
-                                if (s.MarketPrice > 0) old.MarketPrice = s.MarketPrice;
-                            }
-                            else
-                            {
-                                _accumulatedReport.SoldItems.Add(new TradedItemInfo
-                                {
-                                    Name = s.Name,
-                                    Count = s.Count,
-                                    Gold = s.Gold,
-                                    MarketPrice = s.MarketPrice
-                                });
-                            }
-                        }
-
-                        // Merge bought items
-                        foreach (var b in report.BoughtItems)
-                        {
-                            int existingIdx = _accumulatedReport.BoughtItems.FindIndex(x => x.Name == b.Name);
-                            if (existingIdx >= 0)
-                            {
-                                var old = _accumulatedReport.BoughtItems[existingIdx];
-                                old.Count += b.Count;
-                                old.Gold += b.Gold;
-                                if (b.MarketPrice > 0) old.MarketPrice = b.MarketPrice;
-                            }
-                            else
-                            {
-                                _accumulatedReport.BoughtItems.Add(new TradedItemInfo
-                                {
-                                    Name = b.Name,
-                                    Count = b.Count,
-                                    Gold = b.Gold,
-                                    MarketPrice = b.MarketPrice
-                                });
-                            }
-                        }
-
-                        // Merge arbitrage slaughters
-                        foreach (var s in report.ArbitrageSlaughters)
-                        {
-                            _accumulatedReport.ArbitrageSlaughters.Add(s);
-                        }
-                    }
-                }
             }
             finally
             {
@@ -402,34 +300,6 @@ namespace TradeOptimizer
                     actions.Add(new TradeAction(slaughter.EqElement, slaughter.Amount, TradeActionType.Slaughter));
                 }
 
-                // Accumulate report for final printing
-                if (report.SoldItems.Count > 0 || report.BoughtItems.Count > 0)
-                {
-                    if (_currentTradeSettlement != settlement && Hero.MainHero != null)
-                    {
-                        _currentTradeSettlement = settlement;
-                        _initialGold = Hero.MainHero.Gold;
-                        _accumulatedReport = new TradeTransactionReport();
-                    }
-
-                    if (_accumulatedReport != null)
-                    {
-                        foreach (var s in report.SoldItems)
-                        {
-                            int existingIdx = _accumulatedReport.SoldItems.FindIndex(x => x.Name == s.Name);
-                            if (existingIdx >= 0) { _accumulatedReport.SoldItems[existingIdx].Count += s.Count; _accumulatedReport.SoldItems[existingIdx].Gold += s.Gold; }
-                            else _accumulatedReport.SoldItems.Add(new TradedItemInfo { Name = s.Name, Count = s.Count, Gold = s.Gold, MarketPrice = s.MarketPrice });
-                        }
-                        foreach (var b in report.BoughtItems)
-                        {
-                            int existingIdx = _accumulatedReport.BoughtItems.FindIndex(x => x.Name == b.Name);
-                            if (existingIdx >= 0) { _accumulatedReport.BoughtItems[existingIdx].Count += b.Count; _accumulatedReport.BoughtItems[existingIdx].Gold += b.Gold; }
-                            else _accumulatedReport.BoughtItems.Add(new TradedItemInfo { Name = b.Name, Count = b.Count, Gold = b.Gold, MarketPrice = b.MarketPrice });
-                        }
-                        foreach (var sl in report.ArbitrageSlaughters)
-                            _accumulatedReport.ArbitrageSlaughters.Add(sl);
-                    }
-                }
             }
             finally
             {

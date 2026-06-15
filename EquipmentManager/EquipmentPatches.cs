@@ -1,8 +1,6 @@
 using System;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
-using TaleWorlds.CampaignSystem.Settlements;
-using TaleWorlds.CampaignSystem.Party;
 
 namespace EquipmentManager
 {
@@ -36,26 +34,5 @@ namespace EquipmentManager
         }
     }
 
-    [HarmonyPatch(typeof(SettlementAutomationCore.SubModule), "ExecuteBackgroundAutomation")]
-    public static class ExecuteBackgroundAutomationPatch
-    {
-        [HarmonyPostfix]
-        public static void Postfix(Settlement settlement)
-        {
-            try
-            {
-                if (MobileParty.MainParty != null)
-                {
-                    string settlementName = settlement != null ? settlement.Name.ToString() : "Unknown";
-                    SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"[Post-Transaction] Distributing newly bought gear to player & companions in {settlementName}.");
-                    EquipmentEngine.AutoEquipHeadless(MobileParty.MainParty, "Post-Transaction");
-                }
-            }
-            catch (Exception ex)
-            {
-                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error in ExecuteBackgroundAutomation Postfix: {ex}");
-            }
-        }
-    }
 }
 

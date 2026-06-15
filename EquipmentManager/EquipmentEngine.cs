@@ -52,6 +52,86 @@ namespace EquipmentManager
             }
         }
 
+        private abstract class EquipmentTransferContext
+        {
+            public abstract List<AvailableEquipment> BuildAvailableEquipmentPool();
+            public abstract void EquipItem(AvailableEquipment available, EquipTarget target, EquipmentIndex slot);
+        }
+
+        private sealed class InventoryLogicEquipmentTransferContext : EquipmentTransferContext
+        {
+            private readonly InventoryLogic _inventoryLogic;
+
+            public InventoryLogicEquipmentTransferContext(InventoryLogic inventoryLogic)
+            {
+                _inventoryLogic = inventoryLogic;
+            }
+
+            public override List<AvailableEquipment> BuildAvailableEquipmentPool()
+            {
+                var availableItems = new List<AvailableEquipment>();
+                var playerItems = _inventoryLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+                foreach (var element in playerItems)
+                {
+                    if (element.IsEmpty || element.Amount <= 0 || element.EquipmentElement.Item == null) continue;
+                    availableItems.Add(new AvailableEquipment(element.EquipmentElement, element.Amount));
+                }
+
+                return availableItems;
+            }
+
+            public override void EquipItem(AvailableEquipment available, EquipTarget target, EquipmentIndex slot)
+            {
+                var equipElement = new ItemRosterElement(available.EquipmentElement, 1);
+                var command = TransferCommand.Transfer(
+                    1,
+                    InventoryLogic.InventorySide.PlayerInventory,
+                    target.Side,
+                    equipElement,
+                    EquipmentIndex.None,
+                    slot,
+                    target.Hero.CharacterObject);
+                _inventoryLogic.AddTransferCommand(command);
+            }
+        }
+
+        private sealed class DirectPartyEquipmentTransferContext : EquipmentTransferContext
+        {
+            private readonly MobileParty _party;
+
+            public DirectPartyEquipmentTransferContext(MobileParty party)
+            {
+                _party = party;
+            }
+
+            public override List<AvailableEquipment> BuildAvailableEquipmentPool()
+            {
+                var availableItems = new List<AvailableEquipment>();
+                foreach (var element in _party.ItemRoster)
+                {
+                    if (element.IsEmpty || element.Amount <= 0 || element.EquipmentElement.Item == null) continue;
+                    availableItems.Add(new AvailableEquipment(element.EquipmentElement, element.Amount));
+                }
+
+                return availableItems;
+            }
+
+            public override void EquipItem(AvailableEquipment available, EquipTarget target, EquipmentIndex slot)
+            {
+                var equipment = GetEquipmentForSide(target.Hero, target.Side);
+                var currentEquipment = equipment[slot];
+
+                _party.ItemRoster.AddToCounts(available.EquipmentElement, -1);
+
+                if (!currentEquipment.IsEmpty && currentEquipment.Item != null)
+                {
+                    _party.ItemRoster.AddToCounts(currentEquipment, 1);
+                }
+
+                equipment.AddEquipmentToSlotWithoutAgent(slot, available.EquipmentElement);
+            }
+        }
+
         private static readonly FieldInfo? InventoryLogicField = typeof(SPInventoryVM)
             .GetField("_inventoryLogic", BindingFlags.Instance | BindingFlags.NonPublic);
 
@@ -115,7 +195,7 @@ namespace EquipmentManager
             var notifications = new List<string>();
 
             // 2. Auto-Equip Phase
-            equippedCount = EvaluateAndEquip(inventoryLogic, heroesToProcess, settings, notifications);
+            equippedCount = EvaluateAndEquip(new InventoryLogicEquipmentTransferContext(inventoryLogic), heroesToProcess, settings, notifications);
 
             // 3. Display drawback notifications
             foreach (var note in notifications)
@@ -316,50 +396,6 @@ namespace EquipmentManager
             }
         }
 
-        public static InventoryLogic? CreateHeadlessInventoryLogic(MobileParty party)
-        {
-            if (party == null || Hero.MainHero == null) return null;
-            try
-            {
-                var logic = new InventoryLogic(party, Hero.MainHero.CharacterObject, null);
-
-                var initMethod = typeof(InventoryLogic).GetMethods()
-                    .FirstOrDefault(m => m.Name == "Initialize" && m.GetParameters().Length == 13);
-
-                if (initMethod == null) return null;
-
-                var categoryTypeEnum = typeof(InventoryLogic).Assembly.GetType("Helpers.InventoryScreenHelper+InventoryCategoryType");
-                var modeEnum = typeof(InventoryLogic).Assembly.GetType("Helpers.InventoryScreenHelper+InventoryMode");
-                if (categoryTypeEnum == null || modeEnum == null) return null;
-
-                var categoryTypeAll = Enum.Parse(categoryTypeEnum, "All");
-                var modeDefault = Enum.Parse(modeEnum, "Default");
-
-                initMethod.Invoke(logic, new object[] {
-                    null!, // leftItemRoster
-                    party.ItemRoster,
-                    party.MemberRoster,
-                    false, // isTrading
-                    false, // isSpecialActionsPermitted
-                    Hero.MainHero.CharacterObject,
-                    categoryTypeAll,
-                    null!, // marketData
-                    true, // useBasePrices
-                    modeDefault,
-                    new TaleWorlds.Localization.TextObject("Inventory"), // title
-                    null!, // leftMemberRoster
-                    null! // otherSideCapacityData
-                });
-
-                return logic;
-            }
-            catch (Exception ex)
-            {
-                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error creating headless InventoryLogic: {ex}");
-                return null;
-            }
-        }
-
         public static void AutoEquipHeadless(MobileParty party, string context = "Post-Battle")
         {
             if (party == null || Hero.MainHero == null) return;
@@ -383,15 +419,7 @@ namespace EquipmentManager
 
                 SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"=== Headless {context} Equipment Optimization started for: {string.Join(", ", heroesToProcess.Select(h => h.Name.ToString()))} ===");
 
-                var inventoryLogic = CreateHeadlessInventoryLogic(party);
-                if (inventoryLogic == null) return;
-
-                int totalEquipped = EvaluateAndEquip(inventoryLogic, heroesToProcess, settings, null);
-
-                if (totalEquipped > 0 && inventoryLogic.IsThereAnyChanges())
-                {
-                    inventoryLogic.DoneLogic();
-                }
+                int totalEquipped = EvaluateAndEquip(new DirectPartyEquipmentTransferContext(party), heroesToProcess, settings, null);
 
                 SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"=== Headless {context} Equipment Optimization completed (Total equipped: {totalEquipped}) ===");
             }
@@ -402,12 +430,12 @@ namespace EquipmentManager
         }
 
 
-        private static int EvaluateAndEquip(InventoryLogic inventoryLogic, List<Hero> heroesToProcess, Settings settings, List<string>? notifications)
+        private static int EvaluateAndEquip(EquipmentTransferContext transferContext, List<Hero> heroesToProcess, Settings settings, List<string>? notifications)
         {
             int equippedCount = 0;
             var armorSlots = new EquipmentIndex[] { EquipmentIndex.Head, EquipmentIndex.Body, EquipmentIndex.Leg, EquipmentIndex.Gloves, EquipmentIndex.Cape };
             var weaponSlots = new EquipmentIndex[] { EquipmentIndex.Weapon0, EquipmentIndex.Weapon1, EquipmentIndex.Weapon2, EquipmentIndex.Weapon3 };
-            var availableItems = BuildAvailableEquipmentPool(inventoryLogic);
+            var availableItems = transferContext.BuildAvailableEquipmentPool();
             var cascadeQueue = new Queue<AvailableEquipment>();
             var virtualEquipment = new Dictionary<(Hero Hero, InventoryLogic.InventorySide Side, EquipmentIndex Slot), EquipmentElement>();
 
@@ -528,7 +556,7 @@ namespace EquipmentManager
                         if (bestStrictUpgrade != null)
                         {
                             var upgradeElement = bestStrictUpgrade.EquipmentElement;
-                            EquipAvailableItem(inventoryLogic, bestStrictUpgrade, target, slot, currentArmor, false, availableItems, cascadeQueue, virtualEquipment);
+                            EquipAvailableItem(transferContext, bestStrictUpgrade, target, slot, currentArmor, false, availableItems, cascadeQueue, virtualEquipment);
                             equippedCount++;
 
                             string slotName = GetSlotName(slot);
@@ -605,7 +633,7 @@ namespace EquipmentManager
                         if (bestStrictUpgrade != null)
                         {
                             var upgradeElement = bestStrictUpgrade.EquipmentElement;
-                            EquipAvailableItem(inventoryLogic, bestStrictUpgrade, target, slot, currentWeapon, true, availableItems, cascadeQueue, virtualEquipment);
+                            EquipAvailableItem(transferContext, bestStrictUpgrade, target, slot, currentWeapon, true, availableItems, cascadeQueue, virtualEquipment);
                             equippedCount++;
 
                             string setName = GetSetName(targetSide);
@@ -628,31 +656,26 @@ namespace EquipmentManager
                 }
             }
 
+            int maxCascadeIterations = EquipmentDecisionMath.GetCascadeIterationLimit(slotTargets.Count, cascadeQueue.Count);
+            int cascadeIterations = 0;
             while (cascadeQueue.Count > 0)
             {
+                if (++cascadeIterations > maxCascadeIterations)
+                {
+                    SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Aborted equipment cascade after {cascadeIterations - 1} attempts to prevent an auto-equip loop. Pending displaced items: {cascadeQueue.Count}.");
+                    break;
+                }
+
                 var freedItem = cascadeQueue.Dequeue();
                 if (freedItem.Quantity <= 0) continue;
 
-                if (TryFitFreedItem(inventoryLogic, freedItem, slotTargets, availableItems, cascadeQueue, virtualEquipment))
+                if (TryFitFreedItem(transferContext, freedItem, slotTargets, availableItems, cascadeQueue, virtualEquipment))
                 {
                     equippedCount++;
                 }
             }
 
             return equippedCount;
-        }
-
-        private static List<AvailableEquipment> BuildAvailableEquipmentPool(InventoryLogic inventoryLogic)
-        {
-            var availableItems = new List<AvailableEquipment>();
-            var playerItems = inventoryLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-            foreach (var element in playerItems)
-            {
-                if (element.IsEmpty || element.Amount <= 0 || element.EquipmentElement.Item == null) continue;
-                availableItems.Add(new AvailableEquipment(element.EquipmentElement, element.Amount));
-            }
-
-            return availableItems;
         }
 
         private static List<EquipSlotTarget> BuildSlotTargets(
@@ -727,7 +750,7 @@ namespace EquipmentManager
         }
 
         private static void EquipAvailableItem(
-            InventoryLogic inventoryLogic,
+            EquipmentTransferContext transferContext,
             AvailableEquipment available,
             EquipTarget target,
             EquipmentIndex slot,
@@ -737,16 +760,7 @@ namespace EquipmentManager
             Queue<AvailableEquipment> cascadeQueue,
             Dictionary<(Hero Hero, InventoryLogic.InventorySide Side, EquipmentIndex Slot), EquipmentElement> virtualEquipment)
         {
-            var equipElement = new ItemRosterElement(available.EquipmentElement, 1);
-            var command = TransferCommand.Transfer(
-                1,
-                InventoryLogic.InventorySide.PlayerInventory,
-                target.Side,
-                equipElement,
-                EquipmentIndex.None,
-                slot,
-                target.Hero.CharacterObject);
-            inventoryLogic.AddTransferCommand(command);
+            transferContext.EquipItem(available, target, slot);
 
             available.Quantity--;
             SetCurrentEquipment(virtualEquipment, target, slot, available.EquipmentElement);
@@ -761,7 +775,7 @@ namespace EquipmentManager
         }
 
         private static bool TryFitFreedItem(
-            InventoryLogic inventoryLogic,
+            EquipmentTransferContext transferContext,
             AvailableEquipment freedItem,
             List<EquipSlotTarget> slotTargets,
             List<AvailableEquipment> availableItems,
@@ -782,7 +796,7 @@ namespace EquipmentManager
                     if (!CanEquipWeaponCandidate(candidate, currentEquipment, target, slotTarget.Slot)) continue;
                     if (!StrictlyBeatsWeapon(candidate, currentEquipment)) continue;
 
-                    EquipAvailableItem(inventoryLogic, freedItem, target, slotTarget.Slot, currentEquipment, true, availableItems, cascadeQueue, virtualEquipment);
+                    EquipAvailableItem(transferContext, freedItem, target, slotTarget.Slot, currentEquipment, true, availableItems, cascadeQueue, virtualEquipment);
                     SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Cascade equipped {item.Name} on {target.Hero.Name} in Weapon slot {slotTarget.Slot} ({GetSetName(target.Side)} set).");
                     return true;
                 }
@@ -790,7 +804,7 @@ namespace EquipmentManager
                 if (!CanEquipArmorCandidate(candidate, target, slotTarget.Slot)) continue;
                 if (!StrictlyBeatsArmor(candidate, currentEquipment, target.PrioritizeStealth)) continue;
 
-                EquipAvailableItem(inventoryLogic, freedItem, target, slotTarget.Slot, currentEquipment, false, availableItems, cascadeQueue, virtualEquipment);
+                EquipAvailableItem(transferContext, freedItem, target, slotTarget.Slot, currentEquipment, false, availableItems, cascadeQueue, virtualEquipment);
                 SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Cascade equipped {item.Name} on {target.Hero.Name} in {GetSlotName(slotTarget.Slot)} slot ({GetSetName(target.Side)} set).");
                 return true;
             }

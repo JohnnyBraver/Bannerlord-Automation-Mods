@@ -72,22 +72,5 @@ namespace TradeOptimizer
             return averagePrice > 0f && currentPrice <= averagePrice * buyPriceThresholdFactor;
         }
 
-        public static int GetMinimumRequiredBalance(int minimumGoldReserve, int dailyWage, int minDaysExpensesToKeep)
-        {
-            return System.Math.Max(minimumGoldReserve, dailyWage * minDaysExpensesToKeep);
-        }
-
-        public static bool CanSpendWithoutBreachingReserve(
-            int currentBalance,
-            int purchasePrice,
-            int minimumGoldReserve,
-            int dailyWage,
-            int minDaysExpensesToKeep)
-        {
-            return currentBalance - purchasePrice >= GetMinimumRequiredBalance(
-                minimumGoldReserve,
-                dailyWage,
-                minDaysExpensesToKeep);
-        }
     }
 }

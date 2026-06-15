@@ -10,6 +10,7 @@ using SettlementAutomationCore;
 using TaleWorlds.CampaignSystem.MapEvents;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 
 namespace EquipmentManager
@@ -79,10 +80,14 @@ namespace EquipmentManager
             base.OnGameStart(game, gameStarter);
             if (game.GameType is Campaign)
             {
+                UnregisterAutomationHooks();
+
                 _provider = new EquipmentManagerProvider();
                 AutomationRegistry.RegisterPreparationProvider(_provider);
                 AutomationRegistry.RegisterPreSellProvider(_provider);
                 AutomationRegistry.RegisterRequestProvider(_provider);
+                SettlementAutomationCore.SubModule.OnAutomationCycleCompleted -= OnAutomationCycleCompleted;
+                SettlementAutomationCore.SubModule.OnAutomationCycleCompleted += OnAutomationCycleCompleted;
 
                 var campaignStarter = gameStarter as CampaignGameStarter;
                 if (campaignStarter != null)
@@ -95,12 +100,36 @@ namespace EquipmentManager
         public override void OnGameEnd(TaleWorlds.Core.Game game)
         {
             base.OnGameEnd(game);
+            UnregisterAutomationHooks();
+        }
+
+        private static void UnregisterAutomationHooks()
+        {
             if (_provider != null)
             {
                 AutomationRegistry.UnregisterPreparationProvider(_provider);
                 AutomationRegistry.UnregisterPreSellProvider(_provider);
                 AutomationRegistry.UnregisterRequestProvider(_provider);
                 _provider = null;
+            }
+
+            SettlementAutomationCore.SubModule.OnAutomationCycleCompleted -= OnAutomationCycleCompleted;
+        }
+
+        private static void OnAutomationCycleCompleted(Settlement settlement)
+        {
+            try
+            {
+                var party = MobileParty.MainParty;
+                if (party == null) return;
+
+                string settlementName = settlement != null ? settlement.Name.ToString() : "Unknown";
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"[Post-Transaction] Distributing newly bought gear to player & companions in {settlementName}.");
+                EquipmentEngine.AutoEquipHeadless(party, "Post-Transaction");
+            }
+            catch (Exception ex)
+            {
+                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error in OnAutomationCycleCompleted AutoEquipHeadless: {ex}");
             }
         }
     }

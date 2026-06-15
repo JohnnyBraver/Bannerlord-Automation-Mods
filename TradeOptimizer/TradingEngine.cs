@@ -272,7 +272,7 @@ namespace TradeOptimizer
                         }
 
                         int price = currentPrice;
-                        if (logic != null && Hero.MainHero != null)
+                        if (!settings.SimulationMode && logic != null && Hero.MainHero != null)
                         {
                             var command = TransferCommand.Transfer(
                                 1,
@@ -285,7 +285,7 @@ namespace TradeOptimizer
                             );
                             logic.AddTransferCommand(command);
                         }
-                        else
+                        else if (!settings.SimulationMode)
                         {
                             item.ExecuteSellSingle();
                         }
@@ -483,7 +483,7 @@ namespace TradeOptimizer
                         price = bestItem.ItemCost;
                     }
 
-                    if (logic != null && Hero.MainHero != null)
+                    if (!settings.SimulationMode && logic != null && Hero.MainHero != null)
                     {
                         var command = TransferCommand.Transfer(
                             1,
@@ -496,7 +496,7 @@ namespace TradeOptimizer
                         );
                         logic.AddTransferCommand(command);
                     }
-                    else
+                    else if (!settings.SimulationMode)
                     {
                         bestItem.ExecuteBuySingle();
                     }

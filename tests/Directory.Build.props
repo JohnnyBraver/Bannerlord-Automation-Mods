@@ -2,14 +2,16 @@
   <PropertyGroup>
     <BannerlordGameBin>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client</BannerlordGameBin>
     <BannerlordWorkshopRoot>E:\SteamLibrary\steamapps\workshop\content\261550</BannerlordWorkshopRoot>
+    <UIExtenderExPath Condition="'$(UIExtenderExPath)' == ''">$(BannerlordWorkshopRoot)\2859222409\bin\Win64_Shipping_Client\Bannerlord.UIExtenderEx.dll</UIExtenderExPath>
+    <MCMv5Path Condition="'$(MCMv5Path)' == ''">$(BannerlordWorkshopRoot)\2859238197\bin\Win64_Shipping_Client\MCMv5.dll</MCMv5Path>
   </PropertyGroup>
 
   <ItemGroup>
     <Reference Include="Bannerlord.UIExtenderEx">
-      <HintPath>$(BannerlordWorkshopRoot)\2859222409\bin\Win64_Shipping_Client\Bannerlord.UIExtenderEx.dll</HintPath>
+      <HintPath>$(UIExtenderExPath)</HintPath>
     </Reference>
     <Reference Include="MCMv5">
-      <HintPath>$(BannerlordWorkshopRoot)\2859238197\bin\Win64_Shipping_Client\MCMv5.dll</HintPath>
+      <HintPath>$(MCMv5Path)</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>$(BannerlordGameBin)\Newtonsoft.Json.dll</HintPath>
@@ -44,4 +46,3 @@
     <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
 </Project>
-

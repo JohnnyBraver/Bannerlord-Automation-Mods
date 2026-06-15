@@ -112,7 +112,7 @@ namespace TradeOptimizer
         public bool SimulationMode { get; set; } = false;
 
         [SettingPropertyInteger("Initial Economy Settling Days", 0, 200, RequireRestart = false,
-            HintText = "Number of campaign days to wait on a new game/save before auto-trading starts to let the initial economy stabilize (e.g., 50 days).", Order = 3)]
+            HintText = "Number of campaign days to wait on a new game/save before profit auto-trading starts. This only pauses TradeOptimizer free trade, not Core item requests. Default: 50.", Order = 3)]
         [SettingPropertyGroup("General", GroupOrder = 3)]
         public int InitialSettlementDaysDelay { get; set; } = 50;
 
@@ -171,16 +171,6 @@ namespace TradeOptimizer
         [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public Dropdown<TradingModeOption> MountsTradingModeDropdown { get; set; } =
             new Dropdown<TradingModeOption>(TradingModeOptions, 0); // Default: None (index 0)
-
-        [SettingPropertyInteger("Minimum Gold Reserve", 0, 50000, RequireRestart = false,
-            HintText = "Never let your gold balance drop below this amount when buying. Default: 1000 denars.", Order = 1)]
-        [SettingPropertyGroup("Budget Protection", GroupOrder = 0)]
-        public int MinimumGoldReserve { get; set; } = 1000;
-
-        [SettingPropertyInteger("Min Days of Expenses to Keep", 0, 100, RequireRestart = false,
-            HintText = "Ensure you keep enough gold to cover this many days of party wages/expenses (excluding daily income).", Order = 2)]
-        [SettingPropertyGroup("Budget Protection", GroupOrder = 0)]
-        public int MinDaysExpensesToKeep { get; set; } = 10;
 
         // Helper properties for cleaner logic access
         public PricingReferenceMode PricingReference => PricingReferenceDropdown.SelectedValue.Value;

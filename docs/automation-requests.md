@@ -118,4 +118,6 @@ Detailed request gathering, skip reasons, price-cap decisions, cargo failures, r
 - EquipmentManager settings control armor upgrade selection, explicit armor reserves, and EquipmentManager request spend modes.
 - TradeOptimizer settings control profit-focused buy/sell behavior.
 
+TradeOptimizer does not expose gold reserve or carry-capacity settings. Core supplies those limits through `TradeContext` before any optimizer proposal is executed.
+
 TradeOptimizer may trade food or mounts as commodities when its category trading policies allow it. PartyManager owns party restocking needs for food and riding mounts.

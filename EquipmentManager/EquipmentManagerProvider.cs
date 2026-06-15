@@ -66,7 +66,7 @@ namespace EquipmentManager
                 {
                     targets.Add(Hero.MainHero);
                 }
-                if (settings.BuyEquipmentTargetSetting == BuyEquipmentTarget.PlayerAndCompanions && party != null)
+                if (settings.AutoEquipCompanions && party != null)
                 {
                     foreach (var member in party.MemberRoster.GetTroopRoster())
                     {
@@ -195,6 +195,11 @@ namespace EquipmentManager
                         equipment = hero.StealthEquipment;
                         prioritizeStealth = true;
                         side = InventoryLogic.InventorySide.StealthEquipment;
+                    }
+
+                    if (prioritizeStealth && !canBuyStealth)
+                    {
+                        continue;
                     }
 
                     foreach (var slot in armorSlots)

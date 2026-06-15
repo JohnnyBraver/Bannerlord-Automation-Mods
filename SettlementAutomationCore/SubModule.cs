@@ -148,6 +148,7 @@ namespace SettlementAutomationCore
                         {
                             if (!order.IsBuy && order.EquipmentElement.Item != null) // Pre-sell only supports selling!
                             {
+                                int estimatedGold = logic1.GetItemPrice(order.EquipmentElement, false) * order.Amount;
                                 var command = TransferCommand.Transfer(
                                     order.Amount,
                                     InventoryLogic.InventorySide.PlayerInventory,
@@ -160,7 +161,7 @@ namespace SettlementAutomationCore
                                 logic1.AddTransferCommand(command);
                                 executedAny = true;
                                 preSoldList.Add($"{order.Amount}x {order.EquipmentElement.Item.Name}");
-                                marketReport.AddSold(order.EquipmentElement, order.Amount);
+                                marketReport.AddSold(order.EquipmentElement, order.Amount, estimatedGold);
                             }
                         }
                         if (executedAny && logic1.IsThereAnyChanges())
@@ -639,14 +640,14 @@ namespace SettlementAutomationCore
 
             public bool HasActivity => _summary.HasActivity;
 
-            public void AddBought(EquipmentElement equipmentElement, int quantity)
+            public void AddBought(EquipmentElement equipmentElement, int quantity, int gold)
             {
-                _summary.AddBought(GetItemName(equipmentElement), quantity);
+                _summary.AddBought(GetItemName(equipmentElement), quantity, gold);
             }
 
-            public void AddSold(EquipmentElement equipmentElement, int quantity)
+            public void AddSold(EquipmentElement equipmentElement, int quantity, int gold)
             {
-                _summary.AddSold(GetItemName(equipmentElement), quantity);
+                _summary.AddSold(GetItemName(equipmentElement), quantity, gold);
             }
 
             public void AddSlaughtered(EquipmentElement equipmentElement, int quantity)
@@ -659,9 +660,9 @@ namespace SettlementAutomationCore
                 _summary.AddGoldDelta(goldDelta);
             }
 
-            public string BuildInGameSummary(Settlement settlement)
+            public IReadOnlyList<string> BuildInGameLines(Settlement settlement, string? cargoStatus)
             {
-                return _summary.BuildInGameSummary(settlement.Name.ToString());
+                return _summary.BuildInGameLines(settlement.Name.ToString(), cargoStatus);
             }
 
             public string BuildLogSummary(Settlement settlement)
@@ -983,7 +984,7 @@ namespace SettlementAutomationCore
 
             purchasedCount = toBuy;
             state.FulfilledItemParts.Add($"{toBuy}x {item.Name}");
-            state.MarketReport.AddBought(candidateElement.EquipmentElement, toBuy);
+            state.MarketReport.AddBought(candidateElement.EquipmentElement, toBuy, toBuy * price);
             Helpers.Logger.WriteLog("SettlementAutomationCore", $"Request purchased at {state.Settlement.Name}: {DescribeRequest(request)} -> {toBuy}x {item.Name} ({toBuy * price}d, {price}d each)");
             return true;
         }
@@ -1020,9 +1021,22 @@ namespace SettlementAutomationCore
         {
             if (!marketReport.HasActivity) return;
 
-            string inGameSummary = marketReport.BuildInGameSummary(settlement);
-            InformationManager.DisplayMessage(new InformationMessage(inGameSummary));
+            foreach (var line in marketReport.BuildInGameLines(settlement, GetCargoStatus()))
+            {
+                InformationManager.DisplayMessage(new InformationMessage(line));
+            }
             Helpers.Logger.WriteLog("SettlementAutomationCore", marketReport.BuildLogSummary(settlement));
+        }
+
+        private static string? GetCargoStatus()
+        {
+            var party = MobileParty.MainParty;
+            if (party == null || party.InventoryCapacity <= 0f) return null;
+
+            float currentWeight = Helpers.InventoryHelper.GetRosterWeight(party.ItemRoster);
+            float capacity = party.InventoryCapacity;
+            int percent = (int)Math.Round((currentWeight / capacity) * 100);
+            return $"{(int)currentWeight} / {(int)capacity} capacity ({percent}%)";
         }
 
         private static void ExecuteTradeProposal(TradeProposal proposal, TradeContext context, InventoryLogic logic, AutomationMarketReport marketReport)
@@ -1059,7 +1073,7 @@ namespace SettlementAutomationCore
                     logic.AddTransferCommand(command);
 
                     availableGold += toSell * price;
-                    marketReport.AddSold(action.EquipmentElement, toSell);
+                    marketReport.AddSold(action.EquipmentElement, toSell, toSell * price);
                     if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
                     {
                         freeCargo += toSell * action.EquipmentElement.Item.Weight;
@@ -1134,7 +1148,7 @@ namespace SettlementAutomationCore
                     logic.AddTransferCommand(command);
 
                     availableGold -= toBuy * price;
-                    marketReport.AddBought(action.EquipmentElement, toBuy);
+                    marketReport.AddBought(action.EquipmentElement, toBuy, toBuy * price);
                     if (isCargo)
                     {
                         freeCargo -= toBuy * action.EquipmentElement.Item.Weight;

@@ -90,20 +90,24 @@ namespace SettlementAutomationCore.Tests
         public void MarketActivitySummary_AggregatesAndLimitsInGameSummary()
         {
             var summary = new MarketActivitySummary();
-            summary.AddBought("Grain", 3);
-            summary.AddBought("Grain", 2);
-            summary.AddSold("Sword", 1);
+            summary.AddBought("Grain", 3, 60);
+            summary.AddBought("Grain", 2, 40);
+            summary.AddSold("Sword", 1, 250);
             summary.AddSlaughtered("Hog", 4);
             summary.AddGoldDelta(-125);
 
-            string inGame = summary.BuildInGameSummary("Sargot");
+            var inGame = summary.BuildInGameLines("Sargot", "123 / 456 capacity (27%)");
             string log = summary.BuildLogSummary("Sargot");
 
-            Assert.Contains("bought 5x Grain", inGame);
-            Assert.Contains("sold 1x Sword", inGame);
-            Assert.Contains("slaughtered 4x Hog", inGame);
-            Assert.Contains("Net -125d", inGame);
+            Assert.Contains(inGame, line => line.Contains("Purchases: -100d"));
+            Assert.Contains(inGame, line => line.Contains("Sales: +250d"));
+            Assert.Contains(inGame, line => line.Contains("Bought: 5x Grain (-100d)"));
+            Assert.Contains(inGame, line => line.Contains("Sold: 1x Sword (+250d)"));
+            Assert.Contains(inGame, line => line.Contains("Slaughtered: 4x Hog"));
+            Assert.Contains(inGame, line => line.Contains("Cargo: 123 / 456 capacity (27%)"));
             Assert.Contains("Gold change: -125d", log);
+            Assert.Contains("Bought: 5x Grain (-100d)", log);
+            Assert.Contains("Sold: 1x Sword (+250d)", log);
         }
 
         private static AutomationRequest Request(string id, RequestProfile profile, int priority)

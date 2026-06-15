@@ -199,8 +199,8 @@ namespace EquipmentManager
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public bool BuyTopArmor { get; set; } = false;
 
-        [SettingPropertyInteger("Min Gold to Buy Top Armor", 100000, 5000000, "0", RequireRestart = false,
-            HintText = "Only buy premium armor upgrades if your current gold balance is at or above this amount. Default: 1M.", Order = 4)]
+        [SettingPropertyInteger("Top Armor Gold Reserve", 100000, 5000000, "0", RequireRestart = false,
+            HintText = "Only buy premium armor if the purchase leaves at least this much gold. Requests are only submitted once current gold is at or above this reserve. Default: 1M.", Order = 4)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public int BuyTopArmorGoldThreshold { get; set; } = 1000000;
 
@@ -210,12 +210,12 @@ namespace EquipmentManager
         public int MinTierToBuyTopArmor { get; set; } = 5;
 
         [SettingPropertyDropdown("Buy Upgrades For", RequireRestart = false,
-            HintText = "Player Only: buy upgrades only for Main Hero (companions get hand-me-downs). Player & Companions: buy direct upgrades for all.", Order = 3)]
+            HintText = "Player Only: buy direct upgrades only for Main Hero (companions can still get hand-me-downs). Player & Companions: buy direct upgrades for all.", Order = 3)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public Dropdown<BuyEquipmentTargetOption> BuyEquipmentTargetDropdown { get; set; } =
             new Dropdown<BuyEquipmentTargetOption>(BuyEquipmentTargetOptions, 0); // Default: Player Only (index 0)
 
-        [SettingPropertyInteger("Minimum Gold Reserve", 1000, 100000, "0", RequireRestart = false,
+        [SettingPropertyInteger("Stealth Gear Gold Reserve", 1000, 100000, "0", RequireRestart = false,
             HintText = "Never let your gold drop below this amount when buying stealth gear. Default: 10,000 denars.", Order = 6)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public int MinimumGoldReserve { get; set; } = 10000;

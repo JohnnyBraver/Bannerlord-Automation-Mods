@@ -52,13 +52,5 @@ namespace TradeOptimizer.Tests
             Assert.Equal(expected, TradeCandidatePolicy.PassesBuyPriceThreshold(price, average, threshold));
         }
 
-        [Fact]
-        public void CanSpendWithoutBreachingReserve_UsesGreaterOfGoldReserveAndWageReserve()
-        {
-            Assert.Equal(2000, TradeCandidatePolicy.GetMinimumRequiredBalance(1000, 200, 10));
-            Assert.True(TradeCandidatePolicy.CanSpendWithoutBreachingReserve(3000, 1000, 1000, 200, 10));
-            Assert.False(TradeCandidatePolicy.CanSpendWithoutBreachingReserve(2999, 1000, 1000, 200, 10));
-        }
     }
 }
-

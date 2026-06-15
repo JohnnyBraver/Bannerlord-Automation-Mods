@@ -1,3 +1,4 @@
+using System;
 using TaleWorlds.Core;
 using TaleWorlds.CampaignSystem.Inventory;
 
@@ -9,50 +10,17 @@ namespace EquipmentManager
         {
             if (current.IsEmpty) return true;
 
-            int headC = candidate.GetModifiedHeadArmor();
-            int bodyC = candidate.GetModifiedBodyArmor();
-            int legC = candidate.GetModifiedLegArmor();
-            int armC = candidate.GetModifiedArmArmor();
-
-            int headE = current.GetModifiedHeadArmor();
-            int bodyE = current.GetModifiedBodyArmor();
-            int legE = current.GetModifiedLegArmor();
-            int armE = current.GetModifiedArmArmor();
-
-            bool protectionEqualOrBetter = headC >= headE && bodyC >= bodyE && legC >= legE && armC >= armE;
-            bool protectionStrictlyBetter = headC > headE || bodyC > bodyE || legC > legE || armC > armE;
-
-            if (prioritizeStealth)
-            {
-                int stealthC = candidate.Item?.ArmorComponent != null ? candidate.Item.ArmorComponent.StealthFactor : 0;
-                int stealthE = current.Item?.ArmorComponent != null ? current.Item.ArmorComponent.StealthFactor : 0;
-
-                if (stealthC > stealthE) return true;
-                if (stealthC < stealthE) return false;
-
-                return protectionEqualOrBetter && protectionStrictlyBetter;
-            }
-
-            return protectionEqualOrBetter && protectionStrictlyBetter;
+            return EquipmentDecisionMath.StrictlyBeatsArmor(
+                ToArmorStats(candidate),
+                ToArmorStats(current),
+                prioritizeStealth);
         }
 
         public static float GetArmorScore(EquipmentElement equipmentElement, bool prioritizeStealth)
         {
             if (equipmentElement.IsEmpty) return -9999f;
 
-            float armorSum = equipmentElement.GetModifiedHeadArmor() +
-                             equipmentElement.GetModifiedBodyArmor() +
-                             equipmentElement.GetModifiedLegArmor() +
-                             equipmentElement.GetModifiedArmArmor();
-            if (!prioritizeStealth)
-            {
-                return armorSum;
-            }
-
-            int stealthFactor = equipmentElement.Item?.ArmorComponent != null
-                ? equipmentElement.Item.ArmorComponent.StealthFactor
-                : 0;
-            return stealthFactor * 1000f + armorSum;
+            return EquipmentDecisionMath.GetArmorScore(ToArmorStats(equipmentElement), prioritizeStealth);
         }
 
         public static bool StrictlyBeatsWeapon(EquipmentElement candidate, EquipmentElement current)
@@ -63,56 +31,14 @@ namespace EquipmentManager
             var wE = current.Item?.PrimaryWeapon;
             if (wC == null || wE == null) return false;
 
-            if (wC.WeaponClass != wE.WeaponClass) return false;
-
-            bool speedC = wC.ThrustSpeed >= wE.ThrustSpeed && wC.SwingSpeed >= wE.SwingSpeed && wC.MissileSpeed >= wE.MissileSpeed;
-            bool damageC = wC.ThrustDamage >= wE.ThrustDamage && wC.SwingDamage >= wE.SwingDamage && wC.MissileDamage >= wE.MissileDamage;
-            bool lengthC = wC.WeaponLength >= wE.WeaponLength;
-            bool handlingC = wC.Handling >= wE.Handling;
-            bool accuracyC = wC.Accuracy >= wE.Accuracy;
-            bool durabilityC = wC.MaxDataValue >= wE.MaxDataValue;
-
-            bool statsEqualOrBetter = speedC && damageC && lengthC && handlingC && accuracyC && durabilityC;
-
-            bool speedS = wC.ThrustSpeed > wE.ThrustSpeed || wC.SwingSpeed > wE.SwingSpeed || wC.MissileSpeed > wE.MissileSpeed;
-            bool damageS = wC.ThrustDamage > wE.ThrustDamage || wC.SwingDamage > wE.SwingDamage || wC.MissileDamage > wE.MissileDamage;
-            bool lengthS = wC.WeaponLength > wE.WeaponLength;
-            bool handlingS = wC.Handling > wE.Handling;
-            bool accuracyS = wC.Accuracy > wE.Accuracy;
-            bool durabilityS = wC.MaxDataValue > wE.MaxDataValue;
-
-            bool statsStrictlyBetter = speedS || damageS || lengthS || handlingS || accuracyS || durabilityS;
-
-            if (!statsEqualOrBetter || !statsStrictlyBetter) return false;
-
-            var flagsC = wC.WeaponFlags;
-            var flagsE = wE.WeaponFlags;
-            return (flagsC & flagsE) == flagsE;
+            return EquipmentDecisionMath.StrictlyBeatsWeapon(
+                ToWeaponStats(candidate),
+                ToWeaponStats(current));
         }
 
         public static float GetWeaponScore(EquipmentElement equipmentElement)
         {
-            if (equipmentElement.IsEmpty) return -9999f;
-            var weapon = equipmentElement.Item?.PrimaryWeapon;
-            if (weapon == null) return -9999f;
-
-            if (weapon.IsMeleeWeapon)
-            {
-                return weapon.ThrustDamage * weapon.ThrustSpeed * 0.01f +
-                       weapon.SwingDamage * weapon.SwingSpeed * 0.01f +
-                       weapon.Handling * 10f +
-                       weapon.WeaponLength;
-            }
-            if (weapon.IsRangedWeapon)
-            {
-                return weapon.MissileDamage * weapon.MissileSpeed * 0.01f + weapon.Accuracy * 10f;
-            }
-            if (weapon.IsShield || weapon.IsAmmo)
-            {
-                return weapon.MaxDataValue;
-            }
-
-            return 0f;
+            return EquipmentDecisionMath.GetWeaponScore(ToWeaponStats(equipmentElement));
         }
 
         public static bool ShouldEvaluateWeaponSlot(EquipmentElement currentWeapon, InventoryLogic.InventorySide side)
@@ -141,6 +67,57 @@ namespace EquipmentManager
             return !(isStealthLoadout &&
                      currentItemType == ItemObject.ItemTypeEnum.Thrown &&
                      currentItemId == "stealth_throwing_stone");
+        }
+
+        private static ArmorStats ToArmorStats(EquipmentElement equipmentElement)
+        {
+            if (equipmentElement.IsEmpty)
+            {
+                return new ArmorStats(0, 0, 0, 0, 0);
+            }
+
+            int stealthFactor = equipmentElement.Item?.ArmorComponent != null
+                ? equipmentElement.Item.ArmorComponent.StealthFactor
+                : 0;
+
+            return new ArmorStats(
+                equipmentElement.GetModifiedHeadArmor(),
+                equipmentElement.GetModifiedBodyArmor(),
+                equipmentElement.GetModifiedLegArmor(),
+                equipmentElement.GetModifiedArmArmor(),
+                stealthFactor);
+        }
+
+        private static WeaponStats ToWeaponStats(EquipmentElement equipmentElement)
+        {
+            if (equipmentElement.IsEmpty)
+            {
+                return default;
+            }
+
+            var weapon = equipmentElement.Item?.PrimaryWeapon;
+            if (weapon == null)
+            {
+                return default;
+            }
+
+            return new WeaponStats(
+                true,
+                (int)weapon.WeaponClass,
+                weapon.ThrustSpeed,
+                weapon.SwingSpeed,
+                weapon.MissileSpeed,
+                weapon.ThrustDamage,
+                weapon.SwingDamage,
+                weapon.MissileDamage,
+                weapon.WeaponLength,
+                weapon.Handling,
+                weapon.Accuracy,
+                weapon.MaxDataValue,
+                Convert.ToInt64(weapon.WeaponFlags),
+                weapon.IsMeleeWeapon,
+                weapon.IsRangedWeapon,
+                weapon.IsShield || weapon.IsAmmo);
         }
     }
 }

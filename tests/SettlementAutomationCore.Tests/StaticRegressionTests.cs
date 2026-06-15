@@ -33,6 +33,23 @@ namespace SettlementAutomationCore.Tests
             Assert.Empty(offenders);
         }
 
+        [Theory]
+        [InlineData("MinimumGoldReserve")]
+        [InlineData("MinDaysExpensesToKeep")]
+        [InlineData("LimitToInventoryCapacity")]
+        public void TradeOptimizerDoesNotExposeCoreBudgetOrCargoSettings(string forbiddenText)
+        {
+            string root = FindRepoRoot();
+            string tradeOptimizerRoot = Path.Combine(root, "TradeOptimizer");
+            var offenders = Directory.EnumerateFiles(tradeOptimizerRoot, "*.cs", SearchOption.AllDirectories)
+                .Where(path => !IsIgnored(path))
+                .Where(path => File.ReadAllText(path).Contains(forbiddenText))
+                .Select(path => ToRelativePath(root, path))
+                .ToList();
+
+            Assert.Empty(offenders);
+        }
+
         private static bool IsIgnored(string path)
         {
             var parts = new HashSet<string>(

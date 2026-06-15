@@ -27,7 +27,7 @@ namespace SettlementAutomationCore
         public bool LimitToInventoryCapacity { get; set; } = true;
 
         [SettingPropertyFloatingInteger("Routine Request Price Limit", 0.5f, 5.0f, "#0.00", RequireRestart = false,
-            HintText = "Maximum price/value ratio for routine requests. Critical and essential requests ignore this.", Order = 2)]
+            HintText = "Maximum price/value ratio for routine requests. Critical, essential, and luxury requests ignore this.", Order = 2)]
         [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public float RoutinePriceLimitMultiplier { get; set; } = 1.5f;
 
