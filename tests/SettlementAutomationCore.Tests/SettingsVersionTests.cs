@@ -24,6 +24,21 @@ namespace SettlementAutomationCore.Tests
 
             Assert.True(coreSettings.LimitToInventoryCapacity);
         }
+
+        [Fact]
+        public void CoreMarketReporting_DefaultsToFull()
+        {
+            var coreSettings = new SettlementAutomationCore.Settings();
+
+            Assert.Equal(SettlementAutomationCore.CoreReportingMode.Full, coreSettings.CoreReportingModeSetting);
+        }
+
+        [Fact]
+        public void CoreRejectedOrderDetails_DefaultsOff()
+        {
+            var coreSettings = new SettlementAutomationCore.Settings();
+
+            Assert.False(coreSettings.LogRejectedOrderDetails);
+        }
     }
 }
-

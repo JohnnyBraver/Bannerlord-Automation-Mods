@@ -123,13 +123,16 @@ namespace SettlementAutomationCore
                 // Step 2: Pre-Sell Phase (Revenue Generation)
                 // ----------------------------------------------------
                 var preSellProviders = AutomationRegistry.ActivePreSellProviders;
-                var preSellOrders = new List<TradeOrder>();
+                var preSellOrders = new List<(TradeOrder Order, string ProviderName)>();
                 foreach (var reg in preSellProviders)
                 {
                     try
                     {
                         var orders = reg.Provider.GetPreSellOrders(MobileParty.MainParty, settlement);
-                        if (orders != null) preSellOrders.AddRange(orders);
+                        if (orders != null)
+                        {
+                            preSellOrders.AddRange(orders.Select(order => (order, reg.ProviderName)));
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -144,8 +147,9 @@ namespace SettlementAutomationCore
                     {
                         bool executedAny = false;
                         var preSoldList = new List<string>();
-                        foreach (var order in preSellOrders)
+                        foreach (var preSellOrder in preSellOrders)
                         {
+                            var order = preSellOrder.Order;
                             if (!order.IsBuy && order.EquipmentElement.Item != null) // Pre-sell only supports selling!
                             {
                                 int estimatedGold = logic1.GetItemPrice(order.EquipmentElement, false) * order.Amount;
@@ -161,7 +165,7 @@ namespace SettlementAutomationCore
                                 logic1.AddTransferCommand(command);
                                 executedAny = true;
                                 preSoldList.Add($"{order.Amount}x {order.EquipmentElement.Item.Name}");
-                                marketReport.AddSold(order.EquipmentElement, order.Amount, estimatedGold);
+                                marketReport.AddSold(order.EquipmentElement, order.Amount, estimatedGold, preSellOrder.ProviderName, AutomationTransactionStage.PreSell);
                             }
                         }
                         if (executedAny && logic1.IsThereAnyChanges())
@@ -574,7 +578,7 @@ namespace SettlementAutomationCore
                             var proposal = reg.Provider.AnalyzeMarket(context);
                             if (proposal != null && proposal.Actions != null && proposal.Actions.Count > 0)
                             {
-                                ExecuteTradeProposal(proposal, context, logic8, marketReport);
+                                ExecuteTradeProposal(proposal, context, logic8, marketReport, reg.ProviderName);
                             }
                         }
                         catch (Exception ex)
@@ -636,23 +640,49 @@ namespace SettlementAutomationCore
 
         private sealed class AutomationMarketReport
         {
+            private const string CoreProviderName = "SettlementAutomationCore";
             private readonly MarketActivitySummary _summary = new MarketActivitySummary();
+            private readonly List<ProviderStageSummary> _providerSummaries = new List<ProviderStageSummary>();
 
             public bool HasActivity => _summary.HasActivity;
 
             public void AddBought(EquipmentElement equipmentElement, int quantity, int gold)
             {
-                _summary.AddBought(GetItemName(equipmentElement), quantity, gold);
+                AddBought(equipmentElement, quantity, gold, CoreProviderName, AutomationTransactionStage.FreeTrade);
+            }
+
+            public void AddBought(EquipmentElement equipmentElement, int quantity, int gold, string providerName, AutomationTransactionStage stage)
+            {
+                string itemName = GetItemName(equipmentElement);
+                var category = GetItemCategory(equipmentElement);
+                _summary.AddBought(itemName, category, quantity, gold);
+                GetProviderSummary(providerName, stage).Summary.AddBought(itemName, category, quantity, gold);
             }
 
             public void AddSold(EquipmentElement equipmentElement, int quantity, int gold)
             {
-                _summary.AddSold(GetItemName(equipmentElement), quantity, gold);
+                AddSold(equipmentElement, quantity, gold, CoreProviderName, AutomationTransactionStage.FreeTrade);
+            }
+
+            public void AddSold(EquipmentElement equipmentElement, int quantity, int gold, string providerName, AutomationTransactionStage stage)
+            {
+                string itemName = GetItemName(equipmentElement);
+                var category = GetItemCategory(equipmentElement);
+                _summary.AddSold(itemName, category, quantity, gold);
+                GetProviderSummary(providerName, stage).Summary.AddSold(itemName, category, quantity, gold);
             }
 
             public void AddSlaughtered(EquipmentElement equipmentElement, int quantity)
             {
-                _summary.AddSlaughtered(GetItemName(equipmentElement), quantity);
+                AddSlaughtered(equipmentElement, quantity, CoreProviderName, AutomationTransactionStage.FreeTrade);
+            }
+
+            public void AddSlaughtered(EquipmentElement equipmentElement, int quantity, string providerName, AutomationTransactionStage stage)
+            {
+                string itemName = GetItemName(equipmentElement);
+                var category = GetItemCategory(equipmentElement);
+                _summary.AddSlaughtered(itemName, category, quantity);
+                GetProviderSummary(providerName, stage).Summary.AddSlaughtered(itemName, category, quantity);
             }
 
             public void AddGoldDelta(int goldDelta)
@@ -665,9 +695,35 @@ namespace SettlementAutomationCore
                 return _summary.BuildInGameLines(settlement.Name.ToString(), cargoStatus);
             }
 
+            public IReadOnlyList<AutomationProviderReport> BuildProviderReports()
+            {
+                return _providerSummaries
+                    .Where(summary => summary.Summary.HasActivity)
+                    .Select(summary => new AutomationProviderReport(
+                        summary.ProviderName,
+                        summary.Stage,
+                        summary.Summary.BoughtItems,
+                        summary.Summary.SoldItems,
+                        summary.Summary.SlaughteredItems))
+                    .ToList();
+            }
+
             public string BuildLogSummary(Settlement settlement)
             {
                 return _summary.BuildLogSummary(settlement.Name.ToString());
+            }
+
+            private ProviderStageSummary GetProviderSummary(string providerName, AutomationTransactionStage stage)
+            {
+                providerName = string.IsNullOrWhiteSpace(providerName) ? CoreProviderName : providerName;
+                var summary = _providerSummaries.FirstOrDefault(item => item.ProviderName == providerName && item.Stage == stage);
+                if (summary == null)
+                {
+                    summary = new ProviderStageSummary(providerName, stage);
+                    _providerSummaries.Add(summary);
+                }
+
+                return summary;
             }
 
             private static string GetItemName(EquipmentElement equipmentElement)
@@ -675,6 +731,25 @@ namespace SettlementAutomationCore
                 return equipmentElement.Item?.Name?.ToString() ??
                        equipmentElement.Item?.StringId ??
                        "Unknown item";
+            }
+
+            private static InventoryItemCategory GetItemCategory(EquipmentElement equipmentElement)
+            {
+                return InventoryItemView.Classify(equipmentElement.Item);
+            }
+
+            private sealed class ProviderStageSummary
+            {
+                public ProviderStageSummary(string providerName, AutomationTransactionStage stage)
+                {
+                    ProviderName = providerName;
+                    Stage = stage;
+                    Summary = new MarketActivitySummary();
+                }
+
+                public string ProviderName { get; }
+                public AutomationTransactionStage Stage { get; }
+                public MarketActivitySummary Summary { get; }
             }
         }
 
@@ -728,14 +803,14 @@ namespace SettlementAutomationCore
         {
             if (request.Quantity <= 0)
             {
-                LogRequestSkip(request, state, "quantity is zero");
+                LogRequestSkip(request, state, RejectedOrderReason.InvalidQuantity, "quantity is zero");
                 return;
             }
 
             int goldReserve = GetGoldReserveForRequest(request, state.Settings);
             if (state.ProjectedGold <= goldReserve)
             {
-                LogRequestSkip(request, state, $"projected gold {state.ProjectedGold} is at or below reserve {goldReserve}");
+                LogRequestSkip(request, state, RejectedOrderReason.GoldReserveReached, $"projected gold {state.ProjectedGold} is at or below reserve {goldReserve}");
                 return;
             }
 
@@ -751,14 +826,14 @@ namespace SettlementAutomationCore
                 return;
             }
 
-            LogRequestSkip(request, state, $"unsupported quantity mode {request.QuantityMode}");
+            LogRequestSkip(request, state, RejectedOrderReason.UnsupportedQuantityMode, $"unsupported quantity mode {request.QuantityMode}");
         }
 
         private static void ExecuteMarketPurchaseRequest(AutomationRequest request, RequestExecutionState state, int goldReserve)
         {
             if (request.MarketCandidates.Count <= 0)
             {
-                LogRequestSkip(request, state, "no market candidates");
+                LogRequestSkip(request, state, RejectedOrderReason.NoMarketCandidates, "no market candidates");
                 return;
             }
 
@@ -766,6 +841,7 @@ namespace SettlementAutomationCore
             int remainingToBuy = request.Quantity;
             bool purchasedAny = false;
             string lastSkipReason = "no matching merchant stock";
+            RejectedOrderReason lastSkipReasonCode = RejectedOrderReason.NoMatchingMerchantStock;
 
             foreach (var requestedCandidate in request.MarketCandidates)
             {
@@ -773,12 +849,14 @@ namespace SettlementAutomationCore
                 if (state.ProjectedGold <= goldReserve)
                 {
                     lastSkipReason = $"projected gold {state.ProjectedGold} reached reserve {goldReserve}";
+                    lastSkipReasonCode = RejectedOrderReason.GoldReserveReached;
                     break;
                 }
 
                 if (requestedCandidate.Side != InventoryLogic.InventorySide.OtherInventory)
                 {
                     lastSkipReason = "candidate was not from merchant inventory";
+                    lastSkipReasonCode = RejectedOrderReason.CandidateNotFromMerchantInventory;
                     continue;
                 }
 
@@ -796,6 +874,7 @@ namespace SettlementAutomationCore
                 if (matchingCandidates.Count == 0)
                 {
                     lastSkipReason = $"merchant no longer has {requestedCandidate.Item.Name}";
+                    lastSkipReasonCode = RejectedOrderReason.MerchantStockMissing;
                     continue;
                 }
 
@@ -805,10 +884,11 @@ namespace SettlementAutomationCore
                     if (state.ProjectedGold <= goldReserve)
                     {
                         lastSkipReason = $"projected gold {state.ProjectedGold} reached reserve {goldReserve}";
+                        lastSkipReasonCode = RejectedOrderReason.GoldReserveReached;
                         break;
                     }
 
-                    if (TryAddPurchaseTransfer(request, candidateElement, remainingToBuy, goldReserve, state, out int purchasedCount, out string skipReason))
+                    if (TryAddPurchaseTransfer(request, candidateElement, remainingToBuy, goldReserve, state, out int purchasedCount, out RejectedOrderReason skipReasonCode, out string skipReason))
                     {
                         remainingToBuy -= purchasedCount;
                         purchasedAny = true;
@@ -816,13 +896,14 @@ namespace SettlementAutomationCore
                     else
                     {
                         lastSkipReason = skipReason;
+                        lastSkipReasonCode = skipReasonCode;
                     }
                 }
             }
 
             if (!purchasedAny)
             {
-                LogRequestSkip(request, state, lastSkipReason);
+                LogRequestSkip(request, state, lastSkipReasonCode, lastSkipReason);
             }
             else if (remainingToBuy > 0)
             {
@@ -859,7 +940,7 @@ namespace SettlementAutomationCore
 
             if (candidates.Count == 0)
             {
-                LogRequestSkip(request, state, "no matching merchant stock");
+                LogRequestSkip(request, state, RejectedOrderReason.NoMatchingMerchantStock, "no matching merchant stock");
                 return;
             }
 
@@ -871,16 +952,18 @@ namespace SettlementAutomationCore
 
             bool purchasedAny = false;
             string lastSkipReason = "no affordable matching stock";
+            RejectedOrderReason lastSkipReasonCode = RejectedOrderReason.NoAffordableMatchingStock;
             foreach (var candidate in sortedCandidates)
             {
                 if (inventoryDeficit <= 0) break;
                 if (state.ProjectedGold <= goldReserve)
                 {
                     lastSkipReason = $"projected gold {state.ProjectedGold} reached reserve {goldReserve}";
+                    lastSkipReasonCode = RejectedOrderReason.GoldReserveReached;
                     break;
                 }
 
-                if (TryAddPurchaseTransfer(request, candidate.Element, inventoryDeficit, goldReserve, state, out int purchasedCount, out string skipReason))
+                if (TryAddPurchaseTransfer(request, candidate.Element, inventoryDeficit, goldReserve, state, out int purchasedCount, out RejectedOrderReason skipReasonCode, out string skipReason))
                 {
                     inventoryDeficit -= purchasedCount;
                     purchasedAny = true;
@@ -888,12 +971,13 @@ namespace SettlementAutomationCore
                 else
                 {
                     lastSkipReason = skipReason;
+                    lastSkipReasonCode = skipReasonCode;
                 }
             }
 
             if (!purchasedAny)
             {
-                LogRequestSkip(request, state, lastSkipReason);
+                LogRequestSkip(request, state, lastSkipReasonCode, lastSkipReason);
             }
             else if (inventoryDeficit > 0)
             {
@@ -908,14 +992,17 @@ namespace SettlementAutomationCore
             int goldReserve,
             RequestExecutionState state,
             out int purchasedCount,
+            out RejectedOrderReason skipReasonCode,
             out string skipReason)
         {
             purchasedCount = 0;
+            skipReasonCode = RejectedOrderReason.NoAffordableMatchingStock;
             skipReason = "";
 
             var item = candidateElement.EquipmentElement.Item;
             if (item == null)
             {
+                skipReasonCode = RejectedOrderReason.CandidateItemMissing;
                 skipReason = "candidate item was null";
                 return false;
             }
@@ -923,6 +1010,7 @@ namespace SettlementAutomationCore
             int price = state.Logic.GetItemPrice(candidateElement.EquipmentElement, true);
             if (!IsPriceAllowedForRequest(request, item, price, state.Settings))
             {
+                skipReasonCode = RejectedOrderReason.PricePolicyExceeded;
                 skipReason = $"{item.Name} price {price} exceeded {request.Profile} price policy";
                 return false;
             }
@@ -932,6 +1020,7 @@ namespace SettlementAutomationCore
             toBuy = Math.Min(toBuy, maxAfford);
             if (toBuy <= 0)
             {
+                skipReasonCode = RejectedOrderReason.GoldReserveBreach;
                 skipReason = $"{item.Name} would breach reserve {goldReserve}";
                 return false;
             }
@@ -957,6 +1046,7 @@ namespace SettlementAutomationCore
 
             if (toBuy <= 0)
             {
+                skipReasonCode = isAnimalOrMount ? RejectedOrderReason.HerdingLimitExceeded : RejectedOrderReason.CargoCapacityExceeded;
                 skipReason = isAnimalOrMount ? $"{item.Name} would exceed herding allowance" : $"{item.Name} would exceed cargo capacity";
                 return false;
             }
@@ -984,14 +1074,35 @@ namespace SettlementAutomationCore
 
             purchasedCount = toBuy;
             state.FulfilledItemParts.Add($"{toBuy}x {item.Name}");
-            state.MarketReport.AddBought(candidateElement.EquipmentElement, toBuy, toBuy * price);
+            state.MarketReport.AddBought(candidateElement.EquipmentElement, toBuy, toBuy * price, request.RequestorId, AutomationTransactionStage.PriorityRequest);
             Helpers.Logger.WriteLog("SettlementAutomationCore", $"Request purchased at {state.Settlement.Name}: {DescribeRequest(request)} -> {toBuy}x {item.Name} ({toBuy * price}d, {price}d each)");
             return true;
         }
 
-        private static void LogRequestSkip(AutomationRequest request, RequestExecutionState state, string reason)
+        internal static string BuildRejectedOrderLogLine(RejectedOrderDetail detail)
         {
-            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Request skipped at {state.Settlement.Name}: {DescribeRequest(request)} ({reason})");
+            return BuildRejectedOrderLogLine(
+                detail.SettlementName,
+                DescribeRequest(detail.Request),
+                detail.Reason,
+                detail.Detail);
+        }
+
+        internal static string BuildRejectedOrderLogLine(
+            string settlementName,
+            string requestDescription,
+            RejectedOrderReason reason,
+            string detail)
+        {
+            return $"Request skipped at {settlementName}: {requestDescription} [{reason}] ({detail})";
+        }
+
+        private static void LogRequestSkip(AutomationRequest request, RequestExecutionState state, RejectedOrderReason reason, string detail)
+        {
+            if (!(state.Settings?.LogRejectedOrderDetails ?? false)) return;
+
+            var rejectedOrder = new RejectedOrderDetail(state.Settlement.Name.ToString(), request, reason, detail);
+            Helpers.Logger.WriteLog("SettlementAutomationCore", BuildRejectedOrderLogLine(rejectedOrder));
         }
 
         private static string DescribeRequest(AutomationRequest request)
@@ -1021,11 +1132,279 @@ namespace SettlementAutomationCore
         {
             if (!marketReport.HasActivity) return;
 
-            foreach (var line in marketReport.BuildInGameLines(settlement, GetCargoStatus()))
+            var reportingMode = Settings.Instance?.CoreReportingModeSetting ?? CoreReportingMode.Full;
+            if (reportingMode == CoreReportingMode.Off)
             {
-                InformationManager.DisplayMessage(new InformationMessage(line));
+                Helpers.Logger.WriteLog("SettlementAutomationCore", marketReport.BuildLogSummary(settlement));
+                return;
             }
+
+            string? cargoStatus = GetCargoStatus();
+            var providerReports = marketReport.BuildProviderReports();
+            var registeredReporters = AutomationRegistry.ActiveReportProviders;
+            var displayedProviderKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            bool displayedAnyReport = false;
+
+            foreach (var report in providerReports)
+            {
+                var reg = registeredReporters.FirstOrDefault(item =>
+                    string.Equals(item.ProviderName, report.ProviderName, StringComparison.OrdinalIgnoreCase));
+                if (reg == null) continue;
+
+                try
+                {
+                    var context = new AutomationReportContext(settlement, reg.ProviderName, report, cargoStatus);
+                    var lines = reg.Provider.BuildAutomationReportLines(context);
+                    if (lines == null) continue;
+
+                    bool displayedThisProviderReport = false;
+                    uint headerColor = GetProviderHeaderColor(report.ProviderName, reg.Provider);
+                    foreach (var line in lines)
+                    {
+                        if (string.IsNullOrWhiteSpace(line)) continue;
+                        DisplayReportMessage(line, headerColor);
+                        displayedAnyReport = true;
+                        displayedThisProviderReport = true;
+                    }
+
+                    if (displayedThisProviderReport)
+                    {
+                        displayedProviderKeys.Add(GetProviderReportKey(report));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error building {report.Stage} automation report from {reg.ProviderName}: {ex.Message}");
+                }
+            }
+
+            var coreSummaryReports = SelectCoreSummaryReports(providerReports, displayedProviderKeys, reportingMode);
+
+            foreach (var report in coreSummaryReports)
+            {
+                string line = BuildGenericProviderReportLine(settlement, report);
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                DisplayReportMessage(line, GetProviderHeaderColor(report.ProviderName));
+                displayedAnyReport = true;
+            }
+
+            if (displayedAnyReport && !string.IsNullOrWhiteSpace(cargoStatus))
+            {
+                DisplayReportMessage($"[Automation] Cargo: {cargoStatus}", GetProviderHeaderColor("SettlementAutomationCore"));
+            }
+
             Helpers.Logger.WriteLog("SettlementAutomationCore", marketReport.BuildLogSummary(settlement));
+        }
+
+        private static string GetProviderReportKey(AutomationProviderReport report)
+        {
+            return $"{report.ProviderName}:{report.Stage}";
+        }
+
+        internal static IReadOnlyList<AutomationProviderReport> SelectCoreSummaryReports(
+            IReadOnlyList<AutomationProviderReport> providerReports,
+            ISet<string> displayedProviderKeys,
+            CoreReportingMode reportingMode)
+        {
+            if (reportingMode == CoreReportingMode.Off)
+            {
+                return new List<AutomationProviderReport>();
+            }
+
+            if (reportingMode == CoreReportingMode.Full)
+            {
+                return providerReports;
+            }
+
+            return providerReports
+                .Where(report => !displayedProviderKeys.Contains(GetProviderReportKey(report)))
+                .ToList();
+        }
+
+        internal static uint GetProviderHeaderColor(string providerName, IAutomationReportProvider? reportProvider = null)
+        {
+            if (reportProvider is IAutomationReportStyleProvider styleProvider && styleProvider.ReportHeaderColor.HasValue)
+            {
+                return styleProvider.ReportHeaderColor.Value;
+            }
+
+            return DeriveProviderHeaderColor(providerName);
+        }
+
+        internal static uint DeriveProviderHeaderColor(string providerName)
+        {
+            string normalizedName = string.IsNullOrWhiteSpace(providerName)
+                ? "SettlementAutomationCore"
+                : providerName.Trim().ToUpperInvariant();
+
+            uint hash = 2166136261u;
+            unchecked
+            {
+                foreach (char c in normalizedName)
+                {
+                    hash ^= c;
+                    hash *= 16777619u;
+                }
+            }
+
+            double hue = hash % 360;
+            double saturation = 0.62 + ((hash >> 8) % 18) / 100.0;
+            double lightness = 0.58 + ((hash >> 16) % 10) / 100.0;
+            return HslToRgba(hue, saturation, lightness);
+        }
+
+        private static uint HslToRgba(double hue, double saturation, double lightness)
+        {
+            double chroma = (1.0 - Math.Abs(2.0 * lightness - 1.0)) * saturation;
+            double huePrime = hue / 60.0;
+            double x = chroma * (1.0 - Math.Abs(huePrime % 2.0 - 1.0));
+
+            double r1 = 0;
+            double g1 = 0;
+            double b1 = 0;
+
+            if (huePrime < 1.0)
+            {
+                r1 = chroma;
+                g1 = x;
+            }
+            else if (huePrime < 2.0)
+            {
+                r1 = x;
+                g1 = chroma;
+            }
+            else if (huePrime < 3.0)
+            {
+                g1 = chroma;
+                b1 = x;
+            }
+            else if (huePrime < 4.0)
+            {
+                g1 = x;
+                b1 = chroma;
+            }
+            else if (huePrime < 5.0)
+            {
+                r1 = x;
+                b1 = chroma;
+            }
+            else
+            {
+                r1 = chroma;
+                b1 = x;
+            }
+
+            double match = lightness - chroma / 2.0;
+            uint red = ToColorByte(r1 + match);
+            uint green = ToColorByte(g1 + match);
+            uint blue = ToColorByte(b1 + match);
+
+            return (red << 24) | (green << 16) | (blue << 8) | 0xFFu;
+        }
+
+        private static uint ToColorByte(double value)
+        {
+            return (uint)Math.Max(0, Math.Min(255, (int)Math.Round(value * 255.0)));
+        }
+
+        private static void DisplayReportMessage(string line, uint color)
+        {
+            InformationManager.DisplayMessage(new InformationMessage(line, Color.FromUint(color)));
+        }
+
+        private static string BuildGenericProviderReportLine(Settlement settlement, AutomationProviderReport report)
+        {
+            string summary = BuildGenericProviderActivitySummary(report);
+            if (string.IsNullOrWhiteSpace(summary)) return "";
+
+            return $"[Automation] {report.ProviderName} {GetStageLabel(report.Stage)} @ {settlement.Name}: {summary}";
+        }
+
+        internal static string BuildGenericProviderActivitySummary(AutomationProviderReport report)
+        {
+            var parts = new List<string>();
+            if (report.SoldItems.Count > 0)
+            {
+                parts.Add($"Sold {FormatReportItems(report.SoldItems, isSale: true)}");
+            }
+            if (report.BoughtItems.Count > 0)
+            {
+                parts.Add($"Bought {FormatReportItems(report.BoughtItems, isSale: false)}");
+            }
+            if (report.SlaughteredItems.Count > 0)
+            {
+                parts.Add($"Slaughtered {FormatReportItems(report.SlaughteredItems, isSale: false, includeGold: false)}");
+            }
+
+            return string.Join("; ", parts);
+        }
+
+        private static string FormatReportItems(IReadOnlyList<AutomationReportItem> items, bool isSale, bool includeGold = true)
+        {
+            var visible = items
+                .GroupBy(item => item.CategoryName)
+                .OrderBy(group => GetCategorySortOrder(group.First().Category))
+                .ThenBy(group => group.Key)
+                .Select(group => $"{group.Key}: {FormatReportCategoryItems(group.ToList(), isSale, includeGold)}")
+                .ToList();
+
+            return string.Join("; ", visible);
+        }
+
+        private static string FormatReportCategoryItems(IReadOnlyList<AutomationReportItem> items, bool isSale, bool includeGold)
+        {
+            const int itemLimit = 4;
+            var visible = items
+                .Take(itemLimit)
+                .Select(item => FormatReportItem(item, isSale, includeGold))
+                .ToList();
+
+            int hidden = items.Count - visible.Count;
+            if (hidden > 0)
+            {
+                visible.Add($"{hidden} more");
+            }
+
+            return string.Join(", ", visible);
+        }
+
+        private static int GetCategorySortOrder(InventoryItemCategory category)
+        {
+            if ((category & InventoryItemCategory.Armor) == InventoryItemCategory.Armor) return 0;
+            if ((category & InventoryItemCategory.Weapon) == InventoryItemCategory.Weapon) return 1;
+            if ((category & InventoryItemCategory.Food) == InventoryItemCategory.Food) return 2;
+            if ((category & InventoryItemCategory.Mount) == InventoryItemCategory.Mount) return 3;
+            if ((category & InventoryItemCategory.PackAnimal) == InventoryItemCategory.PackAnimal) return 4;
+            if ((category & InventoryItemCategory.Livestock) == InventoryItemCategory.Livestock) return 5;
+            if ((category & InventoryItemCategory.TradeGood) == InventoryItemCategory.TradeGood) return 6;
+            return 7;
+        }
+
+        private static string FormatReportItem(AutomationReportItem item, bool isSale, bool includeGold)
+        {
+            if (!includeGold || item.Gold == 0)
+            {
+                return $"{item.Quantity}x {item.ItemName}";
+            }
+
+            string sign = isSale ? "+" : "-";
+            return $"{item.Quantity}x {item.ItemName} ({sign}{Math.Abs(item.Gold)}d)";
+        }
+
+        private static string GetStageLabel(AutomationTransactionStage stage)
+        {
+            switch (stage)
+            {
+                case AutomationTransactionStage.PreSell:
+                    return "pre-sell";
+                case AutomationTransactionStage.PriorityRequest:
+                    return "requests";
+                case AutomationTransactionStage.FreeTrade:
+                    return "free trade";
+                default:
+                    return "market";
+            }
         }
 
         private static string? GetCargoStatus()
@@ -1039,7 +1418,7 @@ namespace SettlementAutomationCore
             return $"{(int)currentWeight} / {(int)capacity} capacity ({percent}%)";
         }
 
-        private static void ExecuteTradeProposal(TradeProposal proposal, TradeContext context, InventoryLogic logic, AutomationMarketReport marketReport)
+        private static void ExecuteTradeProposal(TradeProposal proposal, TradeContext context, InventoryLogic logic, AutomationMarketReport marketReport, string providerName)
         {
             var sells = proposal.Actions.Where(a => a.ActionType == TradeActionType.Sell).ToList();
             var slaughters = proposal.Actions.Where(a => a.ActionType == TradeActionType.Slaughter).ToList();
@@ -1073,7 +1452,7 @@ namespace SettlementAutomationCore
                     logic.AddTransferCommand(command);
 
                     availableGold += toSell * price;
-                    marketReport.AddSold(action.EquipmentElement, toSell, toSell * price);
+                    marketReport.AddSold(action.EquipmentElement, toSell, toSell * price, providerName, AutomationTransactionStage.FreeTrade);
                     if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
                     {
                         freeCargo += toSell * action.EquipmentElement.Item.Weight;
@@ -1094,7 +1473,7 @@ namespace SettlementAutomationCore
                     if (logic.CanSlaughterItem(itemRosterEl, InventoryLogic.InventorySide.PlayerInventory))
                     {
                         logic.SlaughterItem(itemRosterEl);
-                        marketReport.AddSlaughtered(action.EquipmentElement, action.Quantity);
+                        marketReport.AddSlaughtered(action.EquipmentElement, action.Quantity, providerName, AutomationTransactionStage.FreeTrade);
                         if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
                         {
                             freeCargo += action.Quantity * action.EquipmentElement.Item.Weight;
@@ -1148,7 +1527,7 @@ namespace SettlementAutomationCore
                     logic.AddTransferCommand(command);
 
                     availableGold -= toBuy * price;
-                    marketReport.AddBought(action.EquipmentElement, toBuy, toBuy * price);
+                    marketReport.AddBought(action.EquipmentElement, toBuy, toBuy * price, providerName, AutomationTransactionStage.FreeTrade);
                     if (isCargo)
                     {
                         freeCargo -= toBuy * action.EquipmentElement.Item.Weight;

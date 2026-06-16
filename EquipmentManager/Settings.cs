@@ -133,11 +133,6 @@ namespace EquipmentManager
         public Dropdown<LoadoutPriorityOption> LoadoutPriorityDropdown { get; set; } =
             new Dropdown<LoadoutPriorityOption>(LoadoutPriorityOptions, 0); // Default: Sneaking > Civilian > Combat (index 0)
 
-        [SettingPropertyInteger("Min Tier to Keep", 0, 6, "0", RequireRestart = false,
-            HintText = "Equipment at or above this tier is protected from automatic sale. The mod does not change item lock icons.", Order = 1)]
-        [SettingPropertyGroup("Keep & Sale Protection", GroupOrder = 1)]
-        public int MinTierToKeep { get; set; } = 6;
-
         [SettingPropertyBool("Keep Positive Modifiers", RequireRestart = false,
             HintText = "Protect items with positive price/stat modifiers from automatic sale, even when they are below the tier threshold.", Order = 2)]
         [SettingPropertyGroup("Keep & Sale Protection", GroupOrder = 1)]

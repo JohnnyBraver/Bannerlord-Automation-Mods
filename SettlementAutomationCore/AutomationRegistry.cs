@@ -253,6 +253,7 @@ namespace SettlementAutomationCore
         private static readonly List<ProviderRegistration<IRansomOrderProvider>> RansomProviders = new();
         private static readonly List<ProviderRegistration<IDungeonOrderProvider>> DungeonProviders = new();
         private static readonly List<ProviderRegistration<IFiefAutomationProvider>> FiefProviders = new();
+        private static readonly List<ProviderRegistration<IAutomationReportProvider>> ReportProviders = new();
 
         private static readonly List<ProviderRegistration<IAutomationRequestProvider>> RequestProviders = new();
         private static readonly List<AutomationRequest> CurrentRequests = new();
@@ -510,6 +511,38 @@ namespace SettlementAutomationCore
                 lock (FiefProviders)
                 {
                     return new List<ProviderRegistration<IFiefAutomationProvider>>(FiefProviders);
+                }
+            }
+        }
+
+        // --- Report Providers ---
+        public static void RegisterReportProvider(IAutomationReportProvider provider)
+        {
+            lock (ReportProviders)
+            {
+                if (!ReportProviders.Any(r => EqualityComparer<IAutomationReportProvider>.Default.Equals(r.Provider, provider)))
+                {
+                    string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
+                    ReportProviders.Add(new ProviderRegistration<IAutomationReportProvider>(provider, provider.ProviderName, callingAssembly));
+                }
+            }
+        }
+
+        public static void UnregisterReportProvider(IAutomationReportProvider provider)
+        {
+            lock (ReportProviders)
+            {
+                ReportProviders.RemoveAll(r => EqualityComparer<IAutomationReportProvider>.Default.Equals(r.Provider, provider));
+            }
+        }
+
+        public static IReadOnlyList<ProviderRegistration<IAutomationReportProvider>> ActiveReportProviders
+        {
+            get
+            {
+                lock (ReportProviders)
+                {
+                    return new List<ProviderRegistration<IAutomationReportProvider>>(ReportProviders);
                 }
             }
         }

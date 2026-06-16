@@ -110,9 +110,122 @@ namespace SettlementAutomationCore.Tests
             Assert.Contains("Sold: 1x Sword (+250d)", log);
         }
 
+        [Fact]
+        public void MarketActivitySummary_ExportsAggregatedReportItems()
+        {
+            var summary = new MarketActivitySummary();
+            summary.AddBought("Armor", InventoryItemCategory.Armor, 1, 2000);
+            summary.AddBought("Grain", InventoryItemCategory.Food, 3, 60);
+            summary.AddBought("Grain", InventoryItemCategory.Food, 2, 40);
+            summary.AddSold("Sword", InventoryItemCategory.Weapon, 1, 250);
+
+            Assert.Equal(new[] { "Grain", "Armor" }, summary.BoughtItems.Select(item => item.ItemName).ToArray());
+            Assert.Equal(5, summary.BoughtItems[0].Quantity);
+            Assert.Equal(100, summary.BoughtItems[0].Gold);
+            Assert.Equal(InventoryItemCategory.Food, summary.BoughtItems[0].Category);
+            Assert.Equal("Food", summary.BoughtItems[0].CategoryName);
+            Assert.Equal("Sword", summary.SoldItems.Single().ItemName);
+            Assert.Equal(InventoryItemCategory.Weapon, summary.SoldItems.Single().Category);
+        }
+
+        [Fact]
+        public void GenericProviderActivitySummary_GroupsItemsByCategory()
+        {
+            var report = new AutomationProviderReport(
+                "TradeOptimizer",
+                AutomationTransactionStage.FreeTrade,
+                new[]
+                {
+                    new AutomationReportItem("Grain", InventoryItemCategory.Food, 5, 100),
+                    new AutomationReportItem("Fish", InventoryItemCategory.Food, 4, 80),
+                    new AutomationReportItem("Butter", InventoryItemCategory.Food, 3, 120),
+                    new AutomationReportItem("Cheese", InventoryItemCategory.Food, 2, 90),
+                    new AutomationReportItem("Date Fruit", InventoryItemCategory.Food, 1, 70),
+                    new AutomationReportItem("Body Armor", InventoryItemCategory.Armor, 1, 2000)
+                },
+                new List<AutomationReportItem>(),
+                new List<AutomationReportItem>());
+
+            string summary = SubModule.BuildGenericProviderActivitySummary(report);
+
+            Assert.Contains("Bought Armor: 1x Body Armor (-2000d)", summary);
+            Assert.Contains("Food: 5x Grain (-100d), 4x Fish (-80d), 3x Butter (-120d), 2x Cheese (-90d), 1 more", summary);
+        }
+
+        [Fact]
+        public void SelectCoreSummaryReports_UsesSilentModsOrFullMode()
+        {
+            var reports = new List<AutomationProviderReport>
+            {
+                Report("EquipmentManager", AutomationTransactionStage.PriorityRequest),
+                Report("TradeOptimizer", AutomationTransactionStage.FreeTrade)
+            };
+            var displayedProviderKeys = new HashSet<string> { "EquipmentManager:PriorityRequest" };
+
+            var silent = SubModule.SelectCoreSummaryReports(reports, displayedProviderKeys, CoreReportingMode.SilentMods);
+            var full = SubModule.SelectCoreSummaryReports(reports, displayedProviderKeys, CoreReportingMode.Full);
+            var off = SubModule.SelectCoreSummaryReports(reports, displayedProviderKeys, CoreReportingMode.Off);
+
+            Assert.Equal(new[] { "TradeOptimizer" }, silent.Select(report => report.ProviderName).ToArray());
+            Assert.Equal(new[] { "EquipmentManager", "TradeOptimizer" }, full.Select(report => report.ProviderName).ToArray());
+            Assert.Empty(off);
+        }
+
+        [Fact]
+        public void GetProviderHeaderColor_DerivesStableColorsAndUsesProviderOverride()
+        {
+            var customProvider = new StyledReportProvider();
+
+            uint tradeColor = SubModule.GetProviderHeaderColor("TradeOptimizer");
+
+            Assert.Equal(tradeColor, SubModule.GetProviderHeaderColor("tradeoptimizer"));
+            Assert.NotEqual(tradeColor, SubModule.GetProviderHeaderColor("EquipmentManager"));
+            Assert.Equal(0xFFu, tradeColor & 0xFFu);
+            Assert.Equal(0x11223344u, SubModule.GetProviderHeaderColor("AnyProvider", customProvider));
+        }
+
+        [Fact]
+        public void BuildRejectedOrderLogLine_IncludesReasonCodeAndDetail()
+        {
+            string line = SubModule.BuildRejectedOrderLogLine(
+                "Sargot",
+                "PartyManager Routine/0 DesiredInventoryCount ItemCategory:Food qty=10 reserve=Core",
+                RejectedOrderReason.CargoCapacityExceeded,
+                "Grain would exceed cargo capacity");
+
+            Assert.Contains("Request skipped at Sargot", line);
+            Assert.Contains("PartyManager", line);
+            Assert.Contains("[CargoCapacityExceeded]", line);
+            Assert.Contains("Grain would exceed cargo capacity", line);
+        }
+
         private static AutomationRequest Request(string id, RequestProfile profile, int priority)
         {
             return AutomationRequest.ForInventoryTarget(id, RequestType.ItemCategory, "Food", 1, profile, priority);
+        }
+
+        private static AutomationProviderReport Report(string providerName, AutomationTransactionStage stage)
+        {
+            return new AutomationProviderReport(
+                providerName,
+                stage,
+                new List<AutomationReportItem>
+                {
+                    new AutomationReportItem("Grain", InventoryItemCategory.Food, 1, 10)
+                },
+                new List<AutomationReportItem>(),
+                new List<AutomationReportItem>());
+        }
+
+        private sealed class StyledReportProvider : IAutomationReportProvider, IAutomationReportStyleProvider
+        {
+            public string ProviderName => "AnyProvider";
+            public uint? ReportHeaderColor => 0x11223344u;
+
+            public IReadOnlyList<string> BuildAutomationReportLines(AutomationReportContext context)
+            {
+                return new List<string>();
+            }
         }
 
         private static InventoryItemView MarketItem(string id)

@@ -21,6 +21,21 @@ namespace SettlementAutomationCore
         Weapon = 1 << 6
     }
 
+    public static class InventoryItemCategoryLabels
+    {
+        public static string GetDisplayName(InventoryItemCategory category)
+        {
+            if ((category & InventoryItemCategory.Armor) == InventoryItemCategory.Armor) return "Armor";
+            if ((category & InventoryItemCategory.Weapon) == InventoryItemCategory.Weapon) return "Weapons";
+            if ((category & InventoryItemCategory.Food) == InventoryItemCategory.Food) return "Food";
+            if ((category & InventoryItemCategory.Mount) == InventoryItemCategory.Mount) return "Mounts";
+            if ((category & InventoryItemCategory.PackAnimal) == InventoryItemCategory.PackAnimal) return "Pack animals";
+            if ((category & InventoryItemCategory.Livestock) == InventoryItemCategory.Livestock) return "Livestock";
+            if ((category & InventoryItemCategory.TradeGood) == InventoryItemCategory.TradeGood) return "Trade goods";
+            return "Other";
+        }
+    }
+
     public class InventoryItemView
     {
         public string SnapshotId { get; }

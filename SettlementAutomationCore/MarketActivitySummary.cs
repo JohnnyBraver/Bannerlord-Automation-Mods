@@ -9,6 +9,7 @@ namespace SettlementAutomationCore
 
         private sealed class ItemActivity
         {
+            public InventoryItemCategory Category { get; set; }
             public int Quantity { get; set; }
             public int Gold { get; set; }
         }
@@ -22,20 +23,38 @@ namespace SettlementAutomationCore
         public bool HasActivity => _boughtItems.Count > 0 || _soldItems.Count > 0 || _slaughteredItems.Count > 0;
         public int TotalSoldGold => _soldItems.Values.Sum(item => item.Gold);
         public int TotalBoughtGold => _boughtItems.Values.Sum(item => item.Gold);
+        public IReadOnlyList<AutomationReportItem> BoughtItems => ToReportItems(_boughtItems);
+        public IReadOnlyList<AutomationReportItem> SoldItems => ToReportItems(_soldItems);
+        public IReadOnlyList<AutomationReportItem> SlaughteredItems => ToReportItems(_slaughteredItems);
 
         public void AddBought(string itemName, int quantity, int gold)
         {
-            AddItem(_boughtItems, itemName, quantity, gold);
+            AddBought(itemName, InventoryItemCategory.None, quantity, gold);
+        }
+
+        public void AddBought(string itemName, InventoryItemCategory category, int quantity, int gold)
+        {
+            AddItem(_boughtItems, itemName, category, quantity, gold);
         }
 
         public void AddSold(string itemName, int quantity, int gold)
         {
-            AddItem(_soldItems, itemName, quantity, gold);
+            AddSold(itemName, InventoryItemCategory.None, quantity, gold);
+        }
+
+        public void AddSold(string itemName, InventoryItemCategory category, int quantity, int gold)
+        {
+            AddItem(_soldItems, itemName, category, quantity, gold);
         }
 
         public void AddSlaughtered(string itemName, int quantity)
         {
-            AddItem(_slaughteredItems, itemName, quantity, 0);
+            AddSlaughtered(itemName, InventoryItemCategory.None, quantity);
+        }
+
+        public void AddSlaughtered(string itemName, InventoryItemCategory category, int quantity)
+        {
+            AddItem(_slaughteredItems, itemName, category, quantity, 0);
         }
 
         public void AddGoldDelta(int goldDelta)
@@ -92,18 +111,19 @@ namespace SettlementAutomationCore
             return $"Market automation summary at {settlementName} (Gold change: {goldSign}{GoldDelta}d). {string.Join(" ", parts)}";
         }
 
-        private static void AddItem(Dictionary<string, ItemActivity> items, string itemName, int quantity, int gold)
+        private static void AddItem(Dictionary<string, ItemActivity> items, string itemName, InventoryItemCategory category, int quantity, int gold)
         {
             if (quantity <= 0 || string.IsNullOrWhiteSpace(itemName)) return;
 
             if (items.TryGetValue(itemName, out var current))
             {
+                current.Category |= category;
                 current.Quantity += quantity;
                 current.Gold += gold;
             }
             else
             {
-                items.Add(itemName, new ItemActivity { Quantity = quantity, Gold = gold });
+                items.Add(itemName, new ItemActivity { Category = category, Quantity = quantity, Gold = gold });
             }
         }
 
@@ -137,6 +157,15 @@ namespace SettlementAutomationCore
 
             string sign = isSale ? "+" : "-";
             return $"{activity.Quantity}x {itemName} ({sign}{System.Math.Abs(activity.Gold)}d)";
+        }
+
+        private static IReadOnlyList<AutomationReportItem> ToReportItems(Dictionary<string, ItemActivity> items)
+        {
+            return items
+                .OrderByDescending(item => item.Value.Quantity)
+                .ThenBy(item => item.Key)
+                .Select(item => new AutomationReportItem(item.Key, item.Value.Category, item.Value.Quantity, item.Value.Gold))
+                .ToList();
         }
     }
 }

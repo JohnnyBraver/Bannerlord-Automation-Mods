@@ -8,7 +8,7 @@
       <CopiedModuleDependencyDlls Include="$(TargetDir)MCMv5.dll" />
       <CopiedModuleDependencyDlls Include="$(TargetDir)Newtonsoft.Json.dll" />
       <CopiedModuleDependencyDlls Include="$(TargetDir)SettlementAutomationCore.dll" Condition="'$(MSBuildProjectName)' != 'SettlementAutomationCore'" />
-      <CopiedModuleDependencyDlls Include="$(TargetDir)TradingOptimizer.dll" />
+      <CopiedModuleDependencyDlls Include="$(TargetDir)TradeOptimizer.dll" Condition="'$(MSBuildProjectName)' != 'TradeOptimizer'" />
     </ItemGroup>
     <Delete Files="@(CopiedModuleDependencyDlls)" />
   </Target>
@@ -26,7 +26,7 @@
       <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\MCMv5.dll" />
       <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\Newtonsoft.Json.dll" />
       <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\SettlementAutomationCore.dll" Condition="'$(MSBuildProjectName)' != 'SettlementAutomationCore'" />
-      <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\TradingOptimizer.dll" />
+      <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\TradeOptimizer.dll" Condition="'$(MSBuildProjectName)' != 'TradeOptimizer'" />
     </ItemGroup>
     <Delete Files="@(InstalledModuleDependencyDlls)" />
   </Target>

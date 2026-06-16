@@ -86,6 +86,7 @@ namespace EquipmentManager
                 AutomationRegistry.RegisterPreparationProvider(_provider);
                 AutomationRegistry.RegisterPreSellProvider(_provider);
                 AutomationRegistry.RegisterRequestProvider(_provider);
+                AutomationRegistry.RegisterReportProvider(_provider);
                 SettlementAutomationCore.SubModule.OnAutomationCycleCompleted -= OnAutomationCycleCompleted;
                 SettlementAutomationCore.SubModule.OnAutomationCycleCompleted += OnAutomationCycleCompleted;
 
@@ -110,6 +111,7 @@ namespace EquipmentManager
                 AutomationRegistry.UnregisterPreparationProvider(_provider);
                 AutomationRegistry.UnregisterPreSellProvider(_provider);
                 AutomationRegistry.UnregisterRequestProvider(_provider);
+                AutomationRegistry.UnregisterReportProvider(_provider);
                 _provider = null;
             }
 

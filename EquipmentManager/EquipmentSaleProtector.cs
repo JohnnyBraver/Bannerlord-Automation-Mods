@@ -120,11 +120,6 @@ namespace EquipmentManager
             var item = equipmentElement.Item;
             if (item == null) return false;
 
-            if ((int)item.Tier >= settings.MinTierToKeep)
-            {
-                return true;
-            }
-
             var modifier = equipmentElement.ItemModifier;
             if (settings.KeepPositiveModifiers && modifier != null && modifier.PriceMultiplier > 1.0f)
             {
@@ -136,7 +131,7 @@ namespace EquipmentManager
                 return true;
             }
 
-            if (item.HasArmorComponent && EquipmentManagerProvider.IsUpgradeForAnyTarget(equipmentElement, targets, settings))
+            if (EquipmentManagerProvider.IsUpgradeForAnyTarget(equipmentElement, targets, settings))
             {
                 return true;
             }

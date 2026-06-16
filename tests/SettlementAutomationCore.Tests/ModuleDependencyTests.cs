@@ -75,12 +75,15 @@ namespace SettlementAutomationCore.Tests
                 "0Harmony.dll",
                 "Bannerlord.UIExtenderEx.dll",
                 "MCMv5.dll",
-                "Newtonsoft.Json.dll",
-                "TradingOptimizer.dll"
+                "Newtonsoft.Json.dll"
             };
             if (!string.Equals(moduleName, "SettlementAutomationCore", StringComparison.OrdinalIgnoreCase))
             {
                 forbidden.Add("SettlementAutomationCore.dll");
+            }
+            if (!string.Equals(moduleName, "TradeOptimizer", StringComparison.OrdinalIgnoreCase))
+            {
+                forbidden.Add("TradeOptimizer.dll");
             }
 
             var offenders = Directory.EnumerateFiles(outputPath, "*.dll")
@@ -109,4 +112,3 @@ namespace SettlementAutomationCore.Tests
         }
     }
 }
-

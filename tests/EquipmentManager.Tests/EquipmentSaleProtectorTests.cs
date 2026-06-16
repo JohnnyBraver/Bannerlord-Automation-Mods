@@ -36,12 +36,11 @@ namespace EquipmentManager.Tests
         }
 
         [Fact]
-        public void Settings_DefaultPositiveModifierProtectionIsOff()
+        public void Settings_DefaultQualityReserveProtectionIsOff()
         {
             var settings = new Settings();
 
             Assert.False(settings.KeepPositiveModifiers);
-            Assert.Equal(6, settings.MinTierToKeep);
             Assert.Equal(0, settings.AdditionalArmorSetsToKeep);
             Assert.False(settings.KeepSpareCombatArmorSets);
             Assert.False(settings.KeepSpareCivilianArmorSets);

@@ -10,7 +10,7 @@ using SettlementAutomationCore;
 
 namespace EquipmentManager
 {
-    public class EquipmentManagerProvider : IAutomationPreparationProvider, IPreSellProvider, IAutomationRequestProvider
+    public class EquipmentManagerProvider : IAutomationPreparationProvider, IPreSellProvider, IAutomationRequestProvider, IAutomationReportProvider, IAutomationReportStyleProvider
     {
         private struct PotentialBuyOrder
         {
@@ -25,6 +25,35 @@ namespace EquipmentManager
         }
 
         public string ProviderName => "EquipmentManager";
+        public uint? ReportHeaderColor => 0xE6A23CFF;
+
+        public IReadOnlyList<string> BuildAutomationReportLines(AutomationReportContext context)
+        {
+            var lines = new List<string>();
+            if (context == null) return lines;
+
+            if (context.Stage == AutomationTransactionStage.PreSell && context.SoldItems.Count > 0)
+            {
+                lines.Add($"[Equipment] Sold spare gear @ {context.Settlement.Name}: {FormatReportItems(context.SoldItems, isSale: true)}");
+            }
+            else if (context.Stage == AutomationTransactionStage.PriorityRequest && context.BoughtItems.Count > 0)
+            {
+                lines.Add($"[Equipment] Bought upgrades @ {context.Settlement.Name}: {FormatReportItems(context.BoughtItems, isSale: false)}");
+            }
+            else if (context.Stage == AutomationTransactionStage.FreeTrade)
+            {
+                if (context.SoldItems.Count > 0)
+                {
+                    lines.Add($"[Equipment] Free-trade gear sold @ {context.Settlement.Name}: {FormatReportItems(context.SoldItems, isSale: true)}");
+                }
+                if (context.BoughtItems.Count > 0)
+                {
+                    lines.Add($"[Equipment] Free-trade gear bought @ {context.Settlement.Name}: {FormatReportItems(context.BoughtItems, isSale: false)}");
+                }
+            }
+
+            return lines;
+        }
 
         public void PrepareForAutomation(MobileParty party, Settlement settlement)
         {
@@ -336,9 +365,10 @@ namespace EquipmentManager
         public static bool IsUpgradeForAnyTarget(EquipmentElement eqEl, List<Hero> targets, Settings settings)
         {
             var item = eqEl.Item;
-            if (item == null || !item.HasArmorComponent) return false;
+            if (item == null) return false;
 
             var armorSlots = new EquipmentIndex[] { EquipmentIndex.Head, EquipmentIndex.Body, EquipmentIndex.Leg, EquipmentIndex.Gloves, EquipmentIndex.Cape };
+            var weaponSlots = new EquipmentIndex[] { EquipmentIndex.Weapon0, EquipmentIndex.Weapon1, EquipmentIndex.Weapon2, EquipmentIndex.Weapon3 };
             
             foreach (var hero in targets)
             {
@@ -348,39 +378,61 @@ namespace EquipmentManager
                 {
                     Equipment equipment;
                     bool prioritizeStealth = false;
+                    InventoryLogic.InventorySide side;
 
                     if (setIndex == 0)
                     {
                         equipment = hero.BattleEquipment;
+                        side = InventoryLogic.InventorySide.BattleEquipment;
                     }
                     else if (setIndex == 1)
                     {
                         if (!item.IsCivilian) continue;
                         equipment = hero.CivilianEquipment;
+                        side = InventoryLogic.InventorySide.CivilianEquipment;
                     }
                     else
                     {
                         if (!item.IsStealthItem) continue;
                         equipment = hero.StealthEquipment;
+                        side = InventoryLogic.InventorySide.StealthEquipment;
                         prioritizeStealth = true;
                     }
 
-                    foreach (var slot in armorSlots)
+                    if (item.HasArmorComponent)
                     {
-                        if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
+                        foreach (var slot in armorSlots)
+                        {
+                            if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
 
-                        var currentArmor = equipment[slot];
-                        float currentScore = prioritizeStealth ? GetStealthScore(currentArmor) : GetArmorScore(currentArmor);
-                        
-                        if (prioritizeStealth)
-                        {
-                            float candidateScore = GetStealthScore(eqEl);
-                            if (candidateScore > currentScore) return true;
+                            var currentArmor = equipment[slot];
+                            float currentScore = prioritizeStealth ? GetStealthScore(currentArmor) : GetArmorScore(currentArmor);
+
+                            if (prioritizeStealth)
+                            {
+                                float candidateScore = GetStealthScore(eqEl);
+                                if (EquipmentComparison.StrictlyBeatsArmor(eqEl, currentArmor, true) || candidateScore > currentScore) return true;
+                            }
+                            else
+                            {
+                                float candidateScore = GetArmorScore(eqEl);
+                                if (EquipmentComparison.StrictlyBeatsArmor(eqEl, currentArmor, false) || candidateScore > currentScore) return true;
+                            }
                         }
-                        else
+                    }
+
+                    if (item.PrimaryWeapon != null)
+                    {
+                        foreach (var slot in weaponSlots)
                         {
-                            float candidateScore = GetArmorScore(eqEl);
-                            if (candidateScore > currentScore) return true;
+                            if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
+
+                            var currentWeapon = equipment[slot];
+                            if (!EquipmentComparison.ShouldEvaluateWeaponSlot(currentWeapon, side)) continue;
+
+                            float candidateScore = EquipmentComparison.GetWeaponScore(eqEl);
+                            float currentScore = EquipmentComparison.GetWeaponScore(currentWeapon);
+                            if (EquipmentComparison.StrictlyBeatsWeapon(eqEl, currentWeapon) || candidateScore > currentScore) return true;
                         }
                     }
                 }
@@ -400,6 +452,34 @@ namespace EquipmentManager
             if (eqEl.IsEmpty) return 0f;
             int stealthFactor = (eqEl.Item != null && eqEl.Item.ArmorComponent != null) ? eqEl.Item.ArmorComponent.StealthFactor : 0;
             return stealthFactor * 1000f + GetArmorScore(eqEl);
+        }
+
+        private static string FormatReportItems(IReadOnlyList<AutomationReportItem> items, bool isSale)
+        {
+            const int itemLimit = 8;
+            var visible = items
+                .Take(itemLimit)
+                .Select(item => FormatReportItem(item, isSale))
+                .ToList();
+
+            int hidden = items.Count - visible.Count;
+            if (hidden > 0)
+            {
+                visible.Add($"{hidden} more");
+            }
+
+            return string.Join(", ", visible);
+        }
+
+        private static string FormatReportItem(AutomationReportItem item, bool isSale)
+        {
+            if (item.Gold == 0)
+            {
+                return $"{item.Quantity}x {item.ItemName}";
+            }
+
+            string sign = isSale ? "+" : "-";
+            return $"{item.Quantity}x {item.ItemName} ({sign}{Math.Abs(item.Gold)}d)";
         }
     }
 }
