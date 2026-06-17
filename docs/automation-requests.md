@@ -133,9 +133,9 @@ Current report phases are:
 
 The report context includes `ProviderName`, `Stage`, `BoughtItems`, `SoldItems`, `SlaughteredItems`, and `CargoStatus`. Item lists contain completed activity only: item name, inventory category, quantity, and gold total. Core still writes the detailed aggregate file log summary after in-game reporting.
 
-Report providers can optionally implement `IAutomationReportStyleProvider` to supply a `ReportHeaderColor` as an RGBA `uint`. Core applies that color when it writes the provider's in-game report lines. Providers without a style hook get a deterministic color derived from the provider name, and fallback summaries use the same provider-name color.
+Report providers can optionally implement `IAutomationReportStyleProvider` to supply a `ReportHeaderColor` as an RGBA `uint`. Core applies that color when it writes the provider's in-game report lines. Providers without a style hook get a deterministic color derived from the provider name. Core-authored summary and fallback lines stay uncolored so they remain visually quiet.
 
-The core summary and generic fallback lines are written after module-owned report lines. They group visible items by category, so equipment, food, mounts, livestock, and trade goods remain readable instead of disappearing into a single "more" count.
+The core summary and generic fallback lines are written after module-owned report lines. They summarize completed activity by category totals, so equipment, food, mounts, livestock, and trade goods remain readable without repeating the full item list.
 
 Detailed request gathering, skip reasons, price-cap decisions, cargo failures, reserve failures, and per-request purchase lines remain in the mod log files. The HUD message is intentionally compact so normal town visits do not become noisy.
 

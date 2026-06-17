@@ -73,6 +73,35 @@ namespace EquipmentManager
         public override string ToString() => _name;
     }
 
+    public enum EquipmentSaleReportDetailMode
+    {
+        CategoryCounts,
+        FullItemList
+    }
+
+    public class EquipmentSaleReportDetailModeOption
+    {
+        private readonly string _name;
+        public EquipmentSaleReportDetailMode Value { get; }
+        public EquipmentSaleReportDetailModeOption(string name, EquipmentSaleReportDetailMode value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
+    public enum EquipmentReportSortMode
+    {
+        Amount,
+        MarketValue,
+        PaidPrice
+    }
+
+    public class EquipmentReportSortModeOption
+    {
+        private readonly string _name;
+        public EquipmentReportSortMode Value { get; }
+        public EquipmentReportSortModeOption(string name, EquipmentReportSortMode value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
     public class Settings : AttributeGlobalSettings<Settings>
     {
         public override string Id => "EquipmentManager_v3";
@@ -112,6 +141,19 @@ namespace EquipmentManager
             new KeepDonationCategoryOption("Weapons Only", KeepDonationCategory.WeaponsOnly),
             new KeepDonationCategoryOption("Armor Only", KeepDonationCategory.ArmorOnly),
             new KeepDonationCategoryOption("Weapons & Armor", KeepDonationCategory.WeaponsAndArmor)
+        };
+
+        private static readonly IReadOnlyList<EquipmentSaleReportDetailModeOption> EquipmentSaleReportDetailModeOptions = new List<EquipmentSaleReportDetailModeOption>
+        {
+            new EquipmentSaleReportDetailModeOption("Category Counts", EquipmentSaleReportDetailMode.CategoryCounts),
+            new EquipmentSaleReportDetailModeOption("Full Item List", EquipmentSaleReportDetailMode.FullItemList)
+        };
+
+        private static readonly IReadOnlyList<EquipmentReportSortModeOption> EquipmentReportSortModeOptions = new List<EquipmentReportSortModeOption>
+        {
+            new EquipmentReportSortModeOption("Amount", EquipmentReportSortMode.Amount),
+            new EquipmentReportSortModeOption("Market Value", EquipmentReportSortMode.MarketValue),
+            new EquipmentReportSortModeOption("Paid Price", EquipmentReportSortMode.PaidPrice)
         };
 
         [SettingPropertyBool("Auto-Equip Companions", RequireRestart = false,
@@ -227,6 +269,22 @@ namespace EquipmentManager
         public Dropdown<RequestProfileOption> StealthGearSpendModeDropdown { get; set; } =
             new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Luxury));
 
+        [SettingPropertyDropdown("Sale Report Detail", RequireRestart = false,
+            HintText = "Category Counts reports spare gear sales as armor/weapon totals. Full Item List prints individual sold equipment.", Order = 1)]
+        [SettingPropertyGroup("Equipment Reporting", GroupOrder = 5)]
+        public Dropdown<EquipmentSaleReportDetailModeOption> EquipmentSaleReportDetailDropdown { get; set; } =
+            new Dropdown<EquipmentSaleReportDetailModeOption>(EquipmentSaleReportDetailModeOptions, 0);
+
+        [SettingPropertyInteger("Max Items to Print Details For", 1, 20, RequireRestart = false,
+            HintText = "Maximum individual equipment item types shown when printing detailed report lines.", Order = 2)]
+        [SettingPropertyGroup("Equipment Reporting", GroupOrder = 5)]
+        public int MaxReportItemsToPrint { get; set; } = 4;
+
+        [SettingPropertyDropdown("Sorting Mode", RequireRestart = false,
+            HintText = "Choose how detailed equipment report lines select which items to print.", Order = 3)]
+        [SettingPropertyGroup("Equipment Reporting", GroupOrder = 5)]
+        public Dropdown<EquipmentReportSortModeOption> EquipmentReportSortDropdown { get; set; } =
+            new Dropdown<EquipmentReportSortModeOption>(EquipmentReportSortModeOptions, 2);
 
         // Compatibility wrappers
         public AutoEquipCategory AutoEquipCategorySetting => AutoEquipCategoryDropdown.SelectedValue.Value;
@@ -236,5 +294,7 @@ namespace EquipmentManager
         public BuyEquipmentTarget BuyEquipmentTargetSetting => BuyEquipmentTargetDropdown.SelectedValue.Value;
         public RequestProfile TopArmorRequestProfile => TopArmorSpendModeDropdown.SelectedValue.Value;
         public RequestProfile StealthGearRequestProfile => StealthGearSpendModeDropdown.SelectedValue.Value;
+        public EquipmentSaleReportDetailMode EquipmentSaleReportDetail => EquipmentSaleReportDetailDropdown.SelectedValue.Value;
+        public EquipmentReportSortMode EquipmentReportSort => EquipmentReportSortDropdown.SelectedValue.Value;
     }
 }

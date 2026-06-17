@@ -83,19 +83,28 @@ namespace TradeOptimizer
             base.OnGameStart(game, gameStarter);
             if (game.GameType is Campaign)
             {
+                UnregisterAutomationHooks();
+
                 _provider = new TradeOptimizerProvider();
                 AutomationRegistry.RegisterPreSellProvider(_provider);
                 AutomationRegistry.RegisterFreeTradeAnalyzer(_provider);
+                AutomationRegistry.RegisterReportProvider(_provider);
             }
         }
 
         public override void OnGameEnd(Game game)
         {
             base.OnGameEnd(game);
+            UnregisterAutomationHooks();
+        }
+
+        private static void UnregisterAutomationHooks()
+        {
             if (_provider != null)
             {
                 AutomationRegistry.UnregisterPreSellProvider(_provider);
                 AutomationRegistry.UnregisterFreeTradeAnalyzer(_provider);
+                AutomationRegistry.UnregisterReportProvider(_provider);
                 _provider = null;
             }
         }

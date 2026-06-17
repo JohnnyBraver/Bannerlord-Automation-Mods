@@ -148,8 +148,61 @@ namespace SettlementAutomationCore.Tests
 
             string summary = SubModule.BuildGenericProviderActivitySummary(report);
 
-            Assert.Contains("Bought Armor: 1x Body Armor (-2000d)", summary);
-            Assert.Contains("Food: 5x Grain (-100d), 4x Fish (-80d), 3x Butter (-120d), 2x Cheese (-90d), 1 more", summary);
+            Assert.Contains("bought Armor 1x (-2000d)", summary);
+            Assert.Contains("Food 15x (-460d)", summary);
+            Assert.DoesNotContain("Date Fruit", summary);
+        }
+
+        [Fact]
+        public void BuildGenericProviderReportLine_UsesShortCoreSummary()
+        {
+            var equipmentReport = new AutomationProviderReport(
+                "EquipmentManager",
+                AutomationTransactionStage.PriorityRequest,
+                new[]
+                {
+                    new AutomationReportItem("Blackened Armor", InventoryItemCategory.Armor, 1, 2096)
+                },
+                new List<AutomationReportItem>(),
+                new List<AutomationReportItem>());
+            var tradeReport = new AutomationProviderReport(
+                "TradeOptimizer",
+                AutomationTransactionStage.FreeTrade,
+                new[]
+                {
+                    new AutomationReportItem("Clay", InventoryItemCategory.TradeGood, 44, 352)
+                },
+                new List<AutomationReportItem>(),
+                new List<AutomationReportItem>());
+
+            string equipmentLine = SubModule.BuildGenericProviderReportLine(equipmentReport);
+            string tradeLine = SubModule.BuildGenericProviderReportLine(tradeReport);
+
+            Assert.Equal("[Core] Equipment requests: bought Armor 1x (-2096d)", equipmentLine);
+            Assert.Equal("[Core] Free trade: bought Trade goods 44x (-352d)", tradeLine);
+        }
+
+        [Fact]
+        public void BuildGenericProviderReportLine_SummarizesMixedFreeTrade()
+        {
+            var report = new AutomationProviderReport(
+                "TradeOptimizer",
+                AutomationTransactionStage.FreeTrade,
+                new[]
+                {
+                    new AutomationReportItem("Clay", InventoryItemCategory.TradeGood, 44, 352),
+                    new AutomationReportItem("Grain", InventoryItemCategory.Food, 5, 75)
+                },
+                new[]
+                {
+                    new AutomationReportItem("Wine", InventoryItemCategory.TradeGood, 7, 490),
+                    new AutomationReportItem("Hog", InventoryItemCategory.Livestock, 2, 120)
+                },
+                new List<AutomationReportItem>());
+
+            string line = SubModule.BuildGenericProviderReportLine(report);
+
+            Assert.Equal("[Core] Free trade: sold Livestock 2x (+120d), Trade goods 7x (+490d); bought Food 5x (-75d), Trade goods 44x (-352d)", line);
         }
 
         [Fact]

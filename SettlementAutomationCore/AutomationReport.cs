@@ -13,16 +13,22 @@ namespace SettlementAutomationCore
     public sealed class AutomationReportItem
     {
         public AutomationReportItem(string itemName, int quantity, int gold)
-            : this(itemName, InventoryItemCategory.None, quantity, gold)
+            : this(itemName, InventoryItemCategory.None, quantity, gold, 0)
         {
         }
 
         public AutomationReportItem(string itemName, InventoryItemCategory category, int quantity, int gold)
+            : this(itemName, category, quantity, gold, 0)
+        {
+        }
+
+        public AutomationReportItem(string itemName, InventoryItemCategory category, int quantity, int gold, int marketValue)
         {
             ItemName = itemName;
             Category = category;
             Quantity = quantity;
             Gold = gold;
+            MarketValue = marketValue;
         }
 
         public string ItemName { get; }
@@ -30,6 +36,7 @@ namespace SettlementAutomationCore
         public string CategoryName => InventoryItemCategoryLabels.GetDisplayName(Category);
         public int Quantity { get; }
         public int Gold { get; }
+        public int MarketValue { get; }
     }
 
     public sealed class AutomationProviderReport

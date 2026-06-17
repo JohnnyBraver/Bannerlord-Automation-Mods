@@ -66,6 +66,35 @@ namespace TradeOptimizer
         public override string ToString() => _name;
     }
 
+    public enum TradeReportDetailMode
+    {
+        TopTradeGoods,
+        Full
+    }
+
+    public class TradeReportDetailModeOption
+    {
+        private readonly string _name;
+        public TradeReportDetailMode Value { get; }
+        public TradeReportDetailModeOption(string name, TradeReportDetailMode value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
+    public enum TradeReportSortMode
+    {
+        Amount,
+        MarketValue,
+        PaidPrice
+    }
+
+    public class TradeReportSortModeOption
+    {
+        private readonly string _name;
+        public TradeReportSortMode Value { get; }
+        public TradeReportSortModeOption(string name, TradeReportSortMode value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
     public class Settings : AttributeGlobalSettings<Settings>
     {
         public override string Id => "TradeOptimizer_v3";
@@ -99,6 +128,19 @@ namespace TradeOptimizer
             new TradingModeOption("Sell Only", TradingMode.SellOnly),
             new TradingModeOption("Buy Only", TradingMode.BuyOnly),
             new TradingModeOption("Buy & Sell", TradingMode.BuyAndSell)
+        };
+
+        private static readonly IReadOnlyList<TradeReportDetailModeOption> TradeReportDetailModeOptions = new List<TradeReportDetailModeOption>
+        {
+            new TradeReportDetailModeOption("Top Trade Goods", TradeReportDetailMode.TopTradeGoods),
+            new TradeReportDetailModeOption("Full Item List", TradeReportDetailMode.Full)
+        };
+
+        private static readonly IReadOnlyList<TradeReportSortModeOption> TradeReportSortModeOptions = new List<TradeReportSortModeOption>
+        {
+            new TradeReportSortModeOption("Amount", TradeReportSortMode.Amount),
+            new TradeReportSortModeOption("Market Value", TradeReportSortMode.MarketValue),
+            new TradeReportSortModeOption("Paid Price", TradeReportSortMode.PaidPrice)
         };
 
         [SettingPropertyBool("Auto-trade on Settlement Entry", RequireRestart = false,
@@ -172,6 +214,28 @@ namespace TradeOptimizer
         public Dropdown<TradingModeOption> MountsTradingModeDropdown { get; set; } =
             new Dropdown<TradingModeOption>(TradingModeOptions, 0); // Default: None (index 0)
 
+        [SettingPropertyDropdown("Level of Detail", RequireRestart = false,
+            HintText = "Top Trade Goods reports only the most important trade goods. Full Item List reports every traded item.", Order = 1)]
+        [SettingPropertyGroup("Trade Reporting", GroupOrder = 4)]
+        public Dropdown<TradeReportDetailModeOption> TradeReportDetailDropdown { get; set; } =
+            new Dropdown<TradeReportDetailModeOption>(TradeReportDetailModeOptions, 0);
+
+        [SettingPropertyInteger("Max Items to Print Details For", 1, 20, RequireRestart = false,
+            HintText = "Maximum trade-good item types shown for buys and for sells in the concise in-game TradeOptimizer report.", Order = 2)]
+        [SettingPropertyGroup("Trade Reporting", GroupOrder = 4)]
+        public int TopTradeGoodsToReport { get; set; } = 4;
+
+        [SettingPropertyBool("Apply Max Items Per Side", RequireRestart = false,
+            HintText = "If enabled, the max item count applies separately to sold and bought trade goods. If disabled, the max applies to the combined report.", Order = 3)]
+        [SettingPropertyGroup("Trade Reporting", GroupOrder = 4)]
+        public bool ApplyTradeReportLimitPerSide { get; set; } = true;
+
+        [SettingPropertyDropdown("Sorting Mode", RequireRestart = false,
+            HintText = "Choose how the concise in-game TradeOptimizer report selects top trade goods.", Order = 4)]
+        [SettingPropertyGroup("Trade Reporting", GroupOrder = 4)]
+        public Dropdown<TradeReportSortModeOption> TradeReportSortDropdown { get; set; } =
+            new Dropdown<TradeReportSortModeOption>(TradeReportSortModeOptions, 2);
+
         // Helper properties for cleaner logic access
         public PricingReferenceMode PricingReference => PricingReferenceDropdown.SelectedValue.Value;
         public TradingStance Stance => TradingStanceDropdown.SelectedValue.Value;
@@ -181,5 +245,7 @@ namespace TradeOptimizer
         public TradingMode FoodTradingMode => FoodTradingModeDropdown.SelectedValue.Value;
         public TradingMode LivestockTradingMode => LivestockTradingModeDropdown.SelectedValue.Value;
         public TradingMode MountsTradingMode => MountsTradingModeDropdown.SelectedValue.Value;
+        public TradeReportDetailMode TradeReportDetail => TradeReportDetailDropdown.SelectedValue.Value;
+        public TradeReportSortMode TradeReportSort => TradeReportSortDropdown.SelectedValue.Value;
     }
 }

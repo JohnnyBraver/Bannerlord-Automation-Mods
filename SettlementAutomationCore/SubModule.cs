@@ -655,8 +655,9 @@ namespace SettlementAutomationCore
             {
                 string itemName = GetItemName(equipmentElement);
                 var category = GetItemCategory(equipmentElement);
-                _summary.AddBought(itemName, category, quantity, gold);
-                GetProviderSummary(providerName, stage).Summary.AddBought(itemName, category, quantity, gold);
+                int marketValue = GetItemMarketValue(equipmentElement, quantity);
+                _summary.AddBought(itemName, category, quantity, gold, marketValue);
+                GetProviderSummary(providerName, stage).Summary.AddBought(itemName, category, quantity, gold, marketValue);
             }
 
             public void AddSold(EquipmentElement equipmentElement, int quantity, int gold)
@@ -668,8 +669,9 @@ namespace SettlementAutomationCore
             {
                 string itemName = GetItemName(equipmentElement);
                 var category = GetItemCategory(equipmentElement);
-                _summary.AddSold(itemName, category, quantity, gold);
-                GetProviderSummary(providerName, stage).Summary.AddSold(itemName, category, quantity, gold);
+                int marketValue = GetItemMarketValue(equipmentElement, quantity);
+                _summary.AddSold(itemName, category, quantity, gold, marketValue);
+                GetProviderSummary(providerName, stage).Summary.AddSold(itemName, category, quantity, gold, marketValue);
             }
 
             public void AddSlaughtered(EquipmentElement equipmentElement, int quantity)
@@ -681,8 +683,9 @@ namespace SettlementAutomationCore
             {
                 string itemName = GetItemName(equipmentElement);
                 var category = GetItemCategory(equipmentElement);
-                _summary.AddSlaughtered(itemName, category, quantity);
-                GetProviderSummary(providerName, stage).Summary.AddSlaughtered(itemName, category, quantity);
+                int marketValue = GetItemMarketValue(equipmentElement, quantity);
+                _summary.AddSlaughtered(itemName, category, quantity, marketValue);
+                GetProviderSummary(providerName, stage).Summary.AddSlaughtered(itemName, category, quantity, marketValue);
             }
 
             public void AddGoldDelta(int goldDelta)
@@ -736,6 +739,11 @@ namespace SettlementAutomationCore
             private static InventoryItemCategory GetItemCategory(EquipmentElement equipmentElement)
             {
                 return InventoryItemView.Classify(equipmentElement.Item);
+            }
+
+            private static int GetItemMarketValue(EquipmentElement equipmentElement, int quantity)
+            {
+                return Math.Max(0, equipmentElement.Item?.Value ?? 0) * Math.Max(0, quantity);
             }
 
             private sealed class ProviderStageSummary
@@ -1182,16 +1190,16 @@ namespace SettlementAutomationCore
 
             foreach (var report in coreSummaryReports)
             {
-                string line = BuildGenericProviderReportLine(settlement, report);
+                string line = BuildGenericProviderReportLine(report);
                 if (string.IsNullOrWhiteSpace(line)) continue;
 
-                DisplayReportMessage(line, GetProviderHeaderColor(report.ProviderName));
+                DisplayCoreReportMessage(line);
                 displayedAnyReport = true;
             }
 
             if (displayedAnyReport && !string.IsNullOrWhiteSpace(cargoStatus))
             {
-                DisplayReportMessage($"[Automation] Cargo: {cargoStatus}", GetProviderHeaderColor("SettlementAutomationCore"));
+                DisplayCoreReportMessage($"[Core] Cargo: {cargoStatus}");
             }
 
             Helpers.Logger.WriteLog("SettlementAutomationCore", marketReport.BuildLogSummary(settlement));
@@ -1313,12 +1321,17 @@ namespace SettlementAutomationCore
             InformationManager.DisplayMessage(new InformationMessage(line, Color.FromUint(color)));
         }
 
-        private static string BuildGenericProviderReportLine(Settlement settlement, AutomationProviderReport report)
+        private static void DisplayCoreReportMessage(string line)
+        {
+            InformationManager.DisplayMessage(new InformationMessage(line));
+        }
+
+        internal static string BuildGenericProviderReportLine(AutomationProviderReport report)
         {
             string summary = BuildGenericProviderActivitySummary(report);
             if (string.IsNullOrWhiteSpace(summary)) return "";
 
-            return $"[Automation] {report.ProviderName} {GetStageLabel(report.Stage)} @ {settlement.Name}: {summary}";
+            return $"[Core] {GetCompactReportLabel(report)}: {summary}";
         }
 
         internal static string BuildGenericProviderActivitySummary(AutomationProviderReport report)
@@ -1326,15 +1339,15 @@ namespace SettlementAutomationCore
             var parts = new List<string>();
             if (report.SoldItems.Count > 0)
             {
-                parts.Add($"Sold {FormatReportItems(report.SoldItems, isSale: true)}");
+                parts.Add($"sold {FormatReportItems(report.SoldItems, isSale: true)}");
             }
             if (report.BoughtItems.Count > 0)
             {
-                parts.Add($"Bought {FormatReportItems(report.BoughtItems, isSale: false)}");
+                parts.Add($"bought {FormatReportItems(report.BoughtItems, isSale: false)}");
             }
             if (report.SlaughteredItems.Count > 0)
             {
-                parts.Add($"Slaughtered {FormatReportItems(report.SlaughteredItems, isSale: false, includeGold: false)}");
+                parts.Add($"slaughtered {FormatReportItems(report.SlaughteredItems, isSale: false, includeGold: false)}");
             }
 
             return string.Join("; ", parts);
@@ -1346,27 +1359,49 @@ namespace SettlementAutomationCore
                 .GroupBy(item => item.CategoryName)
                 .OrderBy(group => GetCategorySortOrder(group.First().Category))
                 .ThenBy(group => group.Key)
-                .Select(group => $"{group.Key}: {FormatReportCategoryItems(group.ToList(), isSale, includeGold)}")
+                .Select(group => FormatReportCategoryTotal(group.Key, group.ToList(), isSale, includeGold))
                 .ToList();
-
-            return string.Join("; ", visible);
-        }
-
-        private static string FormatReportCategoryItems(IReadOnlyList<AutomationReportItem> items, bool isSale, bool includeGold)
-        {
-            const int itemLimit = 4;
-            var visible = items
-                .Take(itemLimit)
-                .Select(item => FormatReportItem(item, isSale, includeGold))
-                .ToList();
-
-            int hidden = items.Count - visible.Count;
-            if (hidden > 0)
-            {
-                visible.Add($"{hidden} more");
-            }
 
             return string.Join(", ", visible);
+        }
+
+        private static string FormatReportCategoryTotal(string categoryName, IReadOnlyList<AutomationReportItem> items, bool isSale, bool includeGold)
+        {
+            int quantity = items.Sum(item => item.Quantity);
+            int gold = items.Sum(item => item.Gold);
+            if (!includeGold || gold == 0)
+            {
+                return $"{categoryName} {quantity}x";
+            }
+
+            string sign = isSale ? "+" : "-";
+            return $"{categoryName} {quantity}x ({sign}{Math.Abs(gold)}d)";
+        }
+
+        private static string GetCompactProviderName(string providerName)
+        {
+            if (string.IsNullOrWhiteSpace(providerName)) return "Automation";
+            if (string.Equals(providerName, "SettlementAutomationCore", StringComparison.OrdinalIgnoreCase)) return "Core";
+            if (providerName.EndsWith("Manager", StringComparison.OrdinalIgnoreCase))
+            {
+                return providerName.Substring(0, providerName.Length - "Manager".Length);
+            }
+            if (providerName.EndsWith("Optimizer", StringComparison.OrdinalIgnoreCase))
+            {
+                return providerName.Substring(0, providerName.Length - "Optimizer".Length);
+            }
+
+            return providerName;
+        }
+
+        private static string GetCompactReportLabel(AutomationProviderReport report)
+        {
+            if (report.Stage == AutomationTransactionStage.FreeTrade)
+            {
+                return "Free trade";
+            }
+
+            return $"{GetCompactProviderName(report.ProviderName)} {GetStageLabel(report.Stage)}";
         }
 
         private static int GetCategorySortOrder(InventoryItemCategory category)

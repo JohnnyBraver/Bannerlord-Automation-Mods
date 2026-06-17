@@ -12,6 +12,7 @@ namespace SettlementAutomationCore
             public InventoryItemCategory Category { get; set; }
             public int Quantity { get; set; }
             public int Gold { get; set; }
+            public int MarketValue { get; set; }
         }
 
         private readonly Dictionary<string, ItemActivity> _boughtItems = new Dictionary<string, ItemActivity>();
@@ -29,32 +30,47 @@ namespace SettlementAutomationCore
 
         public void AddBought(string itemName, int quantity, int gold)
         {
-            AddBought(itemName, InventoryItemCategory.None, quantity, gold);
+            AddBought(itemName, InventoryItemCategory.None, quantity, gold, 0);
         }
 
         public void AddBought(string itemName, InventoryItemCategory category, int quantity, int gold)
         {
-            AddItem(_boughtItems, itemName, category, quantity, gold);
+            AddBought(itemName, category, quantity, gold, 0);
+        }
+
+        public void AddBought(string itemName, InventoryItemCategory category, int quantity, int gold, int marketValue)
+        {
+            AddItem(_boughtItems, itemName, category, quantity, gold, marketValue);
         }
 
         public void AddSold(string itemName, int quantity, int gold)
         {
-            AddSold(itemName, InventoryItemCategory.None, quantity, gold);
+            AddSold(itemName, InventoryItemCategory.None, quantity, gold, 0);
         }
 
         public void AddSold(string itemName, InventoryItemCategory category, int quantity, int gold)
         {
-            AddItem(_soldItems, itemName, category, quantity, gold);
+            AddSold(itemName, category, quantity, gold, 0);
+        }
+
+        public void AddSold(string itemName, InventoryItemCategory category, int quantity, int gold, int marketValue)
+        {
+            AddItem(_soldItems, itemName, category, quantity, gold, marketValue);
         }
 
         public void AddSlaughtered(string itemName, int quantity)
         {
-            AddSlaughtered(itemName, InventoryItemCategory.None, quantity);
+            AddSlaughtered(itemName, InventoryItemCategory.None, quantity, 0);
         }
 
         public void AddSlaughtered(string itemName, InventoryItemCategory category, int quantity)
         {
-            AddItem(_slaughteredItems, itemName, category, quantity, 0);
+            AddSlaughtered(itemName, category, quantity, 0);
+        }
+
+        public void AddSlaughtered(string itemName, InventoryItemCategory category, int quantity, int marketValue)
+        {
+            AddItem(_slaughteredItems, itemName, category, quantity, 0, marketValue);
         }
 
         public void AddGoldDelta(int goldDelta)
@@ -111,7 +127,7 @@ namespace SettlementAutomationCore
             return $"Market automation summary at {settlementName} (Gold change: {goldSign}{GoldDelta}d). {string.Join(" ", parts)}";
         }
 
-        private static void AddItem(Dictionary<string, ItemActivity> items, string itemName, InventoryItemCategory category, int quantity, int gold)
+        private static void AddItem(Dictionary<string, ItemActivity> items, string itemName, InventoryItemCategory category, int quantity, int gold, int marketValue)
         {
             if (quantity <= 0 || string.IsNullOrWhiteSpace(itemName)) return;
 
@@ -120,10 +136,11 @@ namespace SettlementAutomationCore
                 current.Category |= category;
                 current.Quantity += quantity;
                 current.Gold += gold;
+                current.MarketValue += marketValue;
             }
             else
             {
-                items.Add(itemName, new ItemActivity { Category = category, Quantity = quantity, Gold = gold });
+                items.Add(itemName, new ItemActivity { Category = category, Quantity = quantity, Gold = gold, MarketValue = marketValue });
             }
         }
 
@@ -164,7 +181,7 @@ namespace SettlementAutomationCore
             return items
                 .OrderByDescending(item => item.Value.Quantity)
                 .ThenBy(item => item.Key)
-                .Select(item => new AutomationReportItem(item.Key, item.Value.Category, item.Value.Quantity, item.Value.Gold))
+                .Select(item => new AutomationReportItem(item.Key, item.Value.Category, item.Value.Quantity, item.Value.Gold, item.Value.MarketValue))
                 .ToList();
         }
     }

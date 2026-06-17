@@ -25,30 +25,52 @@ namespace EquipmentManager
         }
 
         public string ProviderName => "EquipmentManager";
-        public uint? ReportHeaderColor => 0xE6A23CFF;
+        public uint? ReportHeaderColor => 0x8FA3ADFF;
 
         public IReadOnlyList<string> BuildAutomationReportLines(AutomationReportContext context)
         {
-            var lines = new List<string>();
-            if (context == null) return lines;
+            if (context == null) return new List<string>();
 
-            if (context.Stage == AutomationTransactionStage.PreSell && context.SoldItems.Count > 0)
+            var settings = Settings.Instance;
+            return BuildAutomationReportLines(
+                context.Stage,
+                context.Settlement?.Name?.ToString() ?? "Settlement",
+                context.BoughtItems,
+                context.SoldItems,
+                settings?.EquipmentSaleReportDetail ?? EquipmentSaleReportDetailMode.CategoryCounts,
+                Math.Max(1, settings?.MaxReportItemsToPrint ?? 4),
+                settings?.EquipmentReportSort ?? EquipmentReportSortMode.PaidPrice);
+        }
+
+        internal static IReadOnlyList<string> BuildAutomationReportLines(
+            AutomationTransactionStage stage,
+            string settlementName,
+            IReadOnlyList<AutomationReportItem> boughtItems,
+            IReadOnlyList<AutomationReportItem> soldItems,
+            EquipmentSaleReportDetailMode saleReportDetail,
+            int maxItems,
+            EquipmentReportSortMode sortMode)
+        {
+            var lines = new List<string>();
+            maxItems = Math.Max(1, maxItems);
+
+            if (stage == AutomationTransactionStage.PreSell && soldItems.Count > 0)
             {
-                lines.Add($"[Equipment] Sold spare gear @ {context.Settlement.Name}: {FormatReportItems(context.SoldItems, isSale: true)}");
+                lines.Add($"[Equipment] Sold spare gear @ {settlementName}: {FormatSaleReportItems(soldItems, saleReportDetail, maxItems, sortMode)}");
             }
-            else if (context.Stage == AutomationTransactionStage.PriorityRequest && context.BoughtItems.Count > 0)
+            else if (stage == AutomationTransactionStage.PriorityRequest && boughtItems.Count > 0)
             {
-                lines.Add($"[Equipment] Bought upgrades @ {context.Settlement.Name}: {FormatReportItems(context.BoughtItems, isSale: false)}");
+                lines.Add($"[Equipment] Bought upgrades @ {settlementName}: {FormatDetailedReportItems(boughtItems, false, maxItems, sortMode)}");
             }
-            else if (context.Stage == AutomationTransactionStage.FreeTrade)
+            else if (stage == AutomationTransactionStage.FreeTrade)
             {
-                if (context.SoldItems.Count > 0)
+                if (soldItems.Count > 0)
                 {
-                    lines.Add($"[Equipment] Free-trade gear sold @ {context.Settlement.Name}: {FormatReportItems(context.SoldItems, isSale: true)}");
+                    lines.Add($"[Equipment] Free-trade gear sold @ {settlementName}: {FormatSaleReportItems(soldItems, saleReportDetail, maxItems, sortMode)}");
                 }
-                if (context.BoughtItems.Count > 0)
+                if (boughtItems.Count > 0)
                 {
-                    lines.Add($"[Equipment] Free-trade gear bought @ {context.Settlement.Name}: {FormatReportItems(context.BoughtItems, isSale: false)}");
+                    lines.Add($"[Equipment] Free-trade gear bought @ {settlementName}: {FormatDetailedReportItems(boughtItems, false, maxItems, sortMode)}");
                 }
             }
 
@@ -454,21 +476,78 @@ namespace EquipmentManager
             return stealthFactor * 1000f + GetArmorScore(eqEl);
         }
 
-        private static string FormatReportItems(IReadOnlyList<AutomationReportItem> items, bool isSale)
+        private static string FormatSaleReportItems(
+            IReadOnlyList<AutomationReportItem> items,
+            EquipmentSaleReportDetailMode saleReportDetail,
+            int maxItems,
+            EquipmentReportSortMode sortMode)
         {
-            const int itemLimit = 8;
-            var visible = items
-                .Take(itemLimit)
+            if (saleReportDetail == EquipmentSaleReportDetailMode.FullItemList)
+            {
+                return FormatDetailedReportItems(items, true, maxItems, sortMode);
+            }
+
+            return FormatCategoryCounts(items, isSale: true);
+        }
+
+        private static string FormatCategoryCounts(IReadOnlyList<AutomationReportItem> items, bool isSale)
+        {
+            return string.Join(", ", items
+                .GroupBy(item => item.CategoryName)
+                .OrderBy(group => GetCategorySortOrder(group.First().Category))
+                .ThenBy(group => group.Key)
+                .Select(group => FormatCategoryTotal(group.Key, group.ToList(), isSale)));
+        }
+
+        private static string FormatCategoryTotal(string categoryName, IReadOnlyList<AutomationReportItem> items, bool isSale)
+        {
+            int quantity = items.Sum(item => item.Quantity);
+            int gold = items.Sum(item => item.Gold);
+            if (gold == 0)
+            {
+                return $"{categoryName} {quantity}x";
+            }
+
+            string sign = isSale ? "+" : "-";
+            return $"{categoryName} {quantity}x ({sign}{Math.Abs(gold)}d)";
+        }
+
+        private static string FormatDetailedReportItems(IReadOnlyList<AutomationReportItem> items, bool isSale, int maxItems, EquipmentReportSortMode sortMode)
+        {
+            var orderedItems = SortReportItems(items, sortMode).ToList();
+            var visible = orderedItems
+                .Take(Math.Max(1, maxItems))
                 .Select(item => FormatReportItem(item, isSale))
                 .ToList();
 
-            int hidden = items.Count - visible.Count;
+            int hidden = orderedItems.Count - visible.Count;
             if (hidden > 0)
             {
                 visible.Add($"{hidden} more");
             }
 
             return string.Join(", ", visible);
+        }
+
+        private static IEnumerable<AutomationReportItem> SortReportItems(IReadOnlyList<AutomationReportItem> items, EquipmentReportSortMode sortMode)
+        {
+            switch (sortMode)
+            {
+                case EquipmentReportSortMode.Amount:
+                    return items.OrderByDescending(item => item.Quantity).ThenBy(item => item.ItemName);
+                case EquipmentReportSortMode.MarketValue:
+                    return items.OrderByDescending(item => item.MarketValue).ThenByDescending(item => item.Gold).ThenBy(item => item.ItemName);
+                case EquipmentReportSortMode.PaidPrice:
+                default:
+                    return items.OrderByDescending(item => item.Gold).ThenByDescending(item => item.MarketValue).ThenBy(item => item.ItemName);
+            }
+        }
+
+        private static int GetCategorySortOrder(InventoryItemCategory category)
+        {
+            if ((category & InventoryItemCategory.Armor) == InventoryItemCategory.Armor) return 0;
+            if ((category & InventoryItemCategory.Weapon) == InventoryItemCategory.Weapon) return 1;
+            return 2;
         }
 
         private static string FormatReportItem(AutomationReportItem item, bool isSale)
