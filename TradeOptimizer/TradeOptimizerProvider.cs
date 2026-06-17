@@ -409,15 +409,7 @@ namespace TradeOptimizer
                 bool runSell = !settings.ShouldSplitTransactions;
                 bool runBuy = true;
 
-                HashSet<string>? excludedSellItems = null;
-                if (settings.ShouldSplitTransactions)
-                {
-                    // Pre-sell already handled the sell phase; exclude those items
-                    var preSellOrders = SimulateAndCollectOrders(party, settlement, runSell: true, runBuy: false, isMainCall: false);
-                    excludedSellItems = new HashSet<string>(preSellOrders.Where(o => !o.IsBuy).Select(o => o.EquipmentElement.Item?.Name.ToString() ?? ""));
-                }
-
-                var report = TradingEngine.RunOptimization(vm, runSell, runBuy, context, excludedSellItems);
+                var report = TradingEngine.RunOptimization(vm, runSell, runBuy, context);
 
                 // Compute net changes
                 var finalPlayerCounts = new Dictionary<string, int>();

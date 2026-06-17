@@ -57,6 +57,9 @@ namespace TradeOptimizer
             SettlementAutomationCore.TradeContext tradeContext,
             HashSet<string>? excludedItems = null)
         {
+            const int MaxBuyLoopIterations = 1000;
+            const int MaxBuySkipDiagnostics = 25;
+
             var report = new TradeTransactionReport();
             if (vm == null) return report;
             if (tradeContext == null) throw new ArgumentNullException(nameof(tradeContext));
@@ -324,6 +327,10 @@ namespace TradeOptimizer
                 var merchantItems = vm.LeftItemListVM.ToList();
                 var boughtQuantities = new Dictionary<SPItemVM, int>();
                 var totalGoldSpentMap = new Dictionary<SPItemVM, int>();
+                var loggedSkipDiagnostics = new HashSet<string>();
+                int buySkipDiagnosticsWritten = 0;
+                bool buySkipDiagnosticsSuppressed = false;
+                int buyLoopIterations = 0;
 
                 foreach (var item in merchantItems)
                 {
@@ -340,6 +347,13 @@ namespace TradeOptimizer
 
                 while (true)
                 {
+                    buyLoopIterations++;
+                    if (buyLoopIterations > MaxBuyLoopIterations)
+                    {
+                        WriteLog($"[Buy Loop Guard] Stopped buy optimization after {MaxBuyLoopIterations} iterations to keep town-entry automation responsive.");
+                        break;
+                    }
+
                     SPItemVM? bestItem = null;
                     float bestProfitDensity = -1f;
 
@@ -452,9 +466,19 @@ namespace TradeOptimizer
 
                         if (skipReason != "")
                         {
-                            if (currentPrice < avgPrice)
+                            if (currentPrice < avgPrice && buySkipDiagnosticsWritten < MaxBuySkipDiagnostics)
                             {
-                                WriteLog($"[Buy Skip Diagnostic] {itemObj.Name}: {skipReason}");
+                                string diagnosticKey = $"{itemObj.StringId}:{skipReason}";
+                                if (loggedSkipDiagnostics.Add(diagnosticKey))
+                                {
+                                    WriteLog($"[Buy Skip Diagnostic] {itemObj.Name}: {skipReason}");
+                                    buySkipDiagnosticsWritten++;
+                                }
+                            }
+                            else if (currentPrice < avgPrice && !buySkipDiagnosticsSuppressed)
+                            {
+                                WriteLog($"[Buy Skip Diagnostic] Additional buy-skip diagnostics suppressed after {MaxBuySkipDiagnostics} unique entries.");
+                                buySkipDiagnosticsSuppressed = true;
                             }
                             continue;
                         }

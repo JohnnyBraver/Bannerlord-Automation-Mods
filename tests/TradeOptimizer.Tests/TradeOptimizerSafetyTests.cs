@@ -1,0 +1,79 @@
+using System;
+using System.IO;
+using Xunit;
+
+namespace TradeOptimizer.Tests
+{
+    public class TradeOptimizerSafetyTests
+    {
+        [Fact]
+        public void AnalyzeMarket_DoesNotRunSecondSellSimulationForSplitTransactions()
+        {
+            string source = ReadSource("TradeOptimizer", "TradeOptimizerProvider.cs");
+            string analyzeMarket = SliceMethod(source, "public TradeProposal AnalyzeMarket");
+
+            Assert.DoesNotContain("SimulateAndCollectOrders", analyzeMarket);
+        }
+
+        [Fact]
+        public void TradingEngine_BoundsBuyLoopAndDiagnosticSpam()
+        {
+            string source = ReadSource("TradeOptimizer", "TradingEngine.cs");
+
+            Assert.Contains("MaxBuyLoopIterations", source);
+            Assert.Contains("MaxBuySkipDiagnostics", source);
+            Assert.Contains("[Buy Loop Guard]", source);
+            Assert.Contains("Additional buy-skip diagnostics suppressed", source);
+        }
+
+        private static string ReadSource(params string[] parts)
+        {
+            string root = FindRepoRoot();
+            return File.ReadAllText(Path.Combine(root, Path.Combine(parts)));
+        }
+
+        private static string SliceMethod(string source, string marker)
+        {
+            int start = source.IndexOf(marker, StringComparison.Ordinal);
+            Assert.True(start >= 0, $"Could not find marker: {marker}");
+
+            int depth = 0;
+            bool started = false;
+            for (int i = start; i < source.Length; i++)
+            {
+                if (source[i] == '{')
+                {
+                    depth++;
+                    started = true;
+                }
+                else if (source[i] == '}')
+                {
+                    depth--;
+                    if (started && depth == 0)
+                    {
+                        return source.Substring(start, i - start + 1);
+                    }
+                }
+            }
+
+            throw new InvalidOperationException($"Could not slice method for marker: {marker}");
+        }
+
+        private static string FindRepoRoot()
+        {
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir != null)
+            {
+                if (Directory.Exists(Path.Combine(dir.FullName, "SettlementAutomationCore")) &&
+                    Directory.Exists(Path.Combine(dir.FullName, "TradeOptimizer")))
+                {
+                    return dir.FullName;
+                }
+
+                dir = dir.Parent;
+            }
+
+            throw new DirectoryNotFoundException("Could not find Bannerlord-Mods repository root.");
+        }
+    }
+}
