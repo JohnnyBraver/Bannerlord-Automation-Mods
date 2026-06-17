@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -21,6 +21,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TradeOptimizer.Tests", "tests\TradeOptimizer.Tests\TradeOptimizer.Tests.csproj", "{30A4E32C-D023-4CE9-B8CE-27F9DD16179D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FiefManager.Tests", "tests\FiefManager.Tests\FiefManager.Tests.csproj", "{51B9EF74-A4EA-45F3-B58A-4872293AE900}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmithingOptimizer", "SmithingOptimizer\SmithingOptimizer.csproj", "{92F911B8-1680-4F0B-AFAC-3061ED241B16}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -68,9 +70,12 @@ Global
 		{51B9EF74-A4EA-45F3-B58A-4872293AE900}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{51B9EF74-A4EA-45F3-B58A-4872293AE900}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{51B9EF74-A4EA-45F3-B58A-4872293AE900}.Release|Any CPU.Build.0 = Release|Any CPU
+		{92F911B8-1680-4F0B-AFAC-3061ED241B16}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{92F911B8-1680-4F0B-AFAC-3061ED241B16}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{92F911B8-1680-4F0B-AFAC-3061ED241B16}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{92F911B8-1680-4F0B-AFAC-3061ED241B16}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 EndGlobal
-

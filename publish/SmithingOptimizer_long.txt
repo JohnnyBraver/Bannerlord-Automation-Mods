@@ -1,0 +1,25 @@
+[size=4][b]Description[/b][/size]
+[size=3][color=#D4D4D8]Smithing Optimizer is a forge-screen helper for choosing stronger or more profitable weapon designs from your unlocked smithing parts. It adds an optimize button to the crafting UI, evaluates available part combinations, and can limit suggestions to materials you already own.[/color][/size]
+
+[size=4][b]Installation instructions[/b][/size]
+[size=3][color=#D4D4D8]1. Extract the downloaded archive into your Mount & Blade II Bannerlord game directory (inside the Modules folder).
+2. Ensure the "SmithingOptimizer" folder is present under Modules.
+3. Enable "Smithing Optimizer" in the game launcher.[/color][/size]
+
+[size=4][b]Main features[/b][/size]
+[size=3][color=#D4D4D8]- Forge Optimize Button: Adds a direct optimize command to the weapon design screen.
+- Profit or Damage Goals: Choose whether designs optimize for sell value/XP or weapon damage.
+- Owned-Material Limit: Optionally restricts suggestions to designs you can craft with your current material stock.
+- Unlock Reaction: Can re-optimize automatically when new crafting pieces are unlocked.
+- Slider Tuning: Fine-tunes the best part combinations by adjusting piece scales.[/color][/size]
+
+[size=4][b]Save compatibility[/b][/size]
+[size=3][color=#D4D4D8]Safe to add to new or existing campaigns. This mod does not write custom save data. It only changes the active smithing design in the forge UI when you use its optimizer, so crafted weapons and spent materials persist through normal game systems.[/color][/size]
+
+[size=4][b]Requirements[/b][/size]
+[size=3][color=#D4D4D8]- Harmony
+- UIExtenderEx
+- MCM[/color][/size]
+
+[size=4][b]Shout outs[/b][/size]
+[size=3][color=#D4D4D8]Special thanks to the Bannerlord modding community and everyone testing the Settlement Automation suite.[/color][/size]
