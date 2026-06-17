@@ -12,9 +12,11 @@
 - Auto Project Boosting: Automatically deposits gold to boost project construction speed.
 - Budget Protection: Configures thresholds to never deposit gold if your player balance is low.[/color][/size]
 
+[size=4][b]Save compatibility[/b][/size]
+[size=3][color=#D4D4D8]Safe to add to new or existing campaigns. This mod does not write custom save data. It only performs normal game settlement actions when automation runs, such as choosing construction projects or depositing gold into reserves, so those in-game results will naturally remain in your save.[/color][/size]
+
 [size=4][b]Requirements[/b][/size]
 [size=3][color=#D4D4D8]- Settlement Automation Core
-- Harmony
 - MCM[/color][/size]
 
 [size=4][b]Shout outs[/b][/size]

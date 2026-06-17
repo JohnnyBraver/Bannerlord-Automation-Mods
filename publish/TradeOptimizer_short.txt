@@ -1,1 +1,1 @@
-Automate profit trading and cargo liquidation with configurable commodity category policies.
+Automate profitable buy/sell market passes with configurable trade reporting and commodity policies.

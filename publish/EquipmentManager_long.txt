@@ -1,5 +1,5 @@
 [size=4][b]Description[/b][/size]
-[size=3][color=#D4D4D8]Equipment Manager is an automated gear optimization and acquisition tool. It handles companion hand-me-downs, civilian loadout priorities, and can request exact high-tier or stealth armor upgrades from merchant inventories based on your customizable budget and spend-mode settings.[/color][/size]
+[size=3][color=#D4D4D8]Equipment Manager is an automated gear optimization and acquisition tool. It handles companion hand-me-downs, civilian loadout priorities, and can request exact high-tier or stealth armor upgrades from merchant inventories through Settlement Automation Core's shared budget, cargo, and reporting pipeline.[/color][/size]
 
 [size=4][b]Installation instructions[/b][/size]
 [size=3][color=#D4D4D8]1. Extract the downloaded archive into your Mount & Blade II Bannerlord game directory (specifically inside the Modules folder).
@@ -12,11 +12,16 @@
 - Priority Loadouts: Choose custom priority layouts between Sneaking, Civilian, and Combat gear.
 - Auto-Buy Upgrades: Requests exact premium armor or sneaking-item upgrades from merchants when your gold and reserve settings allow it.
 - Spend Modes: Choose how top armor and stealth gear upgrade requests compete with other automation needs.
-- Anti-Sell Safety Lock: Keeps unequipped items locked from being sold if they represent an upgrade/sidegrade for any companion.[/color][/size]
+- Spare Gear Protection: Keeps useful upgrades and sidegrades out of automated sale flows without changing the player's item lock state.
+- Clear Market Reports: Optional concise or detailed equipment reports, with configurable item limits and sorting.[/color][/size]
+
+[size=4][b]Save compatibility[/b][/size]
+[size=3][color=#D4D4D8]Safe to add to new or existing campaigns. This mod does not write custom save data. It only performs normal game actions when automation runs, such as equipping heroes, selling spare gear, or buying requested upgrades, so those in-game results will naturally remain in your save.[/color][/size]
 
 [size=4][b]Requirements[/b][/size]
 [size=3][color=#D4D4D8]- Settlement Automation Core
 - Harmony
+- UIExtenderEx
 - MCM[/color][/size]
 
 [size=4][b]Shout outs[/b][/size]

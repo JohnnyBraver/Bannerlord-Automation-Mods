@@ -1,5 +1,5 @@
 [size=4][b]Description[/b][/size]
-[size=3][color=#D4D4D8]Trade Optimizer is an automated trade engine. It automatically buys and sells commodities when you enter settlements, executing profitable transactions based on average prices, category policies, budget protection, and cargo limits. Party restocking needs are handled by Party Manager.[/color][/size]
+[size=3][color=#D4D4D8]Trade Optimizer is an automated trade engine. It automatically buys and sells commodities when you enter settlements, executing profitable transactions based on average prices, category policies, budget protection, and cargo limits. Party restocking needs are handled by Party Manager, while all market transactions run through Settlement Automation Core.[/color][/size]
 
 [size=4][b]Installation instructions[/b][/size]
 [size=3][color=#D4D4D8]1. Extract the downloaded archive into your Mount & Blade II Bannerlord game directory (inside the Modules folder).
@@ -11,11 +11,16 @@
 - Dynamic Profit Calculations: Sells and buys based on average local or global price margins.
 - Budget & Cargo Protection: Restricts spending based on wages protection, safety gold, and party carry capacity.
 - Category Policies: Configure whether food, livestock, and mounts may be bought, sold, both, or ignored as trade goods.
-- Optional Stealth Buy: Can buy "Blackened" stealth gear when explicitly enabled, outside normal commodity restrictions.[/color][/size]
+- Mixed Free Trade: Can sell overvalued goods and buy undervalued goods in the same market pass.
+- Clear Market Reports: Optional concise trade-good reports or full transaction details, with configurable limits and sorting.[/color][/size]
+
+[size=4][b]Save compatibility[/b][/size]
+[size=3][color=#D4D4D8]Safe to add to new or existing campaigns. This mod does not write custom save data. It only performs normal game trade actions when automation runs, so bought and sold goods, gold changes, and cargo changes will naturally remain in your save.[/color][/size]
 
 [size=4][b]Requirements[/b][/size]
 [size=3][color=#D4D4D8]- Settlement Automation Core
 - Harmony
+- UIExtenderEx
 - MCM[/color][/size]
 
 [size=4][b]Shout outs[/b][/size]

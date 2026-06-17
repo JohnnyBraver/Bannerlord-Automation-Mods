@@ -14,9 +14,11 @@
 - Party Needs: Maintains critical food days, requests a variety of known food types, fills the total food buffer, and buys riding mounts for infantry.
 - Spend Modes: Choose how food and mount requests compete with other automation requests, from Critical through Luxury.[/color][/size]
 
+[size=4][b]Save compatibility[/b][/size]
+[size=3][color=#D4D4D8]Safe to add to new or existing campaigns. This mod does not write custom save data. It only performs normal game actions when automation runs, such as recruiting troops, ransoming prisoners, donating prisoners, and requesting food or mounts, so those in-game results will naturally remain in your save.[/color][/size]
+
 [size=4][b]Requirements[/b][/size]
 [size=3][color=#D4D4D8]- Settlement Automation Core
-- Harmony
 - MCM[/color][/size]
 
 [size=4][b]Shout outs[/b][/size]

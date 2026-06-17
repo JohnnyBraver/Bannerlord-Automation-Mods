@@ -1,1 +1,1 @@
-Automatically equip heroes, manage gear cascades, and request exact premium or stealth armor upgrades.
+Automatically equip heroes, protect useful spare gear, and request exact premium or stealth armor upgrades.
