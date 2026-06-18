@@ -311,31 +311,35 @@ namespace PartyManager
         public bool RecruitOtherCultures { get; set; } = true;
 
         // --- Recruitment Roles ---
-        [SettingPropertyBool("Recruit Shield Infantry", RequireRestart = false, HintText = "Allow recruiting frontline foot soldiers with shields.", Order = 1)]
+        [SettingPropertyBool("Recruit Frontline Infantry", RequireRestart = false, HintText = "Allow recruiting melee foot soldiers intended to hold the line. This includes shield infantry and low-tier recruits.", Order = 1)]
         [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
         public bool RecruitShieldInfantry { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Shock Infantry", RequireRestart = false, HintText = "Allow recruiting two-handed and polearm foot soldiers with no shields.", Order = 2)]
+        [SettingPropertyBool("Recruit Shock Infantry", RequireRestart = false, HintText = "Allow recruiting skilled two-handed and offensive polearm foot soldiers with no shields.", Order = 2)]
         [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
         public bool RecruitShockInfantry { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Skirmishers", RequireRestart = false, HintText = "Allow recruiting foot soldiers carrying throwing weapons.", Order = 3)]
+        [SettingPropertyBool("Recruit Pike Infantry", RequireRestart = false, HintText = "Allow recruiting foot soldiers whose primary role is anti-cavalry pikes.", Order = 3)]
+        [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
+        public bool RecruitPikeInfantry { get; set; } = true;
+
+        [SettingPropertyBool("Recruit Light Throwing Infantry", RequireRestart = false, HintText = "Allow recruiting foot soldiers whose primary role is throwing weapons rather than frontline or shock infantry.", Order = 4)]
         [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
         public bool RecruitSkirmishers { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Foot Archers", RequireRestart = false, HintText = "Allow recruiting foot archers carrying bows.", Order = 4)]
+        [SettingPropertyBool("Recruit Foot Archers", RequireRestart = false, HintText = "Allow recruiting foot archers carrying bows.", Order = 5)]
         [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
         public bool RecruitFootArchers { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Crossbowmen", RequireRestart = false, HintText = "Allow recruiting foot soldiers carrying crossbows.", Order = 5)]
+        [SettingPropertyBool("Recruit Crossbowmen", RequireRestart = false, HintText = "Allow recruiting foot soldiers carrying crossbows.", Order = 6)]
         [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
         public bool RecruitCrossbowmen { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Melee Cavalry", RequireRestart = false, HintText = "Allow recruiting mounted melee soldiers (lancers, light cavalry)..", Order = 6)]
+        [SettingPropertyBool("Recruit Melee Cavalry", RequireRestart = false, HintText = "Allow recruiting mounted melee soldiers (lancers, light cavalry)..", Order = 7)]
         [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
         public bool RecruitMeleeCavalry { get; set; } = true;
 
-        [SettingPropertyBool("Recruit Horse Archers", RequireRestart = false, HintText = "Allow recruiting mounted ranged soldiers (bow/crossbow).", Order = 7)]
+        [SettingPropertyBool("Recruit Horse Archers", RequireRestart = false, HintText = "Allow recruiting mounted ranged soldiers (bow/crossbow).", Order = 8)]
         [SettingPropertyGroup("Recruitment Filters - Roles", GroupOrder = 3)]
         public bool RecruitHorseArchers { get; set; } = true;
 
