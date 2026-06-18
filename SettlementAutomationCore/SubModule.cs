@@ -145,6 +145,7 @@ namespace SettlementAutomationCore
                     var logic1 = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
                     if (logic1 != null)
                     {
+                        var lockKeys = InventoryLockHelper.GetCurrentLockKeys();
                         bool executedAny = false;
                         var preSoldList = new List<string>();
                         foreach (var preSellOrder in preSellOrders)
@@ -152,6 +153,12 @@ namespace SettlementAutomationCore
                             var order = preSellOrder.Order;
                             if (!order.IsBuy && order.EquipmentElement.Item != null) // Pre-sell only supports selling!
                             {
+                                if (InventoryLockHelper.IsLocked(order.EquipmentElement, lockKeys))
+                                {
+                                    Helpers.Logger.WriteLog("SettlementAutomationCore", $"Skipped locked pre-sell order from {preSellOrder.ProviderName}: {order.Amount}x {order.EquipmentElement.Item.Name}");
+                                    continue;
+                                }
+
                                 int estimatedGold = logic1.GetItemPrice(order.EquipmentElement, false) * order.Amount;
                                 var command = TransferCommand.Transfer(
                                     order.Amount,
@@ -534,12 +541,19 @@ namespace SettlementAutomationCore
                 var explicitReservations = AutomationRegistry.ActiveReservations;
                 var sellableItems = new List<SellableItem>();
                 var playerRoster = MobileParty.MainParty.ItemRoster;
+                var freeTradeLockKeys = InventoryLockHelper.GetCurrentLockKeys();
                 for (int i = 0; i < playerRoster.Count; i++)
                 {
                     var element = playerRoster.GetElementCopyAtIndex(i);
                     if (element.EquipmentElement.Item != null)
                     {
                         var item = element.EquipmentElement.Item;
+                        if (InventoryLockHelper.IsLocked(element.EquipmentElement, freeTradeLockKeys))
+                        {
+                            sellableItems.Add(new SellableItem(element.EquipmentElement, 0));
+                            continue;
+                        }
+
                         int reserved = 0;
                         foreach (var res in explicitReservations)
                         {
@@ -1468,7 +1482,7 @@ namespace SettlementAutomationCore
             foreach (var action in sells)
             {
                 if (action.EquipmentElement.Item == null) continue;
-                var sellable = context.SellableItems.FirstOrDefault(s => s.EquipmentElement.Item == action.EquipmentElement.Item);
+                var sellable = context.SellableItems.FirstOrDefault(s => s.Matches(action.EquipmentElement));
                 if (sellable == null || sellable.AvailableQuantity <= 0) continue;
 
                 int toSell = Math.Min(action.Quantity, sellable.AvailableQuantity);

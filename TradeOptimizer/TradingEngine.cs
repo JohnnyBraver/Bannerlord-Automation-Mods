@@ -142,7 +142,7 @@ namespace TradeOptimizer
                     }
 
                     // Reservations are enforced by Core through the TradeContext sellable snapshot.
-                    var sellableEntry = tradeContext.SellableItems.FirstOrDefault(s => s.EquipmentElement.Item?.StringId == itemObj.StringId);
+                    var sellableEntry = tradeContext.SellableItems.FirstOrDefault(s => s.Matches(item.ItemRosterElement.EquipmentElement));
                     int maxSellable = sellableEntry?.AvailableQuantity ?? 0;
                     if (maxSellable <= 0) continue;
 

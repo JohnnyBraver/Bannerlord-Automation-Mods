@@ -114,12 +114,14 @@ namespace PartyManager
         {
             var itemRoster = party.ItemRoster;
             var candidates = new List<AnimalSlaughterCandidate>();
+            var lockKeys = InventoryLockHelper.GetCurrentLockKeys();
 
             for (int i = 0; i < itemRoster.Count; i++)
             {
                 var el = itemRoster.GetElementCopyAtIndex(i);
                 var item = el.EquipmentElement.Item;
                 if (item == null || el.Amount <= 0) continue;
+                if (InventoryLockHelper.IsLocked(el.EquipmentElement, lockKeys)) continue;
 
                 bool isLivestock = item.IsAnimal;
                 bool isPack = item.IsMountable && item.HorseComponent != null && item.HorseComponent.IsPackAnimal;
@@ -146,7 +148,7 @@ namespace PartyManager
 
                 if (allowed)
                 {
-                    candidates.Add(new AnimalSlaughterCandidate(item, el.Amount, item.Value, categoryPriority));
+                    candidates.Add(new AnimalSlaughterCandidate(el.EquipmentElement, el.Amount, item.Value, categoryPriority));
                 }
             }
 
@@ -187,13 +189,15 @@ namespace PartyManager
 
         private class AnimalSlaughterCandidate
         {
+            public EquipmentElement EquipmentElement { get; }
             public ItemObject Item { get; }
             public int Amount { get; }
             public int Value { get; }
             public int Priority { get; }
-            public AnimalSlaughterCandidate(ItemObject item, int amount, int value, int priority)
+            public AnimalSlaughterCandidate(EquipmentElement equipmentElement, int amount, int value, int priority)
             {
-                Item = item;
+                EquipmentElement = equipmentElement;
+                Item = equipmentElement.Item;
                 Amount = amount;
                 Value = value;
                 Priority = priority;

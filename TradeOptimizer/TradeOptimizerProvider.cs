@@ -230,7 +230,7 @@ namespace TradeOptimizer
                     var el = playerElements[i];
                     if (el.EquipmentElement.Item != null)
                     {
-                        string key = el.EquipmentElement.Item.StringId;
+                        string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.PlayerInventory, el.EquipmentElement);
                         initialPlayerCounts[key] = initialPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
                     }
                 }
@@ -242,12 +242,16 @@ namespace TradeOptimizer
                     var el = playerElements[i];
                     if (el.EquipmentElement.Item != null)
                     {
-                        eqElementMap[el.EquipmentElement.Item.StringId] = el.EquipmentElement;
+                        string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.PlayerInventory, el.EquipmentElement);
+                        eqElementMap[key] = el.EquipmentElement;
                     }
                 }
+                var lockKeys = InventoryLockHelper.GetCurrentLockKeys();
                 var sellableItems = playerElements
                     .Where(el => el.EquipmentElement.Item != null)
-                    .Select(el => new SellableItem(el.EquipmentElement, el.Amount))
+                    .Select(el => new SellableItem(
+                        el.EquipmentElement,
+                        InventoryLockHelper.IsLocked(el.EquipmentElement, lockKeys) ? 0 : el.Amount))
                     .ToList();
                 var tradeContext = TradeContextFactory.Create(party, settlement, tempLogic, sellableItems);
                 var otherElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
@@ -256,7 +260,8 @@ namespace TradeOptimizer
                     var el = otherElements[i];
                     if (el.EquipmentElement.Item != null)
                     {
-                        eqElementMap[el.EquipmentElement.Item.StringId] = el.EquipmentElement;
+                        string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.OtherInventory, el.EquipmentElement);
+                        eqElementMap[key] = el.EquipmentElement;
                     }
                 }
 
@@ -271,7 +276,7 @@ namespace TradeOptimizer
                     var el = finalPlayerElements[i];
                     if (el.EquipmentElement.Item != null)
                     {
-                        string key = el.EquipmentElement.Item.StringId;
+                        string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.PlayerInventory, el.EquipmentElement);
                         finalPlayerCounts[key] = finalPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
                     }
                 }
@@ -392,7 +397,7 @@ namespace TradeOptimizer
                     var el = playerElements[i];
                     if (el.EquipmentElement.Item != null)
                     {
-                        string key = el.EquipmentElement.Item.StringId;
+                        string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.PlayerInventory, el.EquipmentElement);
                         initialPlayerCounts[key] = initialPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
                         eqElementMap[key] = el.EquipmentElement;
                     }
@@ -402,7 +407,10 @@ namespace TradeOptimizer
                 {
                     var el = otherElements[i];
                     if (el.EquipmentElement.Item != null)
-                        eqElementMap[el.EquipmentElement.Item.StringId] = el.EquipmentElement;
+                    {
+                        string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.OtherInventory, el.EquipmentElement);
+                        eqElementMap[key] = el.EquipmentElement;
+                    }
                 }
 
                 // If split transactions, for free trade we only run buy phase (sell was handled in pre-sell)
@@ -419,7 +427,7 @@ namespace TradeOptimizer
                     var el = finalPlayerElements[i];
                     if (el.EquipmentElement.Item != null)
                     {
-                        string key = el.EquipmentElement.Item.StringId;
+                        string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.PlayerInventory, el.EquipmentElement);
                         finalPlayerCounts[key] = finalPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
                         if (!eqElementMap.ContainsKey(key))
                             eqElementMap[key] = el.EquipmentElement;
@@ -458,7 +466,7 @@ namespace TradeOptimizer
                     else if (diff < 0)
                     {
                         // Only propose sell if item is in context's sellable list
-                        var sellable = context.SellableItems.FirstOrDefault(s => s.EquipmentElement.Item?.StringId == key);
+                        var sellable = context.SellableItems.FirstOrDefault(s => s.Matches(eqElementMap[key]));
                         int sellQty = Math.Min(-diff, sellable?.AvailableQuantity ?? 0);
                         if (sellQty > 0)
                             actions.Add(new TradeAction(eqElementMap[key], sellQty, TradeActionType.Sell));

@@ -17,6 +17,11 @@ namespace SettlementAutomationCore
             EquipmentElement = equipmentElement;
             AvailableQuantity = availableQuantity;
         }
+
+        public bool Matches(EquipmentElement equipmentElement)
+        {
+            return InventoryItemView.HasSameItemIdentity(EquipmentElement, equipmentElement);
+        }
     }
 
     public class TradeContext

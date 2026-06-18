@@ -106,8 +106,7 @@ namespace EquipmentManager
 
             try
             {
-                var tracker = Campaign.Current?.GetCampaignBehavior<IViewDataTracker>();
-                var locks = new HashSet<string>(tracker?.GetInventoryLocks() ?? Enumerable.Empty<string>());
+                var locks = InventoryLockHelper.GetCurrentLockKeys();
 
                 bool hasWeaponPerk = Hero.MainHero?.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Steward.PaidInPromise) ?? false;
                 bool hasArmorPerk = Hero.MainHero?.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Steward.GivingHands) ?? false;
@@ -160,8 +159,7 @@ namespace EquipmentManager
                     bool isEquipment = item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null;
                     if (!isEquipment) continue;
 
-                    string key = item.StringId + (eqEl.ItemModifier != null ? eqEl.ItemModifier.StringId : "");
-                    if (locks.Contains(key)) continue;
+                    if (InventoryLockHelper.IsLocked(eqEl, locks)) continue;
 
                     int sellQuantity = protectionPlan.GetSellableQuantity(eqEl, rosterElement.Amount);
                     if (sellQuantity > 0)

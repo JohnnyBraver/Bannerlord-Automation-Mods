@@ -40,12 +40,6 @@ Raw notes from live testing and feedback. This is intentionally temporary: keep 
   - Include all ingot types.
   - Default off.
   - This can probably be a simple toggle because ingots are player-made materials and do not behave like normal profit-traded market goods.
-- Investigate inventory lock handling.
-  - TradeOptimizer appears able to sell or otherwise bypass player inventory locks.
-  - Audit every mod/provider that can sell, consume, donate, smelt, trade, slaughter, discard, or otherwise remove inventory items.
-  - Include PartyManager animal/prisoner flows, EquipmentManager pre-sell, TradeOptimizer free trade, and the imported SmithingOptimizer smelting/material paths.
-  - Intended behavior: automation may keep items out of sale flows, but should not mutate locks and should not sell locked stacks.
-
 ## Core / Shared Automation
 
 - Consider adding a reserve-capacity concept to Core.

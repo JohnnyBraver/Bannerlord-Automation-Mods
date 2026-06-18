@@ -41,11 +41,13 @@ namespace PartyManager.Helpers
             {
                 int excess = totalAnimals - maxAllowed;
                 bool slaughter = settings.SlaughterAnimalsForHerding;
+                var lockKeys = InventoryLockHelper.GetCurrentLockKeys();
 
                 // 1. Process Livestock first
                 foreach (var el in livestockItems)
                 {
                     if (excess <= 0) break;
+                    if (InventoryLockHelper.IsLocked(el.EquipmentElement, lockKeys)) continue;
                     int toProcess = Math.Min(excess, el.Amount);
                     orders.Add(new TradeOrder(el.EquipmentElement, toProcess, false, slaughter));
                     excess -= toProcess;
@@ -70,6 +72,7 @@ namespace PartyManager.Helpers
                         foreach (var el in ridingItems)
                         {
                             if (excess <= 0 || excessRiding <= 0) break;
+                            if (InventoryLockHelper.IsLocked(el.EquipmentElement, lockKeys)) continue;
                             int available = el.Amount;
                             int toSell = Math.Min(Math.Min(excess, excessRiding), available);
                             orders.Add(new TradeOrder(el.EquipmentElement, toSell, false, false));
@@ -85,6 +88,7 @@ namespace PartyManager.Helpers
                     foreach (var el in packItems)
                     {
                         if (excess <= 0) break;
+                        if (InventoryLockHelper.IsLocked(el.EquipmentElement, lockKeys)) continue;
                         int toProcess = Math.Min(excess, el.Amount);
                         orders.Add(new TradeOrder(el.EquipmentElement, toProcess, false, slaughter));
                         excess -= toProcess;

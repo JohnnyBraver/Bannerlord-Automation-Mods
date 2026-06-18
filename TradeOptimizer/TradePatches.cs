@@ -55,9 +55,12 @@ namespace TradeOptimizer
                     return;
                 }
 
+                var lockKeys = InventoryLockHelper.GetCurrentLockKeys();
                 var sellableItems = ActiveInventoryVM.RightItemListVM?
                     .Where(item => item?.ItemRosterElement.EquipmentElement.Item != null)
-                    .Select(item => new SellableItem(item.ItemRosterElement.EquipmentElement, item.ItemCount))
+                    .Select(item => new SellableItem(
+                        item.ItemRosterElement.EquipmentElement,
+                        InventoryLockHelper.IsLocked(item.ItemRosterElement.EquipmentElement, lockKeys) ? 0 : item.ItemCount))
                     .ToList() ?? new System.Collections.Generic.List<SellableItem>();
                 var tradeContext = TradeContextFactory.Create(MobileParty.MainParty, settlement, logic, sellableItems);
 
