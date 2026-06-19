@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Settlements.Buildings;
@@ -33,27 +34,54 @@ namespace FiefManager
             var settings = Settings.Instance;
             if (settings == null) return;
 
+            var buildings = town.Buildings.ToList();
+            var buildingCandidates = buildings
+                .Select((b, index) => new BuildingProjectCandidate(
+                    index,
+                    b == null || b.IsCurrentlyDefault,
+                    b?.CurrentLevel ?? 3,
+                    b?.BuildingType?.IsMilitaryProject ?? false,
+                    GetConstructionCost(b),
+                    HasGovernorBuildSpeedPerk(town, b)))
+                .ToList();
+            bool hasUpgradeableBuildingProjects = FiefAutomationPlanner.HasUpgradeableBuildingProjects(buildingCandidates);
+
             // 1. Auto Set Build Queue
             if (settings.AutoSetBuildQueue)
             {
                 try
                  {
-                    if (town.BuildingsInProgress != null && town.BuildingsInProgress.Count == 0)
+                    if (town.BuildingsInProgress != null)
                     {
-                        var buildings = town.Buildings.ToList();
-                        var nextBuildingIndex = FiefAutomationPlanner.ChooseNextBuildingIndex(
-                            buildings.Select((b, index) => new BuildingProjectCandidate(
-                                index,
-                                b == null || b.IsCurrentlyDefault,
-                                b?.CurrentLevel ?? 3,
-                                b?.BuildingType?.IsMilitaryProject ?? false)),
-                            settings.Priority);
-                        var nextBuilding = nextBuildingIndex.HasValue ? buildings[nextBuildingIndex.Value] : null;
-                        if (nextBuilding != null)
+                        var queuedBuildings = town.BuildingsInProgress.ToList();
+                        var queuedIndexes = queuedBuildings
+                            .Select(b => buildings.IndexOf(b))
+                            .Where(index => index >= 0)
+                            .ToList();
+                        var selectedBuildingIndexes = FiefAutomationPlanner.ChooseBuildingQueueIndexes(
+                            buildingCandidates,
+                            settings.Priority,
+                            settings.UpgradeApproach,
+                            queuedIndexes,
+                            settings.MaxQueuedBuildProjects);
+                        var queuedNames = new List<string>();
+                        foreach (int buildingIndex in selectedBuildingIndexes)
                         {
+                            var nextBuilding = buildingIndex >= 0 && buildingIndex < buildings.Count ? buildings[buildingIndex] : null;
+                            if (nextBuilding == null)
+                            {
+                                continue;
+                            }
+
                             town.BuildingsInProgress.Enqueue(nextBuilding);
+                            queuedNames.Add(nextBuilding.BuildingType?.Name?.ToString() ?? "Unknown Project");
+                        }
+
+                        if (queuedNames.Count > 0)
+                        {
                             string priorityLabel = settings.Priority == BuildingPriorityCategory.MilitaryFirst ? " [Military]" : (settings.Priority == BuildingPriorityCategory.EconomicFirst ? " [Economic]" : "");
-                            string msg = $"Auto-queued project '{nextBuilding.BuildingType.Name}'{priorityLabel} at {settlement.Name}.";
+                            string projectLabel = queuedNames.Count == 1 ? $"'{queuedNames[0]}'" : string.Join(", ", queuedNames.Select(name => $"'{name}'"));
+                            string msg = $"Auto-queued {queuedNames.Count} project(s) {projectLabel}{priorityLabel} at {settlement.Name}.";
                             InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
                             SettlementAutomationCore.Helpers.Logger.WriteLog("FiefManager", msg);
                         }
@@ -79,7 +107,9 @@ namespace FiefManager
                         settings.MaxReserveLimitTown,
                         settings.MaxReserveLimitCastle,
                         settings.MinPlayerGoldReserve,
-                        playerGold);
+                        playerGold,
+                        hasUpgradeableBuildingProjects,
+                        settings.OnlyDepositWithUpgradeableProjects);
                     if (depositPlan.AmountToDeposit > 0)
                     {
                         Hero.MainHero.Gold -= depositPlan.AmountToDeposit;
@@ -95,6 +125,55 @@ namespace FiefManager
                     SettlementAutomationCore.Helpers.Logger.WriteLog("FiefManager", $"Error auto-depositing boost gold at {settlement.Name}: {ex}");
                 }
             }
+        }
+
+        private static int GetConstructionCost(Building? building)
+        {
+            if (building == null)
+            {
+                return 0;
+            }
+
+            try
+            {
+                return Math.Max(0, building.GetConstructionCost());
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static bool HasGovernorBuildSpeedPerk(Town town, Building? building)
+        {
+            if (town?.Governor == null || building?.BuildingType == null)
+            {
+                return false;
+            }
+
+            var governor = town.Governor;
+            var buildingType = building.BuildingType;
+
+            if (buildingType.IsMilitaryProject && governor.GetPerkValue(DefaultPerks.TwoHanded.Confidence))
+            {
+                return true;
+            }
+
+            if (buildingType == DefaultBuildingTypes.SettlementMarketplace &&
+                governor.GetPerkValue(DefaultPerks.Trade.SelfMadeMan))
+            {
+                return true;
+            }
+
+            if ((buildingType == DefaultBuildingTypes.SettlementFortifications ||
+                 buildingType == DefaultBuildingTypes.CastleBarracks ||
+                 buildingType == DefaultBuildingTypes.SettlementBarracks) &&
+                governor.GetPerkValue(DefaultPerks.Engineering.Stonecutters))
+            {
+                return true;
+            }
+
+            return false;
         }
     }
 }
