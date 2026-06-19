@@ -214,6 +214,12 @@ namespace TradeOptimizer
         public Dropdown<TradingModeOption> MountsTradingModeDropdown { get; set; } =
             new Dropdown<TradingModeOption>(TradingModeOptions, 0); // Default: None (index 0)
 
+        [SettingPropertyDropdown("Crafting Materials Trading Policy", RequireRestart = false,
+            HintText = "Control how smithing materials such as charcoal and ingots are auto-traded.", Order = 4)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
+        public Dropdown<TradingModeOption> CraftingMaterialsTradingModeDropdown { get; set; } =
+            new Dropdown<TradingModeOption>(TradingModeOptions, 0); // Default: None (index 0)
+
         [SettingPropertyDropdown("Level of Detail", RequireRestart = false,
             HintText = "Top Trade Goods reports only the most important trade goods. Full Item List reports every traded item.", Order = 1)]
         [SettingPropertyGroup("Trade Reporting", GroupOrder = 4)]
@@ -245,6 +251,7 @@ namespace TradeOptimizer
         public TradingMode FoodTradingMode => FoodTradingModeDropdown.SelectedValue.Value;
         public TradingMode LivestockTradingMode => LivestockTradingModeDropdown.SelectedValue.Value;
         public TradingMode MountsTradingMode => MountsTradingModeDropdown.SelectedValue.Value;
+        public TradingMode CraftingMaterialsTradingMode => CraftingMaterialsTradingModeDropdown.SelectedValue.Value;
         public TradeReportDetailMode TradeReportDetail => TradeReportDetailDropdown.SelectedValue.Value;
         public TradeReportSortMode TradeReportSort => TradeReportSortDropdown.SelectedValue.Value;
     }

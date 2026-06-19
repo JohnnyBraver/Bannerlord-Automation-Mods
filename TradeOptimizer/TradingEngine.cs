@@ -136,6 +136,7 @@ namespace TradeOptimizer
                             settings.FoodTradingMode,
                             settings.LivestockTradingMode,
                             settings.MountsTradingMode,
+                            settings.CraftingMaterialsTradingMode,
                             false))
                     {
                         continue;
@@ -369,6 +370,7 @@ namespace TradeOptimizer
                                 settings.FoodTradingMode,
                                 settings.LivestockTradingMode,
                                 settings.MountsTradingMode,
+                                settings.CraftingMaterialsTradingMode,
                                 true))
                         {
                             continue;

@@ -17,6 +17,7 @@ namespace TradeOptimizer.Tests
                 TradingMode.BuyAndSell,
                 TradingMode.BuyAndSell,
                 TradingMode.BuyAndSell,
+                TradingMode.BuyAndSell,
                 isBuy: true));
         }
 
@@ -35,12 +36,56 @@ namespace TradeOptimizer.Tests
                 isFood: true,
                 isLivestock: false,
                 isMount: false,
+                isCraftingMaterial: false,
                 foodMode,
+                TradingMode.BuyAndSell,
                 TradingMode.BuyAndSell,
                 TradingMode.BuyAndSell,
                 isBuy);
 
             Assert.Equal(expected, allowed);
+        }
+
+        [Theory]
+        [InlineData(TradingMode.None, true, false)]
+        [InlineData(TradingMode.None, false, false)]
+        [InlineData(TradingMode.BuyOnly, true, true)]
+        [InlineData(TradingMode.BuyOnly, false, false)]
+        [InlineData(TradingMode.SellOnly, true, false)]
+        [InlineData(TradingMode.SellOnly, false, true)]
+        [InlineData(TradingMode.BuyAndSell, true, true)]
+        [InlineData(TradingMode.BuyAndSell, false, true)]
+        public void CanTradeByMode_RespectsCraftingMaterialTradingMode(TradingMode craftingMaterialMode, bool isBuy, bool expected)
+        {
+            bool allowed = TradeCandidatePolicy.CanTradeByMode(
+                isFood: false,
+                isLivestock: false,
+                isMount: false,
+                isCraftingMaterial: true,
+                TradingMode.BuyAndSell,
+                TradingMode.BuyAndSell,
+                TradingMode.BuyAndSell,
+                craftingMaterialMode,
+                isBuy);
+
+            Assert.Equal(expected, allowed);
+        }
+
+        [Fact]
+        public void CanTradeByMode_CraftingMaterialPolicyOverridesFoodPolicy()
+        {
+            bool allowed = TradeCandidatePolicy.CanTradeByMode(
+                isFood: true,
+                isLivestock: false,
+                isMount: false,
+                isCraftingMaterial: true,
+                TradingMode.BuyAndSell,
+                TradingMode.BuyAndSell,
+                TradingMode.BuyAndSell,
+                TradingMode.None,
+                isBuy: true);
+
+            Assert.False(allowed);
         }
 
         [Theory]
