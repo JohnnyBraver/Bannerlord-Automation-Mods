@@ -6,8 +6,6 @@ using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Settlements.Buildings;
-using TaleWorlds.Core;
-using TaleWorlds.Library;
 using SettlementAutomationCore;
 using SettlementAutomationCore.Helpers;
 
@@ -17,22 +15,24 @@ namespace FiefManager
     {
         public string ProviderName => "FiefManager";
 
-        public void ProcessFiefAutomation(MobileParty party, Settlement settlement, bool isSurplusPhase)
+        public IReadOnlyList<FiefAutomationOrder> GetFiefAutomationOrders(MobileParty party, Settlement settlement, bool isSurplusPhase)
         {
+            var orders = new List<FiefAutomationOrder>();
+
             // FiefManager fief tasks (build queue, boost deposit) run in the surplus phase,
             // after trade has completed and the party's gold is at its post-trade state.
-            if (!isSurplusPhase) return;
+            if (!isSurplusPhase) return orders;
 
-            if (settlement == null || party == null || Hero.MainHero == null) return;
+            if (settlement == null || party == null || Hero.MainHero == null) return orders;
 
             // Only automate fiefs owned by the player's clan
-            if (settlement.OwnerClan != Clan.PlayerClan) return;
+            if (settlement.OwnerClan != Clan.PlayerClan) return orders;
 
             var town = settlement.Town;
-            if (town == null) return;
+            if (town == null) return orders;
 
             var settings = Settings.Instance;
-            if (settings == null) return;
+            if (settings == null) return orders;
 
             var buildings = town.Buildings.ToList();
             var buildingCandidates = buildings
@@ -64,6 +64,7 @@ namespace FiefManager
                             settings.UpgradeApproach,
                             queuedIndexes,
                             settings.MaxQueuedBuildProjects);
+                        var selectedBuildings = new List<Building>();
                         var queuedNames = new List<string>();
                         foreach (int buildingIndex in selectedBuildingIndexes)
                         {
@@ -73,17 +74,17 @@ namespace FiefManager
                                 continue;
                             }
 
-                            town.BuildingsInProgress.Enqueue(nextBuilding);
-                            queuedNames.Add(nextBuilding.BuildingType?.Name?.ToString() ?? "Unknown Project");
+                            string projectName = nextBuilding.BuildingType?.Name?.ToString() ?? "Unknown Project";
+                            selectedBuildings.Add(nextBuilding);
+                            queuedNames.Add(projectName);
                         }
 
-                        if (queuedNames.Count > 0)
+                        if (selectedBuildings.Count > 0)
                         {
                             string priorityLabel = settings.Priority == BuildingPriorityCategory.MilitaryFirst ? " [Military]" : (settings.Priority == BuildingPriorityCategory.EconomicFirst ? " [Economic]" : "");
                             string projectLabel = queuedNames.Count == 1 ? $"'{queuedNames[0]}'" : string.Join(", ", queuedNames.Select(name => $"'{name}'"));
                             string msg = $"Auto-queued {queuedNames.Count} project(s) {projectLabel}{priorityLabel} at {settlement.Name}.";
-                            InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
-                            SettlementAutomationCore.Helpers.Logger.WriteLog("FiefManager", msg);
+                            orders.Add(FiefAutomationOrder.QueueBuildings(selectedBuildings, msg));
                         }
                     }
                 }
@@ -112,12 +113,9 @@ namespace FiefManager
                         settings.OnlyDepositWithUpgradeableProjects);
                     if (depositPlan.AmountToDeposit > 0)
                     {
-                        Hero.MainHero.Gold -= depositPlan.AmountToDeposit;
-                        town.BoostBuildingProcess += depositPlan.AmountToDeposit;
-
-                        string msg = $"Deposited {depositPlan.AmountToDeposit} denars to project boost reserve at {settlement.Name} (Reserve: {town.BoostBuildingProcess}/{depositPlan.TargetReserve}, Daily Cost: {depositPlan.DailyCost}).";
-                        InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
-                        SettlementAutomationCore.Helpers.Logger.WriteLog("FiefManager", msg);
+                        int projectedReserve = currentReserve + depositPlan.AmountToDeposit;
+                        string msg = $"Deposited {depositPlan.AmountToDeposit} denars to project boost reserve at {settlement.Name} (Reserve: {projectedReserve}/{depositPlan.TargetReserve}, Daily Cost: {depositPlan.DailyCost}).";
+                        orders.Add(FiefAutomationOrder.DepositBoostGold(depositPlan.AmountToDeposit, msg));
                     }
                 }
                 catch (Exception ex)
@@ -125,6 +123,8 @@ namespace FiefManager
                     SettlementAutomationCore.Helpers.Logger.WriteLog("FiefManager", $"Error auto-depositing boost gold at {settlement.Name}: {ex}");
                 }
             }
+
+            return orders;
         }
 
         private static int GetConstructionCost(Building? building)

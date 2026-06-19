@@ -599,7 +599,7 @@ namespace SettlementAutomationCore
                     {
                         try
                         {
-                            reg.Provider.ProcessFiefAutomation(MobileParty.MainParty, settlement, false);
+                            ExecuteFiefAutomationProvider(reg, MobileParty.MainParty, settlement, false);
                         }
                         catch (Exception ex)
                         {
@@ -700,7 +700,7 @@ namespace SettlementAutomationCore
                     {
                         try
                         {
-                            reg.Provider.ProcessFiefAutomation(MobileParty.MainParty, settlement, true);
+                            ExecuteFiefAutomationProvider(reg, MobileParty.MainParty, settlement, true);
                         }
                         catch (Exception ex)
                         {
@@ -729,6 +729,78 @@ namespace SettlementAutomationCore
             Campaign.Current?.CurrentMenuContext?.Refresh();
             }
             catch {}
+        }
+
+        private static void ExecuteFiefAutomationProvider(
+            ProviderRegistration<IFiefAutomationProvider> registration,
+            MobileParty party,
+            Settlement settlement,
+            bool isSurplusPhase)
+        {
+            var orders = registration.Provider.GetFiefAutomationOrders(party, settlement, isSurplusPhase);
+            if (orders == null || orders.Count == 0)
+            {
+                return;
+            }
+
+            var town = settlement.Town;
+            if (town == null)
+            {
+                return;
+            }
+
+            foreach (var order in orders)
+            {
+                if (order == null)
+                {
+                    continue;
+                }
+
+                switch (order.OrderType)
+                {
+                    case FiefAutomationOrderType.QueueBuilding:
+                        if (order.Buildings.Count == 0 || town.BuildingsInProgress == null)
+                        {
+                            continue;
+                        }
+
+                        foreach (var building in order.Buildings)
+                        {
+                            if (building != null)
+                            {
+                                town.BuildingsInProgress.Enqueue(building);
+                            }
+                        }
+                        DisplayFiefAutomationMessage(registration.ProviderName, order.Description);
+                        break;
+
+                    case FiefAutomationOrderType.DepositBoostGold:
+                        if (Hero.MainHero == null || order.Amount <= 0)
+                        {
+                            continue;
+                        }
+
+                        int amountToDeposit = Math.Min(order.Amount, Hero.MainHero.Gold);
+                        if (amountToDeposit <= 0)
+                        {
+                            continue;
+                        }
+
+                        GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, null, amountToDeposit, false);
+                        town.BoostBuildingProcess += amountToDeposit;
+                        DisplayFiefAutomationMessage(registration.ProviderName, order.Description);
+                        break;
+                }
+            }
+        }
+
+        private static void DisplayFiefAutomationMessage(string providerName, string description)
+        {
+            string message = string.IsNullOrWhiteSpace(description)
+                ? "Applied fief automation order."
+                : description;
+            InformationManager.DisplayMessage(new InformationMessage($"[Automation] {message}"));
+            Helpers.Logger.WriteLog(providerName, message);
         }
 
         internal sealed class AutomationPhasePolicy

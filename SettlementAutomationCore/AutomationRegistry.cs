@@ -237,7 +237,7 @@ namespace SettlementAutomationCore
     public interface IFiefAutomationProvider
     {
         string ProviderName { get; }
-        void ProcessFiefAutomation(MobileParty party, Settlement settlement, bool isSurplusPhase);
+        IReadOnlyList<FiefAutomationOrder> GetFiefAutomationOrders(MobileParty party, Settlement settlement, bool isSurplusPhase);
     }
 
     // ----------------------------------------------------
