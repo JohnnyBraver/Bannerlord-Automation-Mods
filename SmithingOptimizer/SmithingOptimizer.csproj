@@ -29,6 +29,11 @@
     </Reference>
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\SettlementAutomationCore\SettlementAutomationCore.csproj">
+      <Private>False</Private>
+    </ProjectReference>
+  </ItemGroup>
 
   <ItemGroup>
     <Reference Include="TaleWorlds.Core">

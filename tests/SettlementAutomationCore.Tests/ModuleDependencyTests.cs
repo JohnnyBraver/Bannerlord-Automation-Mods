@@ -36,6 +36,11 @@ namespace SettlementAutomationCore.Tests
                 "FiefManager",
                 new[] { "Native", "SandBoxCore", "SettlementAutomationCore", "Bannerlord.MBOptionScreen" }
             };
+            yield return new object[]
+            {
+                "SmithingOptimizer",
+                new[] { "Native", "SandBoxCore", "SettlementAutomationCore", "Bannerlord.Harmony", "Bannerlord.UIExtenderEx", "Bannerlord.MBOptionScreen" }
+            };
         }
 
         [Theory]
@@ -61,6 +66,7 @@ namespace SettlementAutomationCore.Tests
         [InlineData("PartyManager")]
         [InlineData("EquipmentManager")]
         [InlineData("FiefManager")]
+        [InlineData("SmithingOptimizer")]
         public void ModuleBuildOutput_DoesNotContainCopiedDependencyDlls(string moduleName)
         {
             string root = FindRepoRoot();

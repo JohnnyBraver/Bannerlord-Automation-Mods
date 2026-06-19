@@ -7,6 +7,7 @@
   <DependedModules>
     <DependedModule Id="Native" DependentVersion="v1.4.6" />
     <DependedModule Id="SandBoxCore" DependentVersion="v1.4.6" />
+    <DependedModule Id="SettlementAutomationCore" DependentVersion="v0.3.0" Optional="false" />
     <DependedModule Id="Bannerlord.Harmony" DependentVersion="v2.4.2.0" Optional="false" />
     <DependedModule Id="Bannerlord.UIExtenderEx" DependentVersion="v2.13.2" Optional="false" />
     <DependedModule Id="Bannerlord.MBOptionScreen" DependentVersion="v5.11.4" Optional="false" />
@@ -15,6 +16,7 @@
     <DependedModuleMetadata id="Bannerlord.Harmony" order="LoadBeforeThis" />
     <DependedModuleMetadata id="Bannerlord.UIExtenderEx" order="LoadBeforeThis" />
     <DependedModuleMetadata id="Bannerlord.MBOptionScreen" order="LoadBeforeThis" />
+    <DependedModuleMetadata id="SettlementAutomationCore" order="LoadBeforeThis" />
   </DependedModuleMetadatas>
   <SubModules>
     <SubModule>

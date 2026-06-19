@@ -3,9 +3,12 @@ using System.Linq;
 using System.Reflection;
 using HarmonyLib;
 using TaleWorlds.InputSystem;
+using TaleWorlds.Core;
 using TaleWorlds.MountAndBlade;
+using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.ViewModelCollection.WeaponCrafting.WeaponDesign;
 using Bannerlord.UIExtenderEx;
+using SettlementAutomationCore;
 
 namespace SmithingOptimizer
 {
@@ -14,6 +17,7 @@ namespace SmithingOptimizer
         public static Harmony? HarmonyInstance { get; private set; }
         private static UIExtender? _uiExtender;
         private static bool _uiExtenderInitialized = false;
+        private static SmithingOptimizerProvider? _provider;
 
         protected override void OnSubModuleLoad()
         {
@@ -61,12 +65,42 @@ namespace SmithingOptimizer
             if (!_uiExtenderInitialized)
             {
                 _uiExtenderInitialized = true;
-                _uiExtender = new UIExtender("SmithingOptimizer");
+                _uiExtender = UIExtender.Create("SmithingOptimizer");
                 _uiExtender.Register(typeof(SubModule).Assembly);
                 _uiExtender.Enable();
             }
         }
 
+        protected override void OnGameStart(Game game, IGameStarter gameStarter)
+        {
+            base.OnGameStart(game, gameStarter);
+            if (game.GameType is Campaign)
+            {
+                UnregisterAutomationHooks();
+
+                _provider = new SmithingOptimizerProvider();
+                AutomationRegistry.RegisterRequestProvider(_provider);
+                AutomationRegistry.RegisterReportProvider(_provider);
+            }
+        }
+
+        public override void OnGameEnd(Game game)
+        {
+            base.OnGameEnd(game);
+            UnregisterAutomationHooks();
+        }
+
+        private static void UnregisterAutomationHooks()
+        {
+            if (_provider == null)
+            {
+                return;
+            }
+
+            AutomationRegistry.UnregisterRequestProvider(_provider);
+            AutomationRegistry.UnregisterReportProvider(_provider);
+            _provider = null;
+        }
 
         protected override void OnApplicationTick(float dt)
         {
