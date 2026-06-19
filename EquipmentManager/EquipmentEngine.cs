@@ -9,6 +9,7 @@ using TaleWorlds.CampaignSystem.Inventory;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
+using SettlementAutomationCore.Transactions;
 
 namespace EquipmentManager
 {
@@ -58,77 +59,29 @@ namespace EquipmentManager
             public abstract void EquipItem(AvailableEquipment available, EquipTarget target, EquipmentIndex slot);
         }
 
-        private sealed class InventoryLogicEquipmentTransferContext : EquipmentTransferContext
+        private sealed class CoreEquipmentTransferContext : EquipmentTransferContext
         {
-            private readonly InventoryLogic _inventoryLogic;
+            private readonly IPartyEquipmentTransaction _transaction;
 
-            public InventoryLogicEquipmentTransferContext(InventoryLogic inventoryLogic)
+            public CoreEquipmentTransferContext(IPartyEquipmentTransaction transaction)
             {
-                _inventoryLogic = inventoryLogic;
+                _transaction = transaction;
             }
 
             public override List<AvailableEquipment> BuildAvailableEquipmentPool()
             {
-                var availableItems = new List<AvailableEquipment>();
-                var playerItems = _inventoryLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-                foreach (var element in playerItems)
-                {
-                    if (element.IsEmpty || element.Amount <= 0 || element.EquipmentElement.Item == null) continue;
-                    availableItems.Add(new AvailableEquipment(element.EquipmentElement, element.Amount));
-                }
-
-                return availableItems;
+                return _transaction.BuildAvailableEquipmentPool()
+                    .Select(candidate => new AvailableEquipment(candidate.EquipmentElement, candidate.Quantity))
+                    .ToList();
             }
 
             public override void EquipItem(AvailableEquipment available, EquipTarget target, EquipmentIndex slot)
             {
-                var equipElement = new ItemRosterElement(available.EquipmentElement, 1);
-                var command = TransferCommand.Transfer(
-                    1,
-                    InventoryLogic.InventorySide.PlayerInventory,
-                    target.Side,
-                    equipElement,
-                    EquipmentIndex.None,
-                    slot,
-                    target.Hero.CharacterObject);
-                _inventoryLogic.AddTransferCommand(command);
-            }
-        }
-
-        private sealed class DirectPartyEquipmentTransferContext : EquipmentTransferContext
-        {
-            private readonly MobileParty _party;
-
-            public DirectPartyEquipmentTransferContext(MobileParty party)
-            {
-                _party = party;
-            }
-
-            public override List<AvailableEquipment> BuildAvailableEquipmentPool()
-            {
-                var availableItems = new List<AvailableEquipment>();
-                foreach (var element in _party.ItemRoster)
+                var result = _transaction.EquipItem(available.EquipmentElement, target.Hero, target.Side, slot);
+                if (!result.Success)
                 {
-                    if (element.IsEmpty || element.Amount <= 0 || element.EquipmentElement.Item == null) continue;
-                    availableItems.Add(new AvailableEquipment(element.EquipmentElement, element.Amount));
+                    SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Skipped equipment transfer: {result.FailureReason}");
                 }
-
-                return availableItems;
-            }
-
-            public override void EquipItem(AvailableEquipment available, EquipTarget target, EquipmentIndex slot)
-            {
-                var equipment = GetEquipmentForSide(target.Hero, target.Side);
-                var currentEquipment = equipment[slot];
-
-                _party.ItemRoster.AddToCounts(available.EquipmentElement, -1);
-
-                if (!currentEquipment.IsEmpty && currentEquipment.Item != null)
-                {
-                    _party.ItemRoster.AddToCounts(currentEquipment, 1);
-                }
-
-                equipment.AddEquipmentToSlotWithoutAgent(slot, available.EquipmentElement);
             }
         }
 
@@ -195,7 +148,8 @@ namespace EquipmentManager
             var notifications = new List<string>();
 
             // 2. Auto-Equip Phase
-            equippedCount = EvaluateAndEquip(new InventoryLogicEquipmentTransferContext(inventoryLogic), heroesToProcess, settings, notifications);
+            var equipmentTransaction = PartyEquipmentTransaction.ForInventoryLogic(inventoryLogic, vm);
+            equippedCount = EvaluateAndEquip(new CoreEquipmentTransferContext(equipmentTransaction), heroesToProcess, settings, notifications);
 
             // 3. Display drawback notifications
             foreach (var note in notifications)
@@ -337,28 +291,7 @@ namespace EquipmentManager
             }
 
             // 6. Refresh UI
-            vm.ExecuteRemoveZeroCounts();
-            vm.RefreshValues();
-
-            // Refresh character VM slots, stats, and visual model
-            try
-            {
-                var updateRight = vm.GetType().GetMethod("UpdateRightCharacter", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                updateRight?.Invoke(vm, null);
-
-                var updateLeft = vm.GetType().GetMethod("UpdateLeftCharacter", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                updateLeft?.Invoke(vm, null);
-
-                var refreshInfo = vm.GetType().GetMethod("RefreshInformationValues", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                refreshInfo?.Invoke(vm, null);
-
-                // Trigger event to notify the UI view layer that equipment set has changed, prompting redrawing of 3D models
-                Game.Current?.EventManager?.TriggerEvent(new InventoryEquipmentTypeChangedEvent(!vm.IsCivilianMode));
-            }
-            catch (Exception ex)
-            {
-                SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Error refreshing character visuals: {ex.Message}");
-            }
+            equipmentTransaction.RefreshAfterTransaction();
 
             SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"=== Equipment Optimization Run completed (Total equipped: {equippedCount}, Total sold: {totalSold}) ===");
         }
@@ -419,7 +352,9 @@ namespace EquipmentManager
 
                 SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"=== Headless {context} Equipment Optimization started for: {string.Join(", ", heroesToProcess.Select(h => h.Name.ToString()))} ===");
 
-                int totalEquipped = EvaluateAndEquip(new DirectPartyEquipmentTransferContext(party), heroesToProcess, settings, null);
+                var equipmentTransaction = PartyEquipmentTransaction.ForParty(party);
+                int totalEquipped = EvaluateAndEquip(new CoreEquipmentTransferContext(equipmentTransaction), heroesToProcess, settings, null);
+                equipmentTransaction.RefreshAfterTransaction();
 
                 SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"=== Headless {context} Equipment Optimization completed (Total equipped: {totalEquipped}) ===");
             }
