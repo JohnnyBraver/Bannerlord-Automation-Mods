@@ -56,13 +56,18 @@ namespace SettlementAutomationCore
         [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public bool LimitToInventoryCapacity { get; set; } = true;
 
+        [SettingPropertyInteger("Reserve Carry Capacity (%)", 0, 50, RequireRestart = false,
+            HintText = "Keep this percentage of carry capacity free for loot and manual inventory use when automation buys cargo. Default: 10%.", Order = 2)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
+        public int ReserveCarryCapacityPercent { get; set; } = 10;
+
         [SettingPropertyFloatingInteger("Routine Request Price Limit", 0.5f, 5.0f, "#0.00", RequireRestart = false,
-            HintText = "Maximum price/value ratio for routine requests. Critical, essential, and luxury requests ignore this.", Order = 2)]
+            HintText = "Maximum price/value ratio for routine requests. Critical, essential, and luxury requests ignore this.", Order = 3)]
         [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public float RoutinePriceLimitMultiplier { get; set; } = 1.5f;
 
         [SettingPropertyFloatingInteger("Opportunistic Request Price Limit", 0.5f, 5.0f, "#0.00", RequireRestart = false,
-            HintText = "Maximum price/value ratio for opportunistic requests.", Order = 3)]
+            HintText = "Maximum price/value ratio for opportunistic requests.", Order = 4)]
         [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public float OpportunisticPriceLimitMultiplier { get; set; } = 1.1f;
 

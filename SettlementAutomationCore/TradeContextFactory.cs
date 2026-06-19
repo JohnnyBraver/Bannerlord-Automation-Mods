@@ -30,7 +30,10 @@ namespace SettlementAutomationCore
             int availableGold = Math.Max(0, heroGold - expenseReserve);
 
             float currentWeight = Helpers.InventoryHelper.GetRosterWeight(party.ItemRoster);
-            float freeCargo = Math.Max(0f, party.InventoryCapacity - currentWeight);
+            float freeCargo = CalculateFreeCargoCapacity(
+                party.InventoryCapacity,
+                currentWeight,
+                settings?.ReserveCarryCapacityPercent ?? 0);
             int freeAnimalSlots = HerdingCalculator.GetRemainingAnimalSlots(party);
 
             return new TradeContext(
@@ -43,6 +46,16 @@ namespace SettlementAutomationCore
                 freeAnimalSlots,
                 freeAnimalSlots,
                 sellableItems ?? Array.Empty<SellableItem>());
+        }
+
+        internal static float CalculateFreeCargoCapacity(float inventoryCapacity, float currentWeight, int reservePercent)
+        {
+            if (inventoryCapacity <= 0f) return 0f;
+
+            int clampedReservePercent = Math.Max(0, Math.Min(100, reservePercent));
+            float reservedCapacity = inventoryCapacity * clampedReservePercent / 100f;
+            float usableCapacity = Math.Max(0f, inventoryCapacity - reservedCapacity);
+            return Math.Max(0f, usableCapacity - Math.Max(0f, currentWeight));
         }
     }
 }

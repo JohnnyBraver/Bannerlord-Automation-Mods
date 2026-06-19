@@ -72,19 +72,28 @@ namespace SettlementAutomationCore
 
             try
             {
+                var phasePolicy = AutomationPhasePolicy.Create(MobileParty.MainParty, settlement);
+                if (!phasePolicy.CanRunAny)
+                {
+                    return;
+                }
+
                 // ----------------------------------------------------
                 // Step 0: Preparation Phase
                 // ----------------------------------------------------
-                var preparationProviders = AutomationRegistry.ActivePreparationProviders;
-                foreach (var reg in preparationProviders)
+                if (phasePolicy.Preparation)
                 {
-                    try
+                    var preparationProviders = AutomationRegistry.ActivePreparationProviders;
+                    foreach (var reg in preparationProviders)
                     {
-                        reg.Provider.PrepareForAutomation(MobileParty.MainParty, settlement);
-                    }
-                    catch (Exception ex)
-                    {
-                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error preparing automation from {reg.ProviderName}: {ex.Message}");
+                        try
+                        {
+                            reg.Provider.PrepareForAutomation(MobileParty.MainParty, settlement);
+                        }
+                        catch (Exception ex)
+                        {
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error preparing automation from {reg.ProviderName}: {ex.Message}");
+                        }
                     }
                 }
 
@@ -96,47 +105,53 @@ namespace SettlementAutomationCore
                 AutomationRegistry.ClearRequests();
                 AutomationRegistry.ClearReservations();
                 AutomationRequestContext requestContext;
-                var visibilityLogic = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement, true);
-                if (visibilityLogic != null)
+                if (phasePolicy.Requests)
                 {
-                    requestContext = AutomationRequestContext.FromInventoryLogic(MobileParty.MainParty, settlement, visibilityLogic);
-                }
-                else
-                {
-                    requestContext = AutomationRequestContext.Empty(MobileParty.MainParty, settlement);
-                }
-
-                var requestProviders = AutomationRegistry.ActiveRequestProviders;
-                foreach (var reg in requestProviders)
-                {
-                    try
+                    var visibilityLogic = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement, true);
+                    if (visibilityLogic != null)
                     {
-                        reg.Provider.SubmitAutomationRequests(requestContext);
+                        requestContext = AutomationRequestContext.FromInventoryLogic(MobileParty.MainParty, settlement, visibilityLogic);
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error gathering requests from {reg.ProviderName}: {ex.Message}");
+                        requestContext = AutomationRequestContext.Empty(MobileParty.MainParty, settlement);
+                    }
+
+                    var requestProviders = AutomationRegistry.ActiveRequestProviders;
+                    foreach (var reg in requestProviders)
+                    {
+                        try
+                        {
+                            reg.Provider.SubmitAutomationRequests(requestContext);
+                        }
+                        catch (Exception ex)
+                        {
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error gathering requests from {reg.ProviderName}: {ex.Message}");
+                        }
                     }
                 }
 
                 // ----------------------------------------------------
                 // Step 2: Pre-Sell Phase (Revenue Generation)
                 // ----------------------------------------------------
-                var preSellProviders = AutomationRegistry.ActivePreSellProviders;
                 var preSellOrders = new List<(TradeOrder Order, string ProviderName)>();
-                foreach (var reg in preSellProviders)
+                if (phasePolicy.PreSell)
                 {
-                    try
+                    var preSellProviders = AutomationRegistry.ActivePreSellProviders;
+                    foreach (var reg in preSellProviders)
                     {
-                        var orders = reg.Provider.GetPreSellOrders(MobileParty.MainParty, settlement);
-                        if (orders != null)
+                        try
                         {
-                            preSellOrders.AddRange(orders.Select(order => (order, reg.ProviderName)));
+                            var orders = reg.Provider.GetPreSellOrders(MobileParty.MainParty, settlement);
+                            if (orders != null)
+                            {
+                                preSellOrders.AddRange(orders.Select(order => (order, reg.ProviderName)));
+                            }
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error gathering pre-sell orders from {reg.ProviderName}: {ex.Message}");
+                        catch (Exception ex)
+                        {
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error gathering pre-sell orders from {reg.ProviderName}: {ex.Message}");
+                        }
                     }
                 }
 
@@ -191,20 +206,23 @@ namespace SettlementAutomationCore
                 // ----------------------------------------------------
                 // Step 3: Tavern / Ransom & Mercenaries Phase
                 // ----------------------------------------------------
-                var ransomRegistrations = AutomationRegistry.ActiveRansomProviders;
                 var ransomOrders = new List<RansomOrder>();
                 var mercOrders = new List<MercenaryRecruitOrder>();
-                foreach (var reg in ransomRegistrations)
+                if (phasePolicy.Tavern)
                 {
-                    try
+                    var ransomRegistrations = AutomationRegistry.ActiveRansomProviders;
+                    foreach (var reg in ransomRegistrations)
                     {
-                        var rOrders = reg.Provider.GetRansomOrders(MobileParty.MainParty, settlement);
-                        if (rOrders != null) ransomOrders.AddRange(rOrders);
+                        try
+                        {
+                            var rOrders = reg.Provider.GetRansomOrders(MobileParty.MainParty, settlement);
+                            if (rOrders != null) ransomOrders.AddRange(rOrders);
 
-                        var mOrders = reg.Provider.GetMercenaryRecruitOrders(MobileParty.MainParty, settlement);
-                        if (mOrders != null) mercOrders.AddRange(mOrders);
+                            var mOrders = reg.Provider.GetMercenaryRecruitOrders(MobileParty.MainParty, settlement);
+                            if (mOrders != null) mercOrders.AddRange(mOrders);
+                        }
+                        catch {}
                     }
-                    catch {}
                 }
 
                 // Apply ransoms
@@ -323,16 +341,23 @@ namespace SettlementAutomationCore
                 // ----------------------------------------------------
                 // Step 4: Notable Recruitment Phase
                 // ----------------------------------------------------
-                var recruitRegistrations = AutomationRegistry.ActiveRecruitProviders;
                 var recruitOrders = new List<RecruitOrder>();
-                foreach (var reg in recruitRegistrations)
+                if (phasePolicy.Recruitment)
                 {
-                    try
+                    var recruitRegistrations = AutomationRegistry.ActiveRecruitProviders;
+                    foreach (var reg in recruitRegistrations)
                     {
-                        var orders = reg.Provider.GetRecruitOrders(MobileParty.MainParty, settlement);
-                        if (orders != null) recruitOrders.AddRange(orders);
+                        try
+                        {
+                            var orders = reg.Provider.GetRecruitOrders(MobileParty.MainParty, settlement);
+                            if (orders != null) recruitOrders.AddRange(orders);
+                        }
+                        catch {}
                     }
-                    catch {}
+                }
+                else
+                {
+                    Helpers.Logger.WriteLog("SettlementAutomationCore", $"Skipped notable recruitment at {settlement.Name}: settlement is not eligible.");
                 }
 
                 var recruitedMap = new Dictionary<CharacterObject, int>();
@@ -387,16 +412,19 @@ namespace SettlementAutomationCore
                 // ----------------------------------------------------
                 // Step 5: Garrison Donation Phase
                 // ----------------------------------------------------
-                var garrisonRegistrations = AutomationRegistry.ActiveGarrisonProviders;
                 var garrisonOrders = new List<GarrisonOrder>();
-                foreach (var reg in garrisonRegistrations)
+                if (phasePolicy.GarrisonDonation)
                 {
-                    try
+                    var garrisonRegistrations = AutomationRegistry.ActiveGarrisonProviders;
+                    foreach (var reg in garrisonRegistrations)
                     {
-                        var orders = reg.Provider.GetGarrisonOrders(MobileParty.MainParty, settlement);
-                        if (orders != null) garrisonOrders.AddRange(orders);
+                        try
+                        {
+                            var orders = reg.Provider.GetGarrisonOrders(MobileParty.MainParty, settlement);
+                            if (orders != null) garrisonOrders.AddRange(orders);
+                        }
+                        catch {}
                     }
-                    catch {}
                 }
 
                 var garrisonParty = settlement.Town?.GarrisonParty;
@@ -434,16 +462,19 @@ namespace SettlementAutomationCore
                 // ----------------------------------------------------
                 // Step 6: Dungeon Donation Phase
                 // ----------------------------------------------------
-                var dungeonRegistrations = AutomationRegistry.ActiveDungeonProviders;
                 var dungeonOrders = new List<DungeonOrder>();
-                foreach (var reg in dungeonRegistrations)
+                if (phasePolicy.DungeonDonation)
                 {
-                    try
+                    var dungeonRegistrations = AutomationRegistry.ActiveDungeonProviders;
+                    foreach (var reg in dungeonRegistrations)
                     {
-                        var orders = reg.Provider.GetDungeonOrders(MobileParty.MainParty, settlement);
-                        if (orders != null) dungeonOrders.AddRange(orders);
+                        try
+                        {
+                            var orders = reg.Provider.GetDungeonOrders(MobileParty.MainParty, settlement);
+                            if (orders != null) dungeonOrders.AddRange(orders);
+                        }
+                        catch {}
                     }
-                    catch {}
                 }
 
                 if (dungeonOrders.Count > 0)
@@ -483,7 +514,7 @@ namespace SettlementAutomationCore
                 var activeRequests = RequestPolicy.SortRequests(AutomationRegistry.ActiveRequests).ToList();
                 LogRequestSummary(settlement, activeRequests);
 
-                if (activeRequests.Count > 0 && Hero.MainHero != null)
+                if (phasePolicy.PriorityNeeds && activeRequests.Count > 0 && Hero.MainHero != null)
                 {
                     var needsLogic = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
                     if (needsLogic != null)
@@ -523,93 +554,99 @@ namespace SettlementAutomationCore
                 // Step 8: Fief Minimum Phase
                 // ----------------------------------------------------
                 var fiefRegistrations = AutomationRegistry.ActiveFiefProviders;
-                foreach (var reg in fiefRegistrations)
+                if (phasePolicy.FiefMinimum)
                 {
-                    try
+                    foreach (var reg in fiefRegistrations)
                     {
-                        reg.Provider.ProcessFiefAutomation(MobileParty.MainParty, settlement, false);
-                    }
-                    catch (Exception ex)
-                    {
-                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error in Fief Minimum Phase from {reg.ProviderName}: {ex.Message}");
+                        try
+                        {
+                            reg.Provider.ProcessFiefAutomation(MobileParty.MainParty, settlement, false);
+                        }
+                        catch (Exception ex)
+                        {
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error in Fief Minimum Phase from {reg.ProviderName}: {ex.Message}");
+                        }
                     }
                 }
 
                 // ----------------------------------------------------
                 // Step 9: Free Trade Phase
                 // ----------------------------------------------------
-                var explicitReservations = AutomationRegistry.ActiveReservations;
-                var sellableItems = new List<SellableItem>();
-                var playerRoster = MobileParty.MainParty.ItemRoster;
-                var freeTradeLockKeys = InventoryLockHelper.GetCurrentLockKeys();
-                for (int i = 0; i < playerRoster.Count; i++)
+                if (phasePolicy.FreeTrade)
                 {
-                    var element = playerRoster.GetElementCopyAtIndex(i);
-                    if (element.EquipmentElement.Item != null)
+                    var explicitReservations = AutomationRegistry.ActiveReservations;
+                    var sellableItems = new List<SellableItem>();
+                    var playerRoster = MobileParty.MainParty.ItemRoster;
+                    var freeTradeLockKeys = InventoryLockHelper.GetCurrentLockKeys();
+                    for (int i = 0; i < playerRoster.Count; i++)
                     {
-                        var item = element.EquipmentElement.Item;
-                        if (InventoryLockHelper.IsLocked(element.EquipmentElement, freeTradeLockKeys))
+                        var element = playerRoster.GetElementCopyAtIndex(i);
+                        if (element.EquipmentElement.Item != null)
                         {
-                            sellableItems.Add(new SellableItem(element.EquipmentElement, 0));
-                            continue;
-                        }
-
-                        int reserved = 0;
-                        foreach (var res in explicitReservations)
-                        {
-                            if (res.MatchesItem(item))
+                            var item = element.EquipmentElement.Item;
+                            if (InventoryLockHelper.IsLocked(element.EquipmentElement, freeTradeLockKeys))
                             {
-                                reserved = Math.Max(reserved, res.Quantity);
-                            }
-                        }
-                        foreach (var req in activeRequests)
-                        {
-                            if (!RequestPolicy.CreatesImplicitSellReservation(req))
-                            {
+                                sellableItems.Add(new SellableItem(element.EquipmentElement, 0));
                                 continue;
                             }
 
-                            if (req.MatchesItem(item))
+                            int reserved = 0;
+                            foreach (var res in explicitReservations)
                             {
-                                reserved = Math.Max(reserved, req.Quantity);
+                                if (res.MatchesItem(item))
+                                {
+                                    reserved = Math.Max(reserved, res.Quantity);
+                                }
                             }
-                        }
-                        int available = Math.Max(0, element.Amount - reserved);
-                        sellableItems.Add(new SellableItem(element.EquipmentElement, available));
-                    }
-                }
-
-                var logic8 = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
-                if (logic8 != null)
-                {
-                    var context = TradeContextFactory.Create(MobileParty.MainParty, settlement, logic8, sellableItems);
-
-                    var analyzers = AutomationRegistry.ActiveFreeTradeAnalyzers;
-                    foreach (var reg in analyzers)
-                    {
-                        try
-                        {
-                            var proposal = reg.Provider.AnalyzeMarket(context);
-                            if (proposal != null && proposal.Actions != null && proposal.Actions.Count > 0)
+                            foreach (var req in activeRequests)
                             {
-                                ExecuteTradeProposal(proposal, context, logic8, marketReport, reg.ProviderName);
+                                if (!RequestPolicy.CreatesImplicitSellReservation(req))
+                                {
+                                    continue;
+                                }
+
+                                if (req.MatchesItem(item))
+                                {
+                                    reserved = Math.Max(reserved, req.Quantity);
+                                }
                             }
-                        }
-                        catch (Exception ex)
-                        {
-                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error executing free trade analyzer {reg.ProviderName}: {ex.Message}");
+                            int available = Math.Max(0, element.Amount - reserved);
+                            sellableItems.Add(new SellableItem(element.EquipmentElement, available));
                         }
                     }
 
-                    if (logic8.IsThereAnyChanges())
+                    var logic8 = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
+                    if (logic8 != null)
                     {
-                        int initialGold = Hero.MainHero?.Gold ?? 0;
-                        logic8.DoneLogic();
-                        int finalGold = Hero.MainHero?.Gold ?? 0;
-                        int goldDiff = finalGold - initialGold;
-                        string goldDiffSign = goldDiff >= 0 ? "+" : "";
-                        marketReport.AddGoldDelta(goldDiff);
-                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Free trade execution completed in {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d)");
+                        var context = TradeContextFactory.Create(MobileParty.MainParty, settlement, logic8, sellableItems);
+
+                        var analyzers = AutomationRegistry.ActiveFreeTradeAnalyzers;
+                        foreach (var reg in analyzers)
+                        {
+                            try
+                            {
+                                var proposal = reg.Provider.AnalyzeMarket(context);
+                                if (proposal != null && proposal.Actions != null && proposal.Actions.Count > 0)
+                                {
+                                    context = ExecuteTradeProposal(proposal, context, logic8, marketReport, reg.ProviderName);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error executing free trade analyzer {reg.ProviderName}: {ex.Message}");
+                            }
+                        }
+
+                        if (logic8.IsThereAnyChanges())
+                        {
+                            int initialGold = Hero.MainHero?.Gold ?? 0;
+                            logic8.DoneLogic();
+                            int finalGold = Hero.MainHero?.Gold ?? 0;
+                            int goldDiff = finalGold - initialGold;
+                            string goldDiffSign = goldDiff >= 0 ? "+" : "";
+                            marketReport.AddGoldDelta(goldDiff);
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Free trade execution completed in {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d)");
+                        }
                     }
                 }
 
@@ -618,15 +655,18 @@ namespace SettlementAutomationCore
                 // ----------------------------------------------------
                 // Step 10: Fief Surplus Phase
                 // ----------------------------------------------------
-                foreach (var reg in fiefRegistrations)
+                if (phasePolicy.FiefSurplus)
                 {
-                    try
+                    foreach (var reg in fiefRegistrations)
                     {
-                        reg.Provider.ProcessFiefAutomation(MobileParty.MainParty, settlement, true);
-                    }
-                    catch (Exception ex)
-                    {
-                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error in Fief Surplus Phase from {reg.ProviderName}: {ex.Message}");
+                        try
+                        {
+                            reg.Provider.ProcessFiefAutomation(MobileParty.MainParty, settlement, true);
+                        }
+                        catch (Exception ex)
+                        {
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error in Fief Surplus Phase from {reg.ProviderName}: {ex.Message}");
+                        }
                     }
                 }
             }
@@ -650,6 +690,126 @@ namespace SettlementAutomationCore
             Campaign.Current?.CurrentMenuContext?.Refresh();
             }
             catch {}
+        }
+
+        internal sealed class AutomationPhasePolicy
+        {
+            public bool Preparation { get; }
+            public bool Requests { get; }
+            public bool PreSell { get; }
+            public bool Tavern { get; }
+            public bool Recruitment { get; }
+            public bool GarrisonDonation { get; }
+            public bool DungeonDonation { get; }
+            public bool PriorityNeeds { get; }
+            public bool FiefMinimum { get; }
+            public bool FreeTrade { get; }
+            public bool FiefSurplus { get; }
+
+            public bool CanRunAny =>
+                Preparation ||
+                Requests ||
+                PreSell ||
+                Tavern ||
+                Recruitment ||
+                GarrisonDonation ||
+                DungeonDonation ||
+                PriorityNeeds ||
+                FiefMinimum ||
+                FreeTrade ||
+                FiefSurplus;
+
+            private AutomationPhasePolicy(
+                bool preparation,
+                bool requests,
+                bool preSell,
+                bool tavern,
+                bool recruitment,
+                bool garrisonDonation,
+                bool dungeonDonation,
+                bool priorityNeeds,
+                bool fiefMinimum,
+                bool freeTrade,
+                bool fiefSurplus)
+            {
+                Preparation = preparation;
+                Requests = requests;
+                PreSell = preSell;
+                Tavern = tavern;
+                Recruitment = recruitment;
+                GarrisonDonation = garrisonDonation;
+                DungeonDonation = dungeonDonation;
+                PriorityNeeds = priorityNeeds;
+                FiefMinimum = fiefMinimum;
+                FreeTrade = freeTrade;
+                FiefSurplus = fiefSurplus;
+            }
+
+            public static AutomationPhasePolicy Create(MobileParty party, Settlement settlement)
+            {
+                if (party == null || settlement == null)
+                {
+                    return ForFacts(false, false, false, false, false, false, false);
+                }
+
+                bool isHostile = false;
+                bool isSameFaction = false;
+                try
+                {
+                    isHostile = party.MapFaction != null &&
+                                settlement.MapFaction != null &&
+                                party.MapFaction.IsAtWarWith(settlement.MapFaction);
+                    isSameFaction = party.MapFaction != null &&
+                                    settlement.MapFaction != null &&
+                                    party.MapFaction == settlement.MapFaction;
+                }
+                catch {}
+
+                bool isOwnedByPlayerClan = settlement.OwnerClan != null && settlement.OwnerClan == Clan.PlayerClan;
+
+                return ForFacts(
+                    settlement.IsTown,
+                    settlement.IsVillage,
+                    settlement.IsCastle,
+                    isHostile,
+                    isSameFaction,
+                    isOwnedByPlayerClan,
+                    settlement.IsRaided || settlement.IsUnderRaid);
+            }
+
+            internal static AutomationPhasePolicy ForFacts(
+                bool isTown,
+                bool isVillage,
+                bool isCastle,
+                bool isHostile,
+                bool isSameFaction,
+                bool isOwnedByPlayerClan,
+                bool isRaidedOrUnderRaid)
+            {
+                bool isTownOrVillage = isTown || isVillage;
+                bool isKeep = isTown || isCastle;
+
+                bool canUseMarket = !isRaidedOrUnderRaid &&
+                                    ((isTown && !isHostile) ||
+                                     isVillage);
+                bool canUseTavern = isTown && !isHostile && !isRaidedOrUnderRaid;
+                bool canRecruitNotables = isTownOrVillage && !isHostile && !isRaidedOrUnderRaid;
+                bool canDonateToKeep = isKeep && isSameFaction && !isRaidedOrUnderRaid;
+                bool canManageOwnedFief = isKeep && isOwnedByPlayerClan && !isHostile;
+
+                return new AutomationPhasePolicy(
+                    preparation: canUseMarket,
+                    requests: canUseMarket,
+                    preSell: canUseMarket,
+                    tavern: canUseTavern,
+                    recruitment: canRecruitNotables,
+                    garrisonDonation: canDonateToKeep,
+                    dungeonDonation: canDonateToKeep,
+                    priorityNeeds: canUseMarket,
+                    fiefMinimum: canManageOwnedFief,
+                    freeTrade: canUseMarket,
+                    fiefSurplus: canManageOwnedFief);
+            }
         }
 
         private sealed class AutomationMarketReport
@@ -1050,9 +1210,10 @@ namespace SettlementAutomationCore
             bool isCargo = !item.IsAnimal && !item.IsMountable;
             if (isCargo && (state.Settings?.LimitToInventoryCapacity ?? true))
             {
-                float capacity = MobileParty.MainParty.InventoryCapacity;
-                float remainingCargoSpace = capacity - state.ProjectedWeight;
-                if (remainingCargoSpace < 0f) remainingCargoSpace = 0f;
+                float remainingCargoSpace = TradeContextFactory.CalculateFreeCargoCapacity(
+                    MobileParty.MainParty.InventoryCapacity,
+                    state.ProjectedWeight,
+                    state.Settings?.ReserveCarryCapacityPercent ?? 0);
                 if (item.Weight > 0f)
                 {
                     int maxWeightBuy = (int)(remainingCargoSpace / item.Weight);
@@ -1467,7 +1628,68 @@ namespace SettlementAutomationCore
             return $"{(int)currentWeight} / {(int)capacity} capacity ({percent}%)";
         }
 
-        private static void ExecuteTradeProposal(TradeProposal proposal, TradeContext context, InventoryLogic logic, AutomationMarketReport marketReport, string providerName)
+        internal static bool CanRunNotableRecruitment(MobileParty party, Settlement settlement)
+        {
+            if (party == null || settlement == null)
+            {
+                return false;
+            }
+
+            bool isAtWar = false;
+            try
+            {
+                isAtWar = party.MapFaction != null &&
+                          settlement.MapFaction != null &&
+                          party.MapFaction.IsAtWarWith(settlement.MapFaction);
+            }
+            catch {}
+
+            return CanRunNotableRecruitment(settlement.IsTown, settlement.IsVillage, isAtWar, settlement.IsRaided, settlement.IsUnderRaid);
+        }
+
+        internal static bool CanRunNotableRecruitment(bool isTown, bool isVillage, bool isAtWar, bool isRaided, bool isUnderRaid)
+        {
+            if (!isTown && !isVillage)
+            {
+                return false;
+            }
+
+            if (isAtWar || isRaided || isUnderRaid)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        internal static IReadOnlyList<SellableItem> ConsumeSellableItems(IReadOnlyList<SellableItem> sellableItems, EquipmentElement equipmentElement, int quantity)
+        {
+            if (sellableItems == null || sellableItems.Count == 0 || quantity <= 0)
+            {
+                return sellableItems ?? Array.Empty<SellableItem>();
+            }
+
+            var updated = new List<SellableItem>(sellableItems.Count);
+            bool consumed = false;
+            foreach (var sellableItem in sellableItems)
+            {
+                if (!consumed && sellableItem.Matches(equipmentElement))
+                {
+                    updated.Add(new SellableItem(
+                        sellableItem.EquipmentElement,
+                        Math.Max(0, sellableItem.AvailableQuantity - quantity)));
+                    consumed = true;
+                }
+                else
+                {
+                    updated.Add(sellableItem);
+                }
+            }
+
+            return updated;
+        }
+
+        private static TradeContext ExecuteTradeProposal(TradeProposal proposal, TradeContext context, InventoryLogic logic, AutomationMarketReport marketReport, string providerName)
         {
             var sells = proposal.Actions.Where(a => a.ActionType == TradeActionType.Sell).ToList();
             var slaughters = proposal.Actions.Where(a => a.ActionType == TradeActionType.Slaughter).ToList();
@@ -1477,12 +1699,13 @@ namespace SettlementAutomationCore
             float freeCargo = context.FreeCargoCapacity;
             int freeAnimalSlots = context.FreeAnimalSlots;
             bool enforceCargo = context.EnforceCargoLimit;
+            IReadOnlyList<SellableItem> sellableItems = context.SellableItems;
 
             // 1. Sells
             foreach (var action in sells)
             {
                 if (action.EquipmentElement.Item == null) continue;
-                var sellable = context.SellableItems.FirstOrDefault(s => s.Matches(action.EquipmentElement));
+                var sellable = sellableItems.FirstOrDefault(s => s.Matches(action.EquipmentElement));
                 if (sellable == null || sellable.AvailableQuantity <= 0) continue;
 
                 int toSell = Math.Min(action.Quantity, sellable.AvailableQuantity);
@@ -1501,6 +1724,7 @@ namespace SettlementAutomationCore
                     logic.AddTransferCommand(command);
 
                     availableGold += toSell * price;
+                    sellableItems = ConsumeSellableItems(sellableItems, action.EquipmentElement, toSell);
                     marketReport.AddSold(action.EquipmentElement, toSell, toSell * price, providerName, AutomationTransactionStage.FreeTrade);
                     if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
                     {
@@ -1522,6 +1746,7 @@ namespace SettlementAutomationCore
                     if (logic.CanSlaughterItem(itemRosterEl, InventoryLogic.InventorySide.PlayerInventory))
                     {
                         logic.SlaughterItem(itemRosterEl);
+                        sellableItems = ConsumeSellableItems(sellableItems, action.EquipmentElement, action.Quantity);
                         marketReport.AddSlaughtered(action.EquipmentElement, action.Quantity, providerName, AutomationTransactionStage.FreeTrade);
                         if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
                         {
@@ -1587,6 +1812,17 @@ namespace SettlementAutomationCore
                     }
                 }
             }
+
+            return new TradeContext(
+                context.Settlement,
+                context.Party,
+                logic,
+                availableGold,
+                freeCargo,
+                enforceCargo,
+                freeAnimalSlots,
+                context.MaxPackAnimalPurchases,
+                sellableItems);
         }
     }
 
@@ -1599,7 +1835,7 @@ namespace SettlementAutomationCore
 
         private void OnSettlementEntered(MobileParty party, Settlement settlement, Hero hero)
         {
-            if (party == MobileParty.MainParty && settlement != null && (settlement.IsTown || settlement.IsVillage))
+            if (party == MobileParty.MainParty && settlement != null && (settlement.IsTown || settlement.IsVillage || settlement.IsCastle))
             {
                 SubModule.QueueBackgroundTrade(settlement);
             }

@@ -252,6 +252,140 @@ namespace SettlementAutomationCore.Tests
             Assert.Contains("Grain would exceed cargo capacity", line);
         }
 
+        [Theory]
+        [InlineData(1000f, 800f, 10, 100f)]
+        [InlineData(1000f, 920f, 10, 0f)]
+        [InlineData(1000f, 500f, 0, 500f)]
+        [InlineData(1000f, 500f, 150, 0f)]
+        public void CalculateFreeCargoCapacity_ReservesConfiguredCapacity(float capacity, float currentWeight, int reservePercent, float expected)
+        {
+            Assert.Equal(expected, TradeContextFactory.CalculateFreeCargoCapacity(capacity, currentWeight, reservePercent));
+        }
+
+        [Theory]
+        [InlineData(true, false, false, false, false, true)]
+        [InlineData(false, true, false, false, false, true)]
+        [InlineData(false, true, true, false, false, false)]
+        [InlineData(false, true, false, true, false, false)]
+        [InlineData(false, true, false, false, true, false)]
+        [InlineData(false, false, false, false, false, false)]
+        public void CanRunNotableRecruitment_GatesHostileAndRaidedSettlements(
+            bool isTown,
+            bool isVillage,
+            bool isAtWar,
+            bool isRaided,
+            bool isUnderRaid,
+            bool expected)
+        {
+            Assert.Equal(expected, SubModule.CanRunNotableRecruitment(isTown, isVillage, isAtWar, isRaided, isUnderRaid));
+        }
+
+        [Fact]
+        public void AutomationPhasePolicy_AllowsHostileVillageTradeButNotRecruitment()
+        {
+            var policy = SubModule.AutomationPhasePolicy.ForFacts(
+                isTown: false,
+                isVillage: true,
+                isCastle: false,
+                isHostile: true,
+                isSameFaction: false,
+                isOwnedByPlayerClan: false,
+                isRaidedOrUnderRaid: false);
+
+            Assert.True(policy.FreeTrade);
+            Assert.True(policy.PriorityNeeds);
+            Assert.False(policy.Recruitment);
+            Assert.False(policy.GarrisonDonation);
+            Assert.False(policy.DungeonDonation);
+        }
+
+        [Fact]
+        public void AutomationPhasePolicy_GatesKeepDonationBySameFaction()
+        {
+            var neutralCastle = SubModule.AutomationPhasePolicy.ForFacts(
+                isTown: false,
+                isVillage: false,
+                isCastle: true,
+                isHostile: false,
+                isSameFaction: false,
+                isOwnedByPlayerClan: false,
+                isRaidedOrUnderRaid: false);
+            var sameFactionCastle = SubModule.AutomationPhasePolicy.ForFacts(
+                isTown: false,
+                isVillage: false,
+                isCastle: true,
+                isHostile: false,
+                isSameFaction: true,
+                isOwnedByPlayerClan: false,
+                isRaidedOrUnderRaid: false);
+
+            Assert.False(neutralCastle.GarrisonDonation);
+            Assert.False(neutralCastle.DungeonDonation);
+            Assert.True(sameFactionCastle.GarrisonDonation);
+            Assert.True(sameFactionCastle.DungeonDonation);
+        }
+
+        [Fact]
+        public void AutomationPhasePolicy_AllowsOwnedCastleFiefAutomationWithoutMarket()
+        {
+            var policy = SubModule.AutomationPhasePolicy.ForFacts(
+                isTown: false,
+                isVillage: false,
+                isCastle: true,
+                isHostile: false,
+                isSameFaction: true,
+                isOwnedByPlayerClan: true,
+                isRaidedOrUnderRaid: false);
+
+            Assert.True(policy.FiefMinimum);
+            Assert.True(policy.FiefSurplus);
+            Assert.True(policy.GarrisonDonation);
+            Assert.True(policy.DungeonDonation);
+            Assert.False(policy.FreeTrade);
+            Assert.False(policy.PreSell);
+            Assert.False(policy.Tavern);
+        }
+
+        [Fact]
+        public void AutomationPhasePolicy_RaidedSettlementsSkipMarketRecruitmentAndDonation()
+        {
+            var policy = SubModule.AutomationPhasePolicy.ForFacts(
+                isTown: true,
+                isVillage: false,
+                isCastle: false,
+                isHostile: false,
+                isSameFaction: true,
+                isOwnedByPlayerClan: true,
+                isRaidedOrUnderRaid: true);
+
+            Assert.False(policy.FreeTrade);
+            Assert.False(policy.Recruitment);
+            Assert.False(policy.GarrisonDonation);
+            Assert.False(policy.DungeonDonation);
+            Assert.True(policy.FiefMinimum);
+            Assert.True(policy.FiefSurplus);
+        }
+
+        [Fact]
+        public void ConsumeSellableItems_ReducesOnlyMatchingIdentity()
+        {
+            var item = Item("grain");
+            var fine = Modifier("fine");
+            var cracked = Modifier("cracked");
+            var fineElement = new EquipmentElement(item, fine, null!, false);
+            var crackedElement = new EquipmentElement(item, cracked, null!, false);
+            var sellableItems = new[]
+            {
+                new SellableItem(fineElement, 5),
+                new SellableItem(crackedElement, 7)
+            };
+
+            var updated = SubModule.ConsumeSellableItems(sellableItems, fineElement, 3).ToList();
+
+            Assert.Equal(2, updated[0].AvailableQuantity);
+            Assert.Equal(7, updated[1].AvailableQuantity);
+        }
+
         private static AutomationRequest Request(string id, RequestProfile profile, int priority)
         {
             return AutomationRequest.ForInventoryTarget(id, RequestType.ItemCategory, "Food", 1, profile, priority);
