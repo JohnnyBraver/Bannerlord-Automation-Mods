@@ -112,7 +112,7 @@ namespace PartyManager
             int partySize = party.MemberRoster.TotalManCount;
             int limit = party.Party.PartySizeLimit;
 
-            // If we are over size limit, donate troops to friendly keeps/garrison
+            // If we are over size limit, donate troops to the garrison Core selected.
             if (partySize > limit)
             {
                 int excessCount = partySize - limit;

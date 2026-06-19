@@ -102,6 +102,20 @@ namespace EquipmentManager
         public override string ToString() => _name;
     }
 
+    public enum StealthGearPurchasePolicy
+    {
+        BlackenedOnly,
+        AnyStealthCompatible
+    }
+
+    public class StealthGearPurchasePolicyOption
+    {
+        private readonly string _name;
+        public StealthGearPurchasePolicy Value { get; }
+        public StealthGearPurchasePolicyOption(string name, StealthGearPurchasePolicy value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
     public class Settings : AttributeGlobalSettings<Settings>
     {
         public override string Id => "EquipmentManager_v3";
@@ -154,6 +168,12 @@ namespace EquipmentManager
             new EquipmentReportSortModeOption("Amount", EquipmentReportSortMode.Amount),
             new EquipmentReportSortModeOption("Market Value", EquipmentReportSortMode.MarketValue),
             new EquipmentReportSortModeOption("Paid Price", EquipmentReportSortMode.PaidPrice)
+        };
+
+        private static readonly IReadOnlyList<StealthGearPurchasePolicyOption> StealthGearPurchasePolicyOptions = new List<StealthGearPurchasePolicyOption>
+        {
+            new StealthGearPurchasePolicyOption("Blackened Gear Only", StealthGearPurchasePolicy.BlackenedOnly),
+            new StealthGearPurchasePolicyOption("Any Stealth-Compatible Gear", StealthGearPurchasePolicy.AnyStealthCompatible)
         };
 
         [SettingPropertyBool("Auto-Equip Companions", RequireRestart = false,
@@ -257,14 +277,20 @@ namespace EquipmentManager
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public int MinimumGoldReserve { get; set; } = 10000;
 
+        [SettingPropertyDropdown("Stealth Gear Purchase Policy", RequireRestart = false,
+            HintText = "Controls which stealth-compatible armor can be auto-bought for sneaking slots. Default: Blackened Gear Only.", Order = 7)]
+        [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
+        public Dropdown<StealthGearPurchasePolicyOption> StealthGearPurchasePolicyDropdown { get; set; } =
+            new Dropdown<StealthGearPurchasePolicyOption>(StealthGearPurchasePolicyOptions, 0);
+
         [SettingPropertyDropdown("Top Armor Spend Mode", RequireRestart = false,
-            HintText = "Controls when premium armor upgrade requests run compared to other item requests.", Order = 7)]
+            HintText = "Controls when premium armor upgrade requests run compared to other item requests.", Order = 8)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public Dropdown<RequestProfileOption> TopArmorSpendModeDropdown { get; set; } =
             new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Luxury));
 
         [SettingPropertyDropdown("Stealth Gear Spend Mode", RequireRestart = false,
-            HintText = "Controls when stealth gear upgrade requests run compared to other item requests.", Order = 8)]
+            HintText = "Controls when stealth gear upgrade requests run compared to other item requests.", Order = 9)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public Dropdown<RequestProfileOption> StealthGearSpendModeDropdown { get; set; } =
             new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Luxury));
@@ -294,6 +320,7 @@ namespace EquipmentManager
         public BuyEquipmentTarget BuyEquipmentTargetSetting => BuyEquipmentTargetDropdown.SelectedValue.Value;
         public RequestProfile TopArmorRequestProfile => TopArmorSpendModeDropdown.SelectedValue.Value;
         public RequestProfile StealthGearRequestProfile => StealthGearSpendModeDropdown.SelectedValue.Value;
+        public StealthGearPurchasePolicy StealthGearPurchasePolicySetting => StealthGearPurchasePolicyDropdown.SelectedValue.Value;
         public EquipmentSaleReportDetailMode EquipmentSaleReportDetail => EquipmentSaleReportDetailDropdown.SelectedValue.Value;
         public EquipmentReportSortMode EquipmentReportSort => EquipmentReportSortDropdown.SelectedValue.Value;
     }

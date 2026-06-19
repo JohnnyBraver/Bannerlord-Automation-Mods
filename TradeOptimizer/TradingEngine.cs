@@ -300,7 +300,7 @@ namespace TradeOptimizer
                         // Exclude from buy phase
                         if (!isLoot || settings.LootHandling != LootHandlingMode.XPFarm)
                         {
-                            localExcludedItems.Add(itemObj.Name.ToString());
+                            localExcludedItems.Add(GetTradeIdentityKey(item.ItemRosterElement.EquipmentElement));
                         }
                     }
 
@@ -421,7 +421,7 @@ namespace TradeOptimizer
                         {
                             skipReason = $"BudgetProtectionActive (available={currentBalance}, price={currentPrice})";
                         }
-                        if (skipReason == "" && itemObj.Name != null && localExcludedItems.Contains(itemObj.Name.ToString()))
+                        if (skipReason == "" && localExcludedItems.Contains(GetTradeIdentityKey(item.ItemRosterElement.EquipmentElement)))
                         {
                             skipReason = "SoldInSameStop";
                         }
@@ -468,7 +468,7 @@ namespace TradeOptimizer
                         {
                             if (currentPrice < avgPrice && buySkipDiagnosticsWritten < MaxBuySkipDiagnostics)
                             {
-                                string diagnosticKey = $"{itemObj.StringId}:{skipReason}";
+                                string diagnosticKey = $"{GetTradeIdentityKey(item.ItemRosterElement.EquipmentElement)}:{skipReason}";
                                 if (loggedSkipDiagnostics.Add(diagnosticKey))
                                 {
                                     WriteLog($"[Buy Skip Diagnostic] {itemObj.Name}: {skipReason}");
@@ -576,6 +576,12 @@ namespace TradeOptimizer
             return report;
         }
 
+        internal static string GetTradeIdentityKey(EquipmentElement equipmentElement)
+        {
+            string itemId = equipmentElement.Item?.StringId ?? string.Empty;
+            string modifierId = equipmentElement.ItemModifier?.StringId ?? string.Empty;
+            return $"{itemId}::{modifierId}";
+        }
 
     }
 }

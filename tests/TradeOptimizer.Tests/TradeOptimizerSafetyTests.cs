@@ -26,6 +26,16 @@ namespace TradeOptimizer.Tests
             Assert.Contains("Additional buy-skip diagnostics suppressed", source);
         }
 
+        [Fact]
+        public void TradingEngine_DoesNotUseDisplayNameForSameStopExclusion()
+        {
+            string source = ReadSource("TradeOptimizer", "TradingEngine.cs");
+
+            Assert.DoesNotContain("localExcludedItems.Add(itemObj.Name.ToString())", source);
+            Assert.DoesNotContain("localExcludedItems.Contains(itemObj.Name.ToString())", source);
+            Assert.Contains("GetTradeIdentityKey", source);
+        }
+
         private static string ReadSource(params string[] parts)
         {
             string root = FindRepoRoot();

@@ -17,7 +17,6 @@ namespace PartyManager.Helpers
         public static List<RansomOrder> GetRansomOrders(MobileParty party, Settlement settlement, Settings settings)
         {
             var orders = new List<RansomOrder>();
-            if (!settlement.IsTown) return orders;
             if (settings == null || !settings.AutoRansomPrisoners) return orders;
 
             var prisonRoster = party.PrisonRoster;
@@ -48,14 +47,7 @@ namespace PartyManager.Helpers
         public static List<DungeonOrder> GetDungeonOrders(MobileParty party, Settlement settlement, Settings settings)
         {
             var orders = new List<DungeonOrder>();
-            if (!settlement.IsTown && !settlement.IsCastle) return orders;
             if (settings == null || !settings.AutoDonatePrisoners) return orders;
-
-            // Only donate to friendly settlement dungeons
-            if (settlement.OwnerClan == null || settlement.MapFaction != party.MapFaction)
-            {
-                return orders;
-            }
 
             var prisonRoster = party.PrisonRoster;
             var candidates = new List<PrisonerInfo>();

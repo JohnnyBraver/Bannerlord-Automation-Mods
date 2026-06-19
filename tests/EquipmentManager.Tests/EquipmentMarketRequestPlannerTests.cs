@@ -39,6 +39,18 @@ namespace EquipmentManager.Tests
             Assert.Equal(new[] { "armor_a", "armor_b" }, groups[1].Request.MarketCandidates.Select(c => c.Item.StringId).ToArray());
         }
 
+        [Theory]
+        [InlineData("blackened_hood", StealthGearPurchasePolicy.BlackenedOnly, true)]
+        [InlineData("leather_hood", StealthGearPurchasePolicy.BlackenedOnly, false)]
+        [InlineData("leather_hood", StealthGearPurchasePolicy.AnyStealthCompatible, true)]
+        public void IsAllowedStealthBuyCandidate_AppliesPurchasePolicy(string itemId, StealthGearPurchasePolicy policy, bool expected)
+        {
+            var item = new ItemObject(itemId);
+            var equipmentElement = new EquipmentElement(item, null, null!, false);
+
+            Assert.Equal(expected, EquipmentManagerProvider.IsAllowedStealthBuyCandidate(equipmentElement, policy));
+        }
+
         private static InventoryItemView MarketItem(string id)
         {
             var item = new ItemObject(id);

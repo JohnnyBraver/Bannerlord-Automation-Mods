@@ -290,8 +290,12 @@ namespace TradeOptimizer
                         int meatYield = item.HorseComponent.MeatCount * slaughter.Amount;
                         int hidesYield = item.HorseComponent.HideCount * slaughter.Amount;
 
-                        string meatId = DefaultItems.Meat.StringId;
-                        string hidesId = DefaultItems.Hides.StringId;
+                        string meatId = InventoryItemView.CreateSnapshotId(
+                            InventoryLogic.InventorySide.PlayerInventory,
+                            new EquipmentElement(DefaultItems.Meat, null, null!, false));
+                        string hidesId = InventoryItemView.CreateSnapshotId(
+                            InventoryLogic.InventorySide.PlayerInventory,
+                            new EquipmentElement(DefaultItems.Hides, null, null!, false));
 
                         if (meatYield > 0 && finalPlayerCounts.ContainsKey(meatId))
                         {
@@ -442,8 +446,12 @@ namespace TradeOptimizer
                     {
                         int meatYield = item.HorseComponent.MeatCount * slaughter.Amount;
                         int hidesYield = item.HorseComponent.HideCount * slaughter.Amount;
-                        string meatId = DefaultItems.Meat.StringId;
-                        string hidesId = DefaultItems.Hides.StringId;
+                        string meatId = InventoryItemView.CreateSnapshotId(
+                            InventoryLogic.InventorySide.PlayerInventory,
+                            new EquipmentElement(DefaultItems.Meat, null, null!, false));
+                        string hidesId = InventoryItemView.CreateSnapshotId(
+                            InventoryLogic.InventorySide.PlayerInventory,
+                            new EquipmentElement(DefaultItems.Hides, null, null!, false));
                         if (meatYield > 0 && finalPlayerCounts.ContainsKey(meatId))
                             finalPlayerCounts[meatId] = Math.Max(0, finalPlayerCounts[meatId] - meatYield);
                         if (hidesYield > 0 && finalPlayerCounts.ContainsKey(hidesId))

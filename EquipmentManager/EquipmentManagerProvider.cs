@@ -275,6 +275,7 @@ namespace EquipmentManager
                             if (prioritizeStealth)
                             {
                                 if (!item.IsStealthItem) continue;
+                                if (!IsAllowedStealthBuyCandidate(candidate, settings.StealthGearPurchasePolicySetting)) continue;
 
                                 float score = GetStealthScore(candidate);
                                 if (score > bestScore)
@@ -459,6 +460,24 @@ namespace EquipmentManager
             }
 
             return false;
+        }
+
+        internal static bool IsAllowedStealthBuyCandidate(EquipmentElement equipmentElement, StealthGearPurchasePolicy policy)
+        {
+            var item = equipmentElement.Item;
+            if (item == null) return false;
+
+            switch (policy)
+            {
+                case StealthGearPurchasePolicy.AnyStealthCompatible:
+                    return true;
+                case StealthGearPurchasePolicy.BlackenedOnly:
+                default:
+                    string itemId = item.StringId ?? string.Empty;
+                    string itemName = item.Name?.ToString() ?? string.Empty;
+                    return itemId.IndexOf("blackened", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                           itemName.IndexOf("blackened", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
         }
 
         private static float GetArmorScore(EquipmentElement eqEl)

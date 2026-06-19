@@ -438,7 +438,7 @@ namespace PartyManager
         public int PrisonerStackAlertPercentLimit { get; set; } = 10;
 
         // --- Prisoner Donation Settings ---
-        [SettingPropertyBool("Auto-Donate Prisoners to Dungeon", RequireRestart = false, HintText = "Automatically donate prisoners to friendly town/castle dungeons to farm influence/XP.", Order = 1)]
+        [SettingPropertyBool("Auto-Donate Prisoners to Dungeon", RequireRestart = false, HintText = "Automatically donate eligible prisoners to friendly town/castle dungeons to farm influence/XP.", Order = 1)]
         [SettingPropertyGroup("Prisoners/Donation", GroupOrder = 0)]
         public bool AutoDonatePrisoners { get; set; } = false;
 

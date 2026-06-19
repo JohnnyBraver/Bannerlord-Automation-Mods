@@ -52,5 +52,18 @@ namespace TradeOptimizer.Tests
             Assert.Equal(expected, TradeCandidatePolicy.PassesBuyPriceThreshold(price, average, threshold));
         }
 
+        [Fact]
+        public void GetTradeIdentityKey_IncludesModifierIdentity()
+        {
+            var item = new ItemObject("flax");
+            var fine = new ItemModifier { StringId = "fine" };
+            var cracked = new ItemModifier { StringId = "cracked" };
+
+            string fineKey = TradingEngine.GetTradeIdentityKey(new EquipmentElement(item, fine, null!, false));
+            string crackedKey = TradingEngine.GetTradeIdentityKey(new EquipmentElement(item, cracked, null!, false));
+
+            Assert.NotEqual(fineKey, crackedKey);
+            Assert.Equal("flax::fine", fineKey);
+        }
     }
 }

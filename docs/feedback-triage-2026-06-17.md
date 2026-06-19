@@ -65,6 +65,34 @@ Raw notes from live testing and feedback. This is intentionally temporary: keep 
   - Need determine whether this is caused by a mod or native behavior.
   - Search for any automation/campaign behavior that reacts to village raids, map event ending, capture, or player defeated state.
 
+## Code Review Follow-ups
+
+- TradeOptimizer simulation reconstruction still has stale slaughter-yield bookkeeping.
+  - `TradeOptimizerProvider` now tracks inventory diffs with side/modifier snapshot IDs, but the old meat/hides adjustment still checks plain `DefaultItems.Meat.StringId` and `DefaultItems.Hides.StringId`.
+  - Slaughter arbitrage currently looks disabled, so this is probably dormant, but if that path comes back it may double-count generated meat/hides or fail to cancel them from simulated trade orders.
+- TradeOptimizer's `SimulateAndCollectOrders` has a dangerous buy-side path.
+  - The only current caller uses `runBuy: false`, but the method accepts `runBuy: true`.
+  - If reused for buys, new player inventory keys are `PlayerInventory:item:modifier`, while merchant entries are mapped as `OtherInventory:item:modifier`; that can leave `eqElementMap[key]` missing when converting simulated purchases into `TradeOrder`s.
+- TradeOptimizer's same-stop exclusion uses display names.
+  - Sold items are added to `localExcludedItems` by `itemObj.Name.ToString()`, and buy candidates are checked the same way.
+  - That can collide across variants with the same display name, depend on localization, and does not match the newer item/modifier identity model.
+- Multiple free-trade analyzers can over-consume the same sellable quantity.
+  - Core builds one `TradeContext` before iterating analyzers.
+  - `ExecuteTradeProposal` clamps each proposal to the original `context.SellableItems`, but it does not reduce that availability after a provider sells something, so a later analyzer could sell the same starting quantity again.
+  - This is low risk while TradeOptimizer is the only active analyzer, but it matters for the additive provider model.
+- Exact market requests reserve sellable inventory by item id, not exact market identity.
+  - `AutomationRequest.ForMarketItems` captures exact `InventoryItemView` candidates, but `AutomationRequest.MatchesItem` for `MarketItem` only checks `StringId`.
+  - That can over-reserve or under-reserve when modifiers/variants exist, and it is a mismatch with the newer `SnapshotId` / `HasSameItemIdentity` approach.
+- EquipmentManager sale protection may treat stealth/civilian-compatible gear as a general upgrade.
+  - `IsUpgradeForAnyTarget` checks battle, civilian, and stealth sets, but the battle branch does not apply top-armor tier/budget policy.
+  - This may be fine for "keep useful gear" behavior, but it is worth checking against the observed below-tier armor behavior so sale protection does not preserve or prioritize trash that only looks good in a different context.
+- FiefManager deposits mutate hero gold directly.
+  - `FiefManagerProvider` subtracts from `Hero.MainHero.Gold` and adds to `town.BoostBuildingProcess` directly.
+  - If Bannerlord has a native action/event for construction reserve deposits, using it may keep logs, notifications, achievements, or downstream systems more consistent.
+- SmithingOptimizer is still structurally outside Core.
+  - It is imported into the suite, but it still operates as a standalone UI/Harmony tool.
+  - That is okay for 0.3.0/0.3.1, but future wood/material buying or smelting should go through Core requests/reservations instead of direct inventory manipulation.
+
 ## Future Mod Idea
 
 - Quest completion helper.
