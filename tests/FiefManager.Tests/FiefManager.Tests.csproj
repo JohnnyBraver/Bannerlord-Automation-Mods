@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <SkipBannerlordModuleCopy>true</SkipBannerlordModuleCopy>
+    <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,7 +19,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\SettlementAutomationCore\SettlementAutomationCore.csproj" AdditionalProperties="SkipBannerlordModuleCopy=true" />
     <ProjectReference Include="..\..\FiefManager\FiefManager.csproj" AdditionalProperties="SkipBannerlordModuleCopy=true" />
   </ItemGroup>
 </Project>
