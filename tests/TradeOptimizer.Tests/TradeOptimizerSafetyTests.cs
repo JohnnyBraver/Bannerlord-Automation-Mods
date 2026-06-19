@@ -36,6 +36,17 @@ namespace TradeOptimizer.Tests
             Assert.Contains("GetTradeIdentityKey", source);
         }
 
+        [Fact]
+        public void Provider_UsesCoreClonedPricingSessionInsteadOfLiveRosterRestore()
+        {
+            string source = ReadSource("TradeOptimizer", "TradeOptimizerProvider.cs");
+
+            Assert.Contains("TradePricingSession.CreateSimulated", source);
+            Assert.DoesNotContain("party.ItemRoster.Clear()", source);
+            Assert.DoesNotContain("settlement.ItemRoster.Clear()", source);
+            Assert.DoesNotContain("CreateAndInitInventoryLogic(party, settlement, false)", source);
+        }
+
         private static string ReadSource(params string[] parts)
         {
             string root = FindRepoRoot();

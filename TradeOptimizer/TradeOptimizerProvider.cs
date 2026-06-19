@@ -8,6 +8,7 @@ using TaleWorlds.CampaignSystem.Inventory;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using TaleWorlds.Core;
 using SettlementAutomationCore;
+using SettlementAutomationCore.Transactions;
 
 namespace TradeOptimizer
 {
@@ -209,20 +210,14 @@ namespace TradeOptimizer
                 return orders;
             }
 
-            // Back up the rosters so we can simulate on the real rosters to get accurate dynamic prices
-            // while restoring the original state completely after the simulation run finishes.
-            var backupPlayerRoster = new TaleWorlds.CampaignSystem.Roster.ItemRoster(party.ItemRoster);
-            var backupSettlementRoster = new TaleWorlds.CampaignSystem.Roster.ItemRoster(settlement.ItemRoster);
+            using var pricingSession = TradePricingSession.CreateSimulated(party, settlement);
+            if (pricingSession == null) return orders;
+            var tempLogic = pricingSession.Logic;
 
-            try
-            {
-                var tempLogic = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(party, settlement, false);
-                if (tempLogic == null) return orders;
+            Func<TaleWorlds.Core.WeaponComponentData, TaleWorlds.Core.ItemObject.ItemUsageSetFlags> dummyFunc = w => (TaleWorlds.Core.ItemObject.ItemUsageSetFlags)0;
+            var vm = new SPInventoryVM(tempLogic, false, dummyFunc);
 
-                Func<TaleWorlds.Core.WeaponComponentData, TaleWorlds.Core.ItemObject.ItemUsageSetFlags> dummyFunc = w => (TaleWorlds.Core.ItemObject.ItemUsageSetFlags)0;
-                var vm = new SPInventoryVM(tempLogic, false, dummyFunc);
-
-                // Capture initial counts on both sides to determine net transfers later
+            // Capture initial counts on both sides to determine net transfers later.
                 var initialPlayerCounts = new Dictionary<string, int>();
                 var playerElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
                 for (int i = 0; i < playerElements.Count; i++)
@@ -235,7 +230,7 @@ namespace TradeOptimizer
                     }
                 }
 
-                // Map StringId to EquipmentElement to construct TradeOrder later
+            // Map exact snapshot IDs to EquipmentElement values to construct TradeOrder later.
                 var eqElementMap = new Dictionary<string, EquipmentElement>();
                 for (int i = 0; i < playerElements.Count; i++)
                 {
@@ -265,10 +260,10 @@ namespace TradeOptimizer
                     }
                 }
 
-                // Run the actual optimization on the temp logic (mutates tempLogic, which mutates real rosters)
+            // Run optimization on cloned trade rosters so demand-sensitive prices shift safely.
                 var report = TradingEngine.RunOptimization(vm, runSell, runBuy, tradeContext, excludedItems);
 
-                // Compute net difference to determine what actually got traded in the simulation
+            // Compute net difference to determine what actually got traded in the simulation.
                 var finalPlayerCounts = new Dictionary<string, int>();
                 var finalPlayerElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
                 for (int i = 0; i < finalPlayerElements.Count; i++)
@@ -281,7 +276,7 @@ namespace TradeOptimizer
                     }
                 }
 
-                // Adjust final counts to subtract yields of slaughter arbitrage
+            // Adjust final counts to subtract yields of slaughter arbitrage.
                 foreach (var slaughter in report.ArbitrageSlaughters)
                 {
                     var item = slaughter.EqElement.Item;
@@ -308,7 +303,7 @@ namespace TradeOptimizer
                     }
                 }
 
-                // All unique items across initial & final player inventory
+            // All unique items across initial and final player inventory.
                 var allKeys = initialPlayerCounts.Keys.Union(finalPlayerCounts.Keys).Distinct();
 
                 foreach (var key in allKeys)
@@ -327,23 +322,12 @@ namespace TradeOptimizer
                     }
                 }
 
-                // Manually append the buy and slaughter orders for arbitrage slaughters
+            // Manually append the buy and slaughter orders for arbitrage slaughters.
                 foreach (var slaughter in report.ArbitrageSlaughters)
                 {
                     orders.Add(new TradeOrder(slaughter.EqElement, slaughter.Amount, true, false));
                     orders.Add(new TradeOrder(slaughter.EqElement, slaughter.Amount, false, true));
                 }
-
-            }
-            finally
-            {
-                // Restore original rosters
-                party.ItemRoster.Clear();
-                party.ItemRoster.Add(backupPlayerRoster);
-
-                settlement.ItemRoster.Clear();
-                settlement.ItemRoster.Add(backupSettlementRoster);
-            }
 
             return orders;
         }
@@ -378,21 +362,16 @@ namespace TradeOptimizer
                 return new TradeProposal(actions);
             }
 
-            // Build a synthetic sellable map for TradingEngine to use (from context.SellableItems)
-            // The TradingEngine uses the InventoryLogic in context for price queries
-            // We simulate with rostert backups, but pass context limits to RunOptimization
-            var backupPlayerRoster = new TaleWorlds.CampaignSystem.Roster.ItemRoster(party.ItemRoster);
-            var backupSettlementRoster = new TaleWorlds.CampaignSystem.Roster.ItemRoster(settlement.ItemRoster);
+            // Run demand-sensitive planning on cloned trade rosters so price shifts are preserved
+            // without mutating the live party or settlement inventory.
+            using var pricingSession = TradePricingSession.CreateSimulated(party, settlement);
+            if (pricingSession == null) return new TradeProposal(actions);
+            var tempLogic = pricingSession.Logic;
 
-            try
-            {
-                var tempLogic = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(party, settlement, false);
-                if (tempLogic == null) return new TradeProposal(actions);
+            Func<TaleWorlds.Core.WeaponComponentData, TaleWorlds.Core.ItemObject.ItemUsageSetFlags> dummyFunc = w => (TaleWorlds.Core.ItemObject.ItemUsageSetFlags)0;
+            var vm = new SPInventoryVM(tempLogic, false, dummyFunc);
 
-                Func<TaleWorlds.Core.WeaponComponentData, TaleWorlds.Core.ItemObject.ItemUsageSetFlags> dummyFunc = w => (TaleWorlds.Core.ItemObject.ItemUsageSetFlags)0;
-                var vm = new SPInventoryVM(tempLogic, false, dummyFunc);
-
-                // Capture initial counts
+            // Capture initial counts.
                 var initialPlayerCounts = new Dictionary<string, int>();
                 var eqElementMap = new Dictionary<string, EquipmentElement>();
                 var playerElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
@@ -487,15 +466,6 @@ namespace TradeOptimizer
                     actions.Add(new TradeAction(slaughter.EqElement, slaughter.Amount, TradeActionType.Buy));
                     actions.Add(new TradeAction(slaughter.EqElement, slaughter.Amount, TradeActionType.Slaughter));
                 }
-
-            }
-            finally
-            {
-                party.ItemRoster.Clear();
-                party.ItemRoster.Add(backupPlayerRoster);
-                settlement.ItemRoster.Clear();
-                settlement.ItemRoster.Add(backupSettlementRoster);
-            }
 
             return new TradeProposal(actions);
         }
