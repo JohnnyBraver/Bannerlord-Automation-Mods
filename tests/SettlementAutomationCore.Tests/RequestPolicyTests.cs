@@ -87,6 +87,30 @@ namespace SettlementAutomationCore.Tests
         }
 
         [Fact]
+        public void MarketItemRequest_MatchesExactItemAndModifierIdentity()
+        {
+            var item = Item("armor_a");
+            var fine = Modifier("fine");
+            var cracked = Modifier("cracked");
+            var request = AutomationRequest.ForMarketItems(
+                "EquipmentManager",
+                new[]
+                {
+                    new InventoryItemView(
+                        InventoryLogic.InventorySide.OtherInventory,
+                        new EquipmentElement(item, fine, null!, false),
+                        1,
+                        100,
+                        InventoryItemCategory.Armor)
+                },
+                1);
+
+            Assert.True(request.MatchesEquipmentElement(new EquipmentElement(item, fine, null!, false)));
+            Assert.False(request.MatchesEquipmentElement(new EquipmentElement(item, cracked, null!, false)));
+            Assert.False(request.MatchesEquipmentElement(new EquipmentElement(Item("armor_b"), fine, null!, false)));
+        }
+
+        [Fact]
         public void MarketActivitySummary_AggregatesAndLimitsInGameSummary()
         {
             var summary = new MarketActivitySummary();

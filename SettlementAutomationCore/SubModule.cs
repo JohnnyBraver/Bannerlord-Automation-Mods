@@ -247,7 +247,6 @@ namespace SettlementAutomationCore
                                 int estimatedGold = 0;
                                 foreach (var element in ransomRoster.GetTroopRoster())
                                 {
-                                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed {element.Number}x {element.Character.Name}"));
                                     ransomParts.Add($"{element.Number}x {element.Character.Name}");
                                     try
                                     {
@@ -259,6 +258,7 @@ namespace SettlementAutomationCore
                                     }
                                     catch {}
                                 }
+                                InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed prisoners: {string.Join(", ", ransomParts)}"));
                                 Helpers.Logger.WriteLog("SettlementAutomationCore", $"Ransomed at {settlement.Name}: {string.Join(", ", ransomParts)} (Est. Gold: +{estimatedGold}d)");
                             }
                             catch (Exception ex)
@@ -360,8 +360,10 @@ namespace SettlementAutomationCore
                     Helpers.Logger.WriteLog("SettlementAutomationCore", $"Skipped notable recruitment at {settlement.Name}: settlement is not eligible.");
                 }
 
-                var recruitedMap = new Dictionary<CharacterObject, int>();
-                int totalCount = 0;
+                var plannedRecruitments = new List<(RecruitOrder Order, CharacterObject Troop, int Cost)>();
+                int projectedRecruitGold = Hero.MainHero?.Gold ?? 0;
+                int projectedPartySize = MobileParty.MainParty.MemberRoster.TotalManCount;
+                int partySizeLimit = MobileParty.MainParty.Party.PartySizeLimit;
                 foreach (var order in recruitOrders)
                 {
                     try
@@ -372,31 +374,53 @@ namespace SettlementAutomationCore
                         var troop = order.Notable.VolunteerTypes[order.SlotIndex];
                         if (troop == null) continue;
 
-                        // Check party size limit before recruiting. Providers decide whether a
-                        // specific order may overfill for their own follow-up automation.
-                        int currentSize = MobileParty.MainParty.MemberRoster.TotalManCount;
-                        int limit = MobileParty.MainParty.Party.PartySizeLimit;
-
-                        if (currentSize >= limit && !order.AllowOverPartySize) continue;
+                        if (projectedPartySize >= partySizeLimit && !order.AllowOverPartySize) continue;
 
                         int cost = (int)Campaign.Current.Models.PartyWageModel.GetTroopRecruitmentCost(troop, Hero.MainHero, false).ResultNumber;
-                        if (Hero.MainHero.Gold >= cost)
+                        if (projectedRecruitGold >= cost)
                         {
-                            order.Notable.VolunteerTypes[order.SlotIndex] = null;
-                            MobileParty.MainParty.MemberRoster.AddToCounts(troop, 1);
-                            GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, order.Notable, cost, false);
-                            CampaignEventDispatcher.Instance.OnTroopRecruited(Hero.MainHero, settlement, order.Notable, troop, 1);
-                            
-                            if (recruitedMap.ContainsKey(troop))
-                            {
-                                recruitedMap[troop]++;
-                            }
-                            else
-                            {
-                                recruitedMap[troop] = 1;
-                            }
-                            totalCount++;
+                            plannedRecruitments.Add((order, troop, cost));
+                            projectedRecruitGold -= cost;
+                            projectedPartySize++;
                         }
+                    }
+                    catch {}
+                }
+
+                var recruitedMap = new Dictionary<CharacterObject, int>();
+                int totalCount = 0;
+                foreach (var group in plannedRecruitments.GroupBy(p => new { p.Order.Notable, p.Troop }))
+                {
+                    try
+                    {
+                        var notable = group.Key.Notable;
+                        var troop = group.Key.Troop;
+                        if (notable?.VolunteerTypes == null || troop == null) continue;
+
+                        var entries = group.ToList();
+                        foreach (var entry in entries)
+                        {
+                            if (entry.Order.SlotIndex >= 0 && entry.Order.SlotIndex < notable.VolunteerTypes.Length)
+                            {
+                                notable.VolunteerTypes[entry.Order.SlotIndex] = null;
+                            }
+                        }
+
+                        int count = entries.Count;
+                        int totalCost = entries.Sum(entry => entry.Cost);
+                        MobileParty.MainParty.AddElementToMemberRoster(troop, count, false);
+                        GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, null, totalCost, true);
+                        CampaignEventDispatcher.Instance.OnTroopRecruited(Hero.MainHero, settlement, notable, troop, count);
+
+                        if (recruitedMap.ContainsKey(troop))
+                        {
+                            recruitedMap[troop] += count;
+                        }
+                        else
+                        {
+                            recruitedMap[troop] = count;
+                        }
+                        totalCount += count;
                     }
                     catch {}
                 }
@@ -491,17 +515,32 @@ namespace SettlementAutomationCore
                                 int toDonate = Math.Min(order.Amount, available);
                                 if (toDonate > 0)
                                 {
-                                    MobileParty.MainParty.PrisonRoster.AddToCounts(order.Prisoner, -toDonate);
-                                    settlement.Party.PrisonRoster.AddToCounts(order.Prisoner, toDonate);
-                                    flattenedPrisoners.Add(order.Prisoner, toDonate, 0);
-                                    dungeonLogParts.Add($"{toDonate}x {order.Prisoner.Name}");
-                                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Donated {toDonate}x {order.Prisoner.Name} to Dungeon"));
+                                    int donated = 0;
+                                    for (int i = 0; i < toDonate; i++)
+                                    {
+                                        try
+                                        {
+                                            TransferPrisonerAction.Apply(order.Prisoner, MobileParty.MainParty.Party, settlement.Party);
+                                            donated++;
+                                        }
+                                        catch
+                                        {
+                                            break;
+                                        }
+                                    }
+
+                                    if (donated > 0)
+                                    {
+                                        flattenedPrisoners.Add(order.Prisoner, donated, 0);
+                                        dungeonLogParts.Add($"{donated}x {order.Prisoner.Name}");
+                                    }
                                 }
                             }
                         }
                         if (flattenedPrisoners.Count() > 0)
                         {
                             CampaignEventDispatcher.Instance.OnPrisonerDonatedToSettlement(MobileParty.MainParty, flattenedPrisoners, settlement);
+                            InformationManager.DisplayMessage(new InformationMessage($"[Automation] Donated prisoners to Dungeon: {string.Join(", ", dungeonLogParts)}"));
                             Helpers.Logger.WriteLog("SettlementAutomationCore", $"Donated to Dungeon at {settlement.Name}: {string.Join(", ", dungeonLogParts)}");
                         }
                     }
@@ -605,7 +644,7 @@ namespace SettlementAutomationCore
                                     continue;
                                 }
 
-                                if (req.MatchesItem(item))
+                                if (req.MatchesEquipmentElement(element.EquipmentElement))
                                 {
                                     reserved = Math.Max(reserved, req.Quantity);
                                 }
@@ -1100,7 +1139,7 @@ namespace SettlementAutomationCore
             for (int i = 0; i < playerElements.Count; i++)
             {
                 var element = playerElements[i];
-                if (element.EquipmentElement.Item != null && request.MatchesItem(element.EquipmentElement.Item))
+                if (element.EquipmentElement.Item != null && request.MatchesEquipmentElement(element.EquipmentElement))
                 {
                     currentHeld += element.Amount;
                 }
@@ -1114,7 +1153,7 @@ namespace SettlementAutomationCore
             for (int i = 0; i < marketElements.Count; i++)
             {
                 var element = marketElements[i];
-                if (element.EquipmentElement.Item != null && request.MatchesItem(element.EquipmentElement.Item) && element.Amount > 0)
+                if (element.EquipmentElement.Item != null && request.MatchesEquipmentElement(element.EquipmentElement) && element.Amount > 0)
                 {
                     candidates.Add(element);
                 }

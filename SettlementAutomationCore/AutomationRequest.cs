@@ -197,6 +197,19 @@ namespace SettlementAutomationCore
 
             return false;
         }
+
+        public bool MatchesEquipmentElement(EquipmentElement equipmentElement)
+        {
+            var item = equipmentElement.Item;
+            if (item == null) return false;
+
+            if (Type == RequestType.MarketItem)
+            {
+                return MarketCandidates.Any(candidate => candidate.MatchesEquipmentElement(equipmentElement));
+            }
+
+            return MatchesItem(item);
+        }
     }
 
     public interface IAutomationRequestProvider
