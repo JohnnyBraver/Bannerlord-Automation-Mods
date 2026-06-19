@@ -20,6 +20,8 @@ namespace SettlementAutomationCore
         private static Settlement? _pendingBackgroundTradeSettlement = null;
         private static readonly object QueueLock = new object();
 
+        public static bool IsSettlementAutomationDisabled => Settings.Instance?.DisableSettlementAutomation ?? false;
+
         protected override void OnSubModuleLoad()
         {
             base.OnSubModuleLoad();
@@ -40,6 +42,11 @@ namespace SettlementAutomationCore
 
         public static void QueueBackgroundTrade(Settlement settlement)
         {
+            if (IsSettlementAutomationDisabled)
+            {
+                return;
+            }
+
             lock (QueueLock)
             {
                 _pendingBackgroundTradeSettlement = settlement;
@@ -69,6 +76,11 @@ namespace SettlementAutomationCore
         private static void ExecuteBackgroundAutomation(Settlement settlement)
         {
             if (settlement == null || MobileParty.MainParty == null || Hero.MainHero == null) return;
+            if (IsSettlementAutomationDisabled)
+            {
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Skipped automation at {settlement.Name}: Disable Settlement Automation is enabled.");
+                return;
+            }
 
             try
             {

@@ -26,6 +26,14 @@ namespace SettlementAutomationCore.Tests
         }
 
         [Fact]
+        public void CoreDisableSettlementAutomation_DefaultsOff()
+        {
+            var coreSettings = new SettlementAutomationCore.Settings();
+
+            Assert.False(coreSettings.DisableSettlementAutomation);
+        }
+
+        [Fact]
         public void CoreMarketReporting_DefaultsToFull()
         {
             var coreSettings = new SettlementAutomationCore.Settings();

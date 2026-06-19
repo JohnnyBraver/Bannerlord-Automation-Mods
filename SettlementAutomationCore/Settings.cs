@@ -41,6 +41,11 @@ namespace SettlementAutomationCore
             new CoreReportingModeOption("Full", CoreReportingMode.Full)
         };
 
+        [SettingPropertyBool("Disable Settlement Automation", RequireRestart = false,
+            HintText = "Stops Core-driven automatic settlement-entry actions. Manual buttons can still be used.", Order = 1)]
+        [SettingPropertyGroup("General", GroupOrder = -1)]
+        public bool DisableSettlementAutomation { get; set; } = false;
+
         [SettingPropertyInteger("Minimum Gold Reserve", 0, 50000, RequireRestart = false,
             HintText = "Never let your gold balance drop below this amount when buying. Default: 1000 denars.", Order = 1)]
         [SettingPropertyGroup("Budget Protection", GroupOrder = 0)]
