@@ -1,6 +1,9 @@
 using System.Collections.Generic;
+using System;
+using System.IO;
 using System.Linq;
 using SettlementAutomationCore;
+using SettlementAutomationCore.Helpers;
 using TaleWorlds.CampaignSystem.Inventory;
 using TaleWorlds.Core;
 using Xunit;
@@ -324,6 +327,22 @@ namespace SettlementAutomationCore.Tests
         }
 
         [Fact]
+        public void ApplyTradeGoldDelta_AppliesOnlyBalanceDifference()
+        {
+            var deltas = new List<int>();
+
+            int updated = InventoryHelper.ApplyTradeGoldDelta(1000, 740, deltas.Add);
+
+            Assert.Equal(740, updated);
+            Assert.Equal(new[] { -260 }, deltas);
+
+            updated = InventoryHelper.ApplyTradeGoldDelta(updated, 740, deltas.Add);
+
+            Assert.Equal(740, updated);
+            Assert.Equal(new[] { -260 }, deltas);
+        }
+
+        [Fact]
         public void AutomationPhasePolicy_GatesKeepDonationBySameFaction()
         {
             var neutralCastle = SubModule.AutomationPhasePolicy.ForFacts(
@@ -460,6 +479,29 @@ namespace SettlementAutomationCore.Tests
             {
                 StringId = id
             };
+        }
+
+        private static string ReadSource(params string[] parts)
+        {
+            string root = FindRepoRoot();
+            return File.ReadAllText(Path.Combine(root, Path.Combine(parts)));
+        }
+
+        private static string FindRepoRoot()
+        {
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir != null)
+            {
+                if (Directory.Exists(Path.Combine(dir.FullName, "SettlementAutomationCore")) &&
+                    Directory.Exists(Path.Combine(dir.FullName, "TradeOptimizer")))
+                {
+                    return dir.FullName;
+                }
+
+                dir = dir.Parent;
+            }
+
+            throw new DirectoryNotFoundException("Could not find Bannerlord-Mods repository root.");
         }
     }
 }

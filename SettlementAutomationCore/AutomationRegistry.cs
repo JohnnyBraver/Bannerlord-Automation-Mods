@@ -126,16 +126,83 @@ namespace SettlementAutomationCore
         }
     }
 
-    public class RecruitOrder
+    public enum SettlementRecruitmentSource
     {
-        public Hero Notable { get; }
+        NotableVolunteer,
+        TavernMercenary
+    }
+
+    public class SettlementRecruitmentCandidate
+    {
+        public SettlementRecruitmentSource Source { get; }
+        public CharacterObject Troop { get; }
+        public int AvailableCount { get; }
+        public int UnitCost { get; }
+        public Hero? Notable { get; }
         public int SlotIndex { get; }
-        public bool AllowOverPartySize { get; }
-        
-        public RecruitOrder(Hero notable, int slotIndex, bool allowOverPartySize = false)
+        public int Sequence { get; }
+
+        public SettlementRecruitmentCandidate(
+            SettlementRecruitmentSource source,
+            CharacterObject troop,
+            int availableCount,
+            int unitCost,
+            Hero? notable,
+            int slotIndex,
+            int sequence)
         {
+            Source = source;
+            Troop = troop;
+            AvailableCount = availableCount;
+            UnitCost = unitCost;
             Notable = notable;
             SlotIndex = slotIndex;
+            Sequence = sequence;
+        }
+    }
+
+    public class SettlementRecruitmentContext
+    {
+        public MobileParty Party { get; }
+        public Settlement Settlement { get; }
+        public IReadOnlyList<SettlementRecruitmentCandidate> Candidates { get; }
+        public int HeroGold { get; }
+        public int PartySize { get; }
+        public int PartySizeLimit { get; }
+        public bool CanRecruitNotables { get; }
+        public bool CanRecruitMercenaries { get; }
+
+        public SettlementRecruitmentContext(
+            MobileParty party,
+            Settlement settlement,
+            IReadOnlyList<SettlementRecruitmentCandidate> candidates,
+            int heroGold,
+            int partySize,
+            int partySizeLimit,
+            bool canRecruitNotables,
+            bool canRecruitMercenaries)
+        {
+            Party = party;
+            Settlement = settlement;
+            Candidates = candidates;
+            HeroGold = heroGold;
+            PartySize = partySize;
+            PartySizeLimit = partySizeLimit;
+            CanRecruitNotables = canRecruitNotables;
+            CanRecruitMercenaries = canRecruitMercenaries;
+        }
+    }
+
+    public class SettlementRecruitmentOrder
+    {
+        public SettlementRecruitmentCandidate Candidate { get; }
+        public int Amount { get; }
+        public bool AllowOverPartySize { get; }
+
+        public SettlementRecruitmentOrder(SettlementRecruitmentCandidate candidate, int amount, bool allowOverPartySize = false)
+        {
+            Candidate = candidate;
+            Amount = amount;
             AllowOverPartySize = allowOverPartySize;
         }
     }
@@ -152,39 +219,64 @@ namespace SettlementAutomationCore
         }
     }
 
-    public class RansomOrder
+    public enum PrisonerDispositionAction
+    {
+        Ransom,
+        DonateToDungeon
+    }
+
+    public class PrisonerDispositionContext
+    {
+        public MobileParty Party { get; }
+        public Settlement Settlement { get; }
+        public IReadOnlyList<PrisonerStack> Prisoners { get; }
+        public int PrisonerCount { get; }
+        public int PrisonerSizeLimit { get; }
+        public bool CanRansom { get; }
+        public bool CanDonateToDungeon { get; }
+
+        public PrisonerDispositionContext(
+            MobileParty party,
+            Settlement settlement,
+            IReadOnlyList<PrisonerStack> prisoners,
+            int prisonerCount,
+            int prisonerSizeLimit,
+            bool canRansom,
+            bool canDonateToDungeon)
+        {
+            Party = party;
+            Settlement = settlement;
+            Prisoners = prisoners;
+            PrisonerCount = prisonerCount;
+            PrisonerSizeLimit = prisonerSizeLimit;
+            CanRansom = canRansom;
+            CanDonateToDungeon = canDonateToDungeon;
+        }
+    }
+
+    public class PrisonerStack
     {
         public CharacterObject Prisoner { get; }
         public int Amount { get; }
         
-        public RansomOrder(CharacterObject prisoner, int amount)
+        public PrisonerStack(CharacterObject prisoner, int amount)
         {
             Prisoner = prisoner;
             Amount = amount;
         }
     }
 
-    public class MercenaryRecruitOrder
-    {
-        public CharacterObject Troop { get; }
-        public int Amount { get; }
-        
-        public MercenaryRecruitOrder(CharacterObject troop, int amount)
-        {
-            Troop = troop;
-            Amount = amount;
-        }
-    }
-
-    public class DungeonOrder
+    public class PrisonerDispositionOrder
     {
         public CharacterObject Prisoner { get; }
         public int Amount { get; }
-        
-        public DungeonOrder(CharacterObject prisoner, int amount)
+        public PrisonerDispositionAction Action { get; }
+
+        public PrisonerDispositionOrder(CharacterObject prisoner, int amount, PrisonerDispositionAction action)
         {
             Prisoner = prisoner;
             Amount = amount;
+            Action = action;
         }
     }
 
@@ -209,10 +301,16 @@ namespace SettlementAutomationCore
         TradeProposal AnalyzeMarket(TradeContext context);
     }
 
-    public interface IRecruitOrderProvider
+    public interface ISettlementCleanupProvider
     {
         string ProviderName { get; }
-        List<RecruitOrder> GetRecruitOrders(MobileParty party, Settlement settlement);
+        TradeProposal AnalyzeSettlementCleanup(TradeContext context);
+    }
+
+    public interface ISettlementRecruitmentProvider
+    {
+        string ProviderName { get; }
+        IReadOnlyList<SettlementRecruitmentOrder> GetRecruitmentOrders(SettlementRecruitmentContext context);
     }
 
     public interface IGarrisonOrderProvider
@@ -221,17 +319,10 @@ namespace SettlementAutomationCore
         List<GarrisonOrder> GetGarrisonOrders(MobileParty party, Settlement settlement);
     }
 
-    public interface IRansomOrderProvider
+    public interface IPrisonerDispositionProvider
     {
         string ProviderName { get; }
-        List<RansomOrder> GetRansomOrders(MobileParty party, Settlement settlement);
-        List<MercenaryRecruitOrder> GetMercenaryRecruitOrders(MobileParty party, Settlement settlement);
-    }
-
-    public interface IDungeonOrderProvider
-    {
-        string ProviderName { get; }
-        List<DungeonOrder> GetDungeonOrders(MobileParty party, Settlement settlement);
+        IReadOnlyList<PrisonerDispositionOrder> GetPrisonerDispositionOrders(PrisonerDispositionContext context);
     }
 
     public interface IFiefAutomationProvider
@@ -248,16 +339,19 @@ namespace SettlementAutomationCore
         private static readonly List<ProviderRegistration<IAutomationPreparationProvider>> PreparationProviders = new();
         private static readonly List<ProviderRegistration<IPreSellProvider>> PreSellProviders = new();
         private static readonly List<ProviderRegistration<IFreeTradeAnalyzer>> FreeTradeAnalyzers = new();
-        private static readonly List<ProviderRegistration<IRecruitOrderProvider>> RecruitProviders = new();
+        private static readonly List<ProviderRegistration<ISettlementCleanupProvider>> SettlementCleanupProviders = new();
+        private static readonly List<ProviderRegistration<ISettlementRecruitmentProvider>> RecruitmentProviders = new();
         private static readonly List<ProviderRegistration<IGarrisonOrderProvider>> GarrisonProviders = new();
-        private static readonly List<ProviderRegistration<IRansomOrderProvider>> RansomProviders = new();
-        private static readonly List<ProviderRegistration<IDungeonOrderProvider>> DungeonProviders = new();
+        private static readonly List<ProviderRegistration<IPrisonerDispositionProvider>> PrisonerDispositionProviders = new();
         private static readonly List<ProviderRegistration<IFiefAutomationProvider>> FiefProviders = new();
+        private static readonly List<ProviderRegistration<IPostBattleAutomationProvider>> PostBattleProviders = new();
+        private static readonly List<ProviderRegistration<IAutomationReservationProvider>> ReservationProviders = new();
         private static readonly List<ProviderRegistration<IAutomationReportProvider>> ReportProviders = new();
 
         private static readonly List<ProviderRegistration<IAutomationRequestProvider>> RequestProviders = new();
         private static readonly List<AutomationRequest> CurrentRequests = new();
         private static readonly List<ItemReservation> CurrentReservations = new();
+        private static readonly HashSet<string> WarnedConflictProviderSets = new();
 
         // --- Preparation Providers ---
         public static void RegisterPreparationProvider(IAutomationPreparationProvider provider)
@@ -300,6 +394,7 @@ namespace SettlementAutomationCore
                 {
                     string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
                     PreSellProviders.Add(new ProviderRegistration<IPreSellProvider>(provider, provider.ProviderName, callingAssembly));
+                    WarnIfProviderSetMayConflict("pre-sell trade", PreSellProviders);
                 }
             }
         }
@@ -332,6 +427,7 @@ namespace SettlementAutomationCore
                 {
                     string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
                     FreeTradeAnalyzers.Add(new ProviderRegistration<IFreeTradeAnalyzer>(provider, provider.ProviderName, callingAssembly));
+                    WarnIfProviderSetMayConflict("free trade", FreeTradeAnalyzers);
                 }
             }
         }
@@ -355,34 +451,68 @@ namespace SettlementAutomationCore
             }
         }
 
-        // --- Recruit Providers ---
-        public static void RegisterRecruitProvider(IRecruitOrderProvider provider)
+        // --- Settlement Cleanup Providers ---
+        public static void RegisterSettlementCleanupProvider(ISettlementCleanupProvider provider)
         {
-            lock (RecruitProviders)
+            lock (SettlementCleanupProviders)
             {
-                if (!RecruitProviders.Any(r => EqualityComparer<IRecruitOrderProvider>.Default.Equals(r.Provider, provider)))
+                if (!SettlementCleanupProviders.Any(r => EqualityComparer<ISettlementCleanupProvider>.Default.Equals(r.Provider, provider)))
                 {
                     string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
-                    RecruitProviders.Add(new ProviderRegistration<IRecruitOrderProvider>(provider, provider.ProviderName, callingAssembly));
+                    SettlementCleanupProviders.Add(new ProviderRegistration<ISettlementCleanupProvider>(provider, provider.ProviderName, callingAssembly));
+                    WarnIfProviderSetMayConflict("settlement cleanup", SettlementCleanupProviders);
                 }
             }
         }
 
-        public static void UnregisterRecruitProvider(IRecruitOrderProvider provider)
+        public static void UnregisterSettlementCleanupProvider(ISettlementCleanupProvider provider)
         {
-            lock (RecruitProviders)
+            lock (SettlementCleanupProviders)
             {
-                RecruitProviders.RemoveAll(r => EqualityComparer<IRecruitOrderProvider>.Default.Equals(r.Provider, provider));
+                SettlementCleanupProviders.RemoveAll(r => EqualityComparer<ISettlementCleanupProvider>.Default.Equals(r.Provider, provider));
             }
         }
 
-        public static IReadOnlyList<ProviderRegistration<IRecruitOrderProvider>> ActiveRecruitProviders
+        public static IReadOnlyList<ProviderRegistration<ISettlementCleanupProvider>> ActiveSettlementCleanupProviders
         {
             get
             {
-                lock (RecruitProviders)
+                lock (SettlementCleanupProviders)
                 {
-                    return new List<ProviderRegistration<IRecruitOrderProvider>>(RecruitProviders);
+                    return new List<ProviderRegistration<ISettlementCleanupProvider>>(SettlementCleanupProviders);
+                }
+            }
+        }
+
+        // --- Recruitment Providers ---
+        public static void RegisterSettlementRecruitmentProvider(ISettlementRecruitmentProvider provider)
+        {
+            lock (RecruitmentProviders)
+            {
+                if (!RecruitmentProviders.Any(r => EqualityComparer<ISettlementRecruitmentProvider>.Default.Equals(r.Provider, provider)))
+                {
+                    string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
+                    RecruitmentProviders.Add(new ProviderRegistration<ISettlementRecruitmentProvider>(provider, provider.ProviderName, callingAssembly));
+                    WarnIfProviderSetMayConflict("settlement recruitment", RecruitmentProviders);
+                }
+            }
+        }
+
+        public static void UnregisterSettlementRecruitmentProvider(ISettlementRecruitmentProvider provider)
+        {
+            lock (RecruitmentProviders)
+            {
+                RecruitmentProviders.RemoveAll(r => EqualityComparer<ISettlementRecruitmentProvider>.Default.Equals(r.Provider, provider));
+            }
+        }
+
+        public static IReadOnlyList<ProviderRegistration<ISettlementRecruitmentProvider>> ActiveSettlementRecruitmentProviders
+        {
+            get
+            {
+                lock (RecruitmentProviders)
+                {
+                    return new List<ProviderRegistration<ISettlementRecruitmentProvider>>(RecruitmentProviders);
                 }
             }
         }
@@ -396,6 +526,7 @@ namespace SettlementAutomationCore
                 {
                     string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
                     GarrisonProviders.Add(new ProviderRegistration<IGarrisonOrderProvider>(provider, provider.ProviderName, callingAssembly));
+                    WarnIfProviderSetMayConflict("garrison donation", GarrisonProviders);
                 }
             }
         }
@@ -419,66 +550,35 @@ namespace SettlementAutomationCore
             }
         }
 
-        // --- Ransom Providers ---
-        public static void RegisterRansomProvider(IRansomOrderProvider provider)
+        // --- Prisoner Disposition Providers ---
+        public static void RegisterPrisonerDispositionProvider(IPrisonerDispositionProvider provider)
         {
-            lock (RansomProviders)
+            lock (PrisonerDispositionProviders)
             {
-                if (!RansomProviders.Any(r => EqualityComparer<IRansomOrderProvider>.Default.Equals(r.Provider, provider)))
+                if (!PrisonerDispositionProviders.Any(r => EqualityComparer<IPrisonerDispositionProvider>.Default.Equals(r.Provider, provider)))
                 {
                     string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
-                    RansomProviders.Add(new ProviderRegistration<IRansomOrderProvider>(provider, provider.ProviderName, callingAssembly));
+                    PrisonerDispositionProviders.Add(new ProviderRegistration<IPrisonerDispositionProvider>(provider, provider.ProviderName, callingAssembly));
+                    WarnIfProviderSetMayConflict("prisoner disposition", PrisonerDispositionProviders);
                 }
             }
         }
 
-        public static void UnregisterRansomProvider(IRansomOrderProvider provider)
+        public static void UnregisterPrisonerDispositionProvider(IPrisonerDispositionProvider provider)
         {
-            lock (RansomProviders)
+            lock (PrisonerDispositionProviders)
             {
-                RansomProviders.RemoveAll(r => EqualityComparer<IRansomOrderProvider>.Default.Equals(r.Provider, provider));
+                PrisonerDispositionProviders.RemoveAll(r => EqualityComparer<IPrisonerDispositionProvider>.Default.Equals(r.Provider, provider));
             }
         }
 
-        public static IReadOnlyList<ProviderRegistration<IRansomOrderProvider>> ActiveRansomProviders
+        public static IReadOnlyList<ProviderRegistration<IPrisonerDispositionProvider>> ActivePrisonerDispositionProviders
         {
             get
             {
-                lock (RansomProviders)
+                lock (PrisonerDispositionProviders)
                 {
-                    return new List<ProviderRegistration<IRansomOrderProvider>>(RansomProviders);
-                }
-            }
-        }
-
-        // --- Dungeon Providers ---
-        public static void RegisterDungeonProvider(IDungeonOrderProvider provider)
-        {
-            lock (DungeonProviders)
-            {
-                if (!DungeonProviders.Any(r => EqualityComparer<IDungeonOrderProvider>.Default.Equals(r.Provider, provider)))
-                {
-                    string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
-                    DungeonProviders.Add(new ProviderRegistration<IDungeonOrderProvider>(provider, provider.ProviderName, callingAssembly));
-                }
-            }
-        }
-
-        public static void UnregisterDungeonProvider(IDungeonOrderProvider provider)
-        {
-            lock (DungeonProviders)
-            {
-                DungeonProviders.RemoveAll(r => EqualityComparer<IDungeonOrderProvider>.Default.Equals(r.Provider, provider));
-            }
-        }
-
-        public static IReadOnlyList<ProviderRegistration<IDungeonOrderProvider>> ActiveDungeonProviders
-        {
-            get
-            {
-                lock (DungeonProviders)
-                {
-                    return new List<ProviderRegistration<IDungeonOrderProvider>>(DungeonProviders);
+                    return new List<ProviderRegistration<IPrisonerDispositionProvider>>(PrisonerDispositionProviders);
                 }
             }
         }
@@ -492,6 +592,7 @@ namespace SettlementAutomationCore
                 {
                     string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
                     FiefProviders.Add(new ProviderRegistration<IFiefAutomationProvider>(provider, provider.ProviderName, callingAssembly));
+                    WarnIfProviderSetMayConflict("fief automation", FiefProviders);
                 }
             }
         }
@@ -511,6 +612,70 @@ namespace SettlementAutomationCore
                 lock (FiefProviders)
                 {
                     return new List<ProviderRegistration<IFiefAutomationProvider>>(FiefProviders);
+                }
+            }
+        }
+
+        // --- Post-Battle Providers ---
+        public static void RegisterPostBattleProvider(IPostBattleAutomationProvider provider)
+        {
+            lock (PostBattleProviders)
+            {
+                if (!PostBattleProviders.Any(r => EqualityComparer<IPostBattleAutomationProvider>.Default.Equals(r.Provider, provider)))
+                {
+                    string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
+                    PostBattleProviders.Add(new ProviderRegistration<IPostBattleAutomationProvider>(provider, provider.ProviderName, callingAssembly));
+                }
+            }
+        }
+
+        public static void UnregisterPostBattleProvider(IPostBattleAutomationProvider provider)
+        {
+            lock (PostBattleProviders)
+            {
+                PostBattleProviders.RemoveAll(r => EqualityComparer<IPostBattleAutomationProvider>.Default.Equals(r.Provider, provider));
+            }
+        }
+
+        public static IReadOnlyList<ProviderRegistration<IPostBattleAutomationProvider>> ActivePostBattleProviders
+        {
+            get
+            {
+                lock (PostBattleProviders)
+                {
+                    return new List<ProviderRegistration<IPostBattleAutomationProvider>>(PostBattleProviders);
+                }
+            }
+        }
+
+        // --- Reservation Providers ---
+        public static void RegisterReservationProvider(IAutomationReservationProvider provider)
+        {
+            lock (ReservationProviders)
+            {
+                if (!ReservationProviders.Any(r => EqualityComparer<IAutomationReservationProvider>.Default.Equals(r.Provider, provider)))
+                {
+                    string callingAssembly = Assembly.GetCallingAssembly().GetName().Name ?? "Unknown";
+                    ReservationProviders.Add(new ProviderRegistration<IAutomationReservationProvider>(provider, provider.ProviderName, callingAssembly));
+                }
+            }
+        }
+
+        public static void UnregisterReservationProvider(IAutomationReservationProvider provider)
+        {
+            lock (ReservationProviders)
+            {
+                ReservationProviders.RemoveAll(r => EqualityComparer<IAutomationReservationProvider>.Default.Equals(r.Provider, provider));
+            }
+        }
+
+        public static IReadOnlyList<ProviderRegistration<IAutomationReservationProvider>> ActiveReservationProviders
+        {
+            get
+            {
+                lock (ReservationProviders)
+                {
+                    return new List<ProviderRegistration<IAutomationReservationProvider>>(ReservationProviders);
                 }
             }
         }
@@ -632,6 +797,65 @@ namespace SettlementAutomationCore
                     return new List<ItemReservation>(CurrentReservations);
                 }
             }
+        }
+
+        internal static IReadOnlyList<string> BuildProviderConflictWarnings()
+        {
+            var warnings = new List<string>();
+            AddConflictWarning(warnings, "pre-sell trade", ActivePreSellProviders);
+            AddConflictWarning(warnings, "free trade", ActiveFreeTradeAnalyzers);
+            AddConflictWarning(warnings, "settlement cleanup", ActiveSettlementCleanupProviders);
+            AddConflictWarning(warnings, "settlement recruitment", ActiveSettlementRecruitmentProviders);
+            AddConflictWarning(warnings, "garrison donation", ActiveGarrisonProviders);
+            AddConflictWarning(warnings, "prisoner disposition", ActivePrisonerDispositionProviders);
+            AddConflictWarning(warnings, "fief automation", ActiveFiefProviders);
+            return warnings;
+        }
+
+        private static void WarnIfProviderSetMayConflict<T>(string label, IReadOnlyList<ProviderRegistration<T>> registrations)
+        {
+            var warning = BuildProviderConflictWarning(label, registrations);
+            if (warning == null)
+            {
+                return;
+            }
+
+            var key = BuildProviderConflictKey(label, registrations);
+            lock (WarnedConflictProviderSets)
+            {
+                if (!WarnedConflictProviderSets.Add(key))
+                {
+                    return;
+                }
+            }
+
+            Helpers.Logger.WriteLog("SettlementAutomationCore", warning);
+        }
+
+        private static void AddConflictWarning<T>(List<string> warnings, string label, IReadOnlyList<ProviderRegistration<T>> registrations)
+        {
+            var warning = BuildProviderConflictWarning(label, registrations);
+            if (warning != null)
+            {
+                warnings.Add(warning);
+            }
+        }
+
+        private static string? BuildProviderConflictWarning<T>(string label, IReadOnlyList<ProviderRegistration<T>> registrations)
+        {
+            if (registrations.Count <= 1)
+            {
+                return null;
+            }
+
+            string providers = string.Join(", ", registrations.Select(reg => reg.ProviderName).Distinct().OrderBy(name => name));
+            return $"WARNING: Multiple providers registered for {label}: {providers}. These providers share the same game-state pool and can submit conflicting orders; Core executes them in registration order and clamps unavailable quantities.";
+        }
+
+        private static string BuildProviderConflictKey<T>(string label, IReadOnlyList<ProviderRegistration<T>> registrations)
+        {
+            string providers = string.Join("|", registrations.Select(reg => reg.ProviderName).Distinct().OrderBy(name => name));
+            return $"{label}:{providers}";
         }
     }
 }

@@ -63,6 +63,21 @@ namespace SettlementAutomationCore
                 opportunisticPriceLimitMultiplier);
         }
 
+        public static bool IsPriceAllowedForRequest(
+            AutomationRequest request,
+            int referenceValue,
+            int price,
+            float routinePriceLimitMultiplier,
+            float opportunisticPriceLimitMultiplier)
+        {
+            return IsPriceAllowedForProfile(
+                request.Profile,
+                referenceValue,
+                price,
+                routinePriceLimitMultiplier,
+                opportunisticPriceLimitMultiplier);
+        }
+
         public static bool IsPriceAllowedForProfile(
             RequestProfile profile,
             int itemValue,
@@ -93,7 +108,13 @@ namespace SettlementAutomationCore
             string reserve = request.BudgetPolicy == BudgetPolicyKind.ExplicitReserve
                 ? $"explicitReserve={request.ExplicitGoldReserve}"
                 : "coreReserve";
-            return $"{request.RequestorId} {request.Profile}/{request.Priority} {request.QuantityMode} {request.Type}:{target} qty={request.Quantity} {reserve}";
+            string itemCategories = request.ItemCategoryIds.Count > 0
+                ? $" categories={string.Join(",", request.ItemCategoryIds)}"
+                : "";
+            string priceReference = request.PriceReference == RequestPriceReference.CategoryAverageValue
+                ? " price=CategoryAverage"
+                : "";
+            return $"{request.RequestorId} {request.Profile}/{request.Priority} {request.QuantityMode} {request.Type}:{target} qty={request.Quantity} {reserve}{itemCategories}{priceReference}";
         }
     }
 }

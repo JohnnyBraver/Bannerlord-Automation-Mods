@@ -7,10 +7,12 @@ using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Inventory;
 using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.MapEvents;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.Core;
 using TaleWorlds.MountAndBlade;
 using TaleWorlds.Library;
+using TaleWorlds.ObjectSystem;
 
 namespace SettlementAutomationCore
 {
@@ -36,6 +38,7 @@ namespace SettlementAutomationCore
                 if (campaignStarter != null)
                 {
                     campaignStarter.AddBehavior(new SettlementAutomationCampaignBehavior());
+                    campaignStarter.AddBehavior(new PostBattleAutomationCampaignBehavior());
                 }
             }
         }
@@ -112,35 +115,17 @@ namespace SettlementAutomationCore
                 var marketReport = new AutomationMarketReport();
 
                 // ----------------------------------------------------
-                // Step 1: Gather Prioritized Requests and Reservations
+                // Step 1: Gather Early Reservations
                 // ----------------------------------------------------
                 AutomationRegistry.ClearRequests();
                 AutomationRegistry.ClearReservations();
-                AutomationRequestContext requestContext;
                 if (phasePolicy.Requests)
                 {
-                    var visibilityLogic = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement, true);
-                    if (visibilityLogic != null)
-                    {
-                        requestContext = AutomationRequestContext.FromInventoryLogic(MobileParty.MainParty, settlement, visibilityLogic);
-                    }
-                    else
-                    {
-                        requestContext = AutomationRequestContext.Empty(MobileParty.MainParty, settlement);
-                    }
-
-                    var requestProviders = AutomationRegistry.ActiveRequestProviders;
-                    foreach (var reg in requestProviders)
-                    {
-                        try
-                        {
-                            reg.Provider.SubmitAutomationRequests(requestContext);
-                        }
-                        catch (Exception ex)
-                        {
-                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error gathering requests from {reg.ProviderName}: {ex.Message}");
-                        }
-                    }
+                    GatherReservations(
+                        new AutomationReservationContext(
+                            AutomationReservationFlow.Settlement,
+                            MobileParty.MainParty,
+                            settlement));
                 }
 
                 // ----------------------------------------------------
@@ -216,237 +201,12 @@ namespace SettlementAutomationCore
                 }
 
                 // ----------------------------------------------------
-                // Step 3: Tavern / Ransom & Mercenaries Phase
+                // Step 3: Grouped Recruitment Phase
                 // ----------------------------------------------------
-                var ransomOrders = new List<RansomOrder>();
-                var mercOrders = new List<MercenaryRecruitOrder>();
-                if (phasePolicy.Tavern)
-                {
-                    var ransomRegistrations = AutomationRegistry.ActiveRansomProviders;
-                    foreach (var reg in ransomRegistrations)
-                    {
-                        try
-                        {
-                            var rOrders = reg.Provider.GetRansomOrders(MobileParty.MainParty, settlement);
-                            if (rOrders != null) ransomOrders.AddRange(rOrders);
-
-                            var mOrders = reg.Provider.GetMercenaryRecruitOrders(MobileParty.MainParty, settlement);
-                            if (mOrders != null) mercOrders.AddRange(mOrders);
-                        }
-                        catch {}
-                    }
-                }
-
-                // Apply ransoms
-                if (ransomOrders.Count > 0)
-                {
-                    try
-                    {
-                        var ransomRoster = TroopRoster.CreateDummyTroopRoster();
-                        foreach (var order in ransomOrders)
-                        {
-                            if (order.Prisoner != null && order.Amount > 0)
-                            {
-                                ransomRoster.AddToCounts(order.Prisoner, order.Amount);
-                            }
-                        }
-                        if (ransomRoster.Count > 0)
-                        {
-                            try
-                            {
-                                SellPrisonersAction.ApplyForSelectedPrisoners(MobileParty.MainParty.Party, null, ransomRoster);
-                                var ransomParts = new List<string>();
-                                int estimatedGold = 0;
-                                foreach (var element in ransomRoster.GetTroopRoster())
-                                {
-                                    ransomParts.Add($"{element.Number}x {element.Character.Name}");
-                                    try
-                                    {
-                                        var model = Campaign.Current?.Models?.RansomValueCalculationModel;
-                                        if (model != null)
-                                        {
-                                            estimatedGold += model.PrisonerRansomValue(element.Character, Hero.MainHero) * element.Number;
-                                        }
-                                    }
-                                    catch {}
-                                }
-                                InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed prisoners: {string.Join(", ", ransomParts)}"));
-                                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Ransomed at {settlement.Name}: {string.Join(", ", ransomParts)} (Est. Gold: +{estimatedGold}d)");
-                            }
-                            catch (Exception ex)
-                            {
-                                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Native ApplyForSelectedPrisoners failed ({ex.Message}). Applying manual ransom fallback.");
-                                int totalRansomGold = 0;
-                                var ransomParts = new List<string>();
-                                foreach (var element in ransomRoster.GetTroopRoster())
-                                {
-                                    var character = element.Character;
-                                    int count = element.Number;
-                                    if (character == null || count <= 0) continue;
-
-                                    int unitValue = 0;
-                                    var model = Campaign.Current?.Models?.RansomValueCalculationModel;
-                                    if (model != null)
-                                    {
-                                        unitValue = model.PrisonerRansomValue(character, Hero.MainHero);
-                                    }
-                                    else
-                                    {
-                                        unitValue = character.Tier * 15;
-                                    }
-
-                                    int ransomAmount = unitValue * count;
-                                    totalRansomGold += ransomAmount;
-
-                                    MobileParty.MainParty.PrisonRoster.AddToCounts(character, -count);
-                                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed {count}x {character.Name} for {ransomAmount} denars"));
-                                    ransomParts.Add($"{count}x {character.Name} (+{ransomAmount}d)");
-                                }
-
-                                if (totalRansomGold > 0 && Hero.MainHero != null)
-                                {
-                                    GiveGoldAction.ApplyBetweenCharacters(null, Hero.MainHero, totalRansomGold, false);
-                                    try
-                                    {
-                                        Campaign.Current.SkillLevelingManager?.OnPrisonerSell(MobileParty.MainParty, in ransomRoster);
-                                    }
-                                    catch (Exception xpEx)
-                                    {
-                                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Failed to award Roguery XP via SkillLevelingManager: {xpEx.Message}");
-                                    }
-                                }
-                                Helpers.Logger.WriteLog("SettlementAutomationCore", $"[Manual Fallback] Ransomed at {settlement.Name}: {string.Join(", ", ransomParts)} (Total: +{totalRansomGold}d)");
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Ransom phase error: {ex}");
-                    }
-                }
-
-                // Apply mercenary recruitment
-                if (mercOrders.Count > 0)
-                {
-                    try
-                    {
-                        var recruitmentBehavior = Campaign.Current?.GetCampaignBehavior<TaleWorlds.CampaignSystem.CampaignBehaviors.RecruitmentCampaignBehavior>();
-                        if (recruitmentBehavior != null)
-                        {
-                            var applyMercMethod = recruitmentBehavior.GetType().GetMethod("ApplyRecruitMercenary", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                            if (applyMercMethod != null)
-                            {
-                                foreach (var order in mercOrders)
-                                {
-                                    if (order.Troop != null && order.Amount > 0)
-                                    {
-                                        applyMercMethod.Invoke(recruitmentBehavior, new object[] { MobileParty.MainParty, settlement, order.Troop, order.Amount });
-                                        InformationManager.DisplayMessage(new InformationMessage($"[Automation] Recruited {order.Amount}x {order.Troop.Name} (Mercenary)"));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    catch {}
-                }
+                ExecuteGroupedRecruitment(settlement, phasePolicy);
 
                 // ----------------------------------------------------
-                // Step 4: Notable Recruitment Phase
-                // ----------------------------------------------------
-                var recruitOrders = new List<RecruitOrder>();
-                if (phasePolicy.Recruitment)
-                {
-                    var recruitRegistrations = AutomationRegistry.ActiveRecruitProviders;
-                    foreach (var reg in recruitRegistrations)
-                    {
-                        try
-                        {
-                            var orders = reg.Provider.GetRecruitOrders(MobileParty.MainParty, settlement);
-                            if (orders != null) recruitOrders.AddRange(orders);
-                        }
-                        catch {}
-                    }
-                }
-                else
-                {
-                    Helpers.Logger.WriteLog("SettlementAutomationCore", $"Skipped notable recruitment at {settlement.Name}: settlement is not eligible.");
-                }
-
-                var plannedRecruitments = new List<(RecruitOrder Order, CharacterObject Troop, int Cost)>();
-                int projectedRecruitGold = Hero.MainHero?.Gold ?? 0;
-                int projectedPartySize = MobileParty.MainParty.MemberRoster.TotalManCount;
-                int partySizeLimit = MobileParty.MainParty.Party.PartySizeLimit;
-                foreach (var order in recruitOrders)
-                {
-                    try
-                    {
-                        if (order.Notable == null || order.Notable.VolunteerTypes == null) continue;
-                        if (order.SlotIndex < 0 || order.SlotIndex >= order.Notable.VolunteerTypes.Length) continue;
-
-                        var troop = order.Notable.VolunteerTypes[order.SlotIndex];
-                        if (troop == null) continue;
-
-                        if (projectedPartySize >= partySizeLimit && !order.AllowOverPartySize) continue;
-
-                        int cost = (int)Campaign.Current.Models.PartyWageModel.GetTroopRecruitmentCost(troop, Hero.MainHero, false).ResultNumber;
-                        if (projectedRecruitGold >= cost)
-                        {
-                            plannedRecruitments.Add((order, troop, cost));
-                            projectedRecruitGold -= cost;
-                            projectedPartySize++;
-                        }
-                    }
-                    catch {}
-                }
-
-                var recruitedMap = new Dictionary<CharacterObject, int>();
-                int totalCount = 0;
-                foreach (var group in plannedRecruitments.GroupBy(p => new { p.Order.Notable, p.Troop }))
-                {
-                    try
-                    {
-                        var notable = group.Key.Notable;
-                        var troop = group.Key.Troop;
-                        if (notable?.VolunteerTypes == null || troop == null) continue;
-
-                        var entries = group.ToList();
-                        foreach (var entry in entries)
-                        {
-                            if (entry.Order.SlotIndex >= 0 && entry.Order.SlotIndex < notable.VolunteerTypes.Length)
-                            {
-                                notable.VolunteerTypes[entry.Order.SlotIndex] = null;
-                            }
-                        }
-
-                        int count = entries.Count;
-                        int totalCost = entries.Sum(entry => entry.Cost);
-                        MobileParty.MainParty.AddElementToMemberRoster(troop, count, false);
-                        GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, null, totalCost, true);
-                        CampaignEventDispatcher.Instance.OnTroopRecruited(Hero.MainHero, settlement, notable, troop, count);
-
-                        if (recruitedMap.ContainsKey(troop))
-                        {
-                            recruitedMap[troop] += count;
-                        }
-                        else
-                        {
-                            recruitedMap[troop] = count;
-                        }
-                        totalCount += count;
-                    }
-                    catch {}
-                }
-
-                if (totalCount > 0)
-                {
-                    var troopParts = recruitedMap.Select(kvp => $"{kvp.Value}x {kvp.Key.Name}");
-                    string msg = $"Recruited in {settlement.Name}: {string.Join(", ", troopParts)} (Total: {totalCount})";
-                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
-                    Helpers.Logger.WriteLog("SettlementAutomationCore", msg);
-                }
-
-                // ----------------------------------------------------
-                // Step 5: Garrison Donation Phase
+                // Step 4: Garrison Donation Phase
                 // ----------------------------------------------------
                 var garrisonOrders = new List<GarrisonOrder>();
                 if (phasePolicy.GarrisonDonation)
@@ -496,71 +256,48 @@ namespace SettlementAutomationCore
                 }
 
                 // ----------------------------------------------------
-                // Step 6: Dungeon Donation Phase
+                // Step 5: Prisoner Disposition Phase
                 // ----------------------------------------------------
-                var dungeonOrders = new List<DungeonOrder>();
-                if (phasePolicy.DungeonDonation)
+                ExecutePrisonerDisposition(settlement, phasePolicy);
+
+                // Refresh prioritized requests and reservations after troop/prisoner changes.
+                AutomationRegistry.ClearRequests();
+                AutomationRegistry.ClearReservations();
+                if (phasePolicy.Requests)
                 {
-                    var dungeonRegistrations = AutomationRegistry.ActiveDungeonProviders;
-                    foreach (var reg in dungeonRegistrations)
+                    AutomationRequestContext requestContext;
+                    var visibilityLogic = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement, true);
+                    if (visibilityLogic != null)
+                    {
+                        requestContext = AutomationRequestContext.FromInventoryLogic(MobileParty.MainParty, settlement, visibilityLogic);
+                    }
+                    else
+                    {
+                        requestContext = AutomationRequestContext.Empty(MobileParty.MainParty, settlement);
+                    }
+
+                    var requestProviders = AutomationRegistry.ActiveRequestProviders;
+                    foreach (var reg in requestProviders)
                     {
                         try
                         {
-                            var orders = reg.Provider.GetDungeonOrders(MobileParty.MainParty, settlement);
-                            if (orders != null) dungeonOrders.AddRange(orders);
+                            reg.Provider.SubmitAutomationRequests(requestContext);
                         }
-                        catch {}
-                    }
-                }
-
-                if (dungeonOrders.Count > 0)
-                {
-                    try
-                    {
-                        var flattenedPrisoners = new FlattenedTroopRoster();
-                        var dungeonLogParts = new List<string>();
-                        foreach (var order in dungeonOrders)
+                        catch (Exception ex)
                         {
-                            if (order.Prisoner != null && order.Amount > 0)
-                            {
-                                int available = MobileParty.MainParty.PrisonRoster.GetTroopCount(order.Prisoner);
-                                int toDonate = Math.Min(order.Amount, available);
-                                if (toDonate > 0)
-                                {
-                                    int donated = 0;
-                                    for (int i = 0; i < toDonate; i++)
-                                    {
-                                        try
-                                        {
-                                            TransferPrisonerAction.Apply(order.Prisoner, MobileParty.MainParty.Party, settlement.Party);
-                                            donated++;
-                                        }
-                                        catch
-                                        {
-                                            break;
-                                        }
-                                    }
-
-                                    if (donated > 0)
-                                    {
-                                        flattenedPrisoners.Add(order.Prisoner, donated, 0);
-                                        dungeonLogParts.Add($"{donated}x {order.Prisoner.Name}");
-                                    }
-                                }
-                            }
-                        }
-                        if (flattenedPrisoners.Count() > 0)
-                        {
-                            CampaignEventDispatcher.Instance.OnPrisonerDonatedToSettlement(MobileParty.MainParty, flattenedPrisoners, settlement);
-                            InformationManager.DisplayMessage(new InformationMessage($"[Automation] Donated prisoners to Dungeon: {string.Join(", ", dungeonLogParts)}"));
-                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Donated to Dungeon at {settlement.Name}: {string.Join(", ", dungeonLogParts)}");
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error refreshing requests from {reg.ProviderName}: {ex.Message}");
                         }
                     }
-                    catch {}
+
+                    GatherReservations(
+                        new AutomationReservationContext(
+                            AutomationReservationFlow.Settlement,
+                            MobileParty.MainParty,
+                            settlement));
                 }
 
                 // ----------------------------------------------------
-                // Step 7: Priority Needs Phase (Need Fulfillment)
+                // Step 6: Priority Needs Phase (Need Fulfillment)
                 // ----------------------------------------------------
                 var activeRequests = RequestPolicy.SortRequests(AutomationRegistry.ActiveRequests).ToList();
                 LogRequestSummary(settlement, activeRequests);
@@ -602,6 +339,11 @@ namespace SettlementAutomationCore
                 }
 
                 // ----------------------------------------------------
+                // Step 7: Mounts & Herding Cleanup Phase
+                // ----------------------------------------------------
+                ExecuteSettlementCleanup(settlement, marketReport, activeRequests);
+
+                // ----------------------------------------------------
                 // Step 8: Fief Minimum Phase
                 // ----------------------------------------------------
                 var fiefRegistrations = AutomationRegistry.ActiveFiefProviders;
@@ -621,50 +363,11 @@ namespace SettlementAutomationCore
                 }
 
                 // ----------------------------------------------------
-                // Step 9: Free Trade Phase
+                // Step 10: Free Trade Phase
                 // ----------------------------------------------------
                 if (phasePolicy.FreeTrade)
                 {
-                    var explicitReservations = AutomationRegistry.ActiveReservations;
-                    var sellableItems = new List<SellableItem>();
-                    var playerRoster = MobileParty.MainParty.ItemRoster;
-                    var freeTradeLockKeys = InventoryLockHelper.GetCurrentLockKeys();
-                    for (int i = 0; i < playerRoster.Count; i++)
-                    {
-                        var element = playerRoster.GetElementCopyAtIndex(i);
-                        if (element.EquipmentElement.Item != null)
-                        {
-                            var item = element.EquipmentElement.Item;
-                            if (InventoryLockHelper.IsLocked(element.EquipmentElement, freeTradeLockKeys))
-                            {
-                                sellableItems.Add(new SellableItem(element.EquipmentElement, 0));
-                                continue;
-                            }
-
-                            int reserved = 0;
-                            foreach (var res in explicitReservations)
-                            {
-                                if (res.MatchesItem(item))
-                                {
-                                    reserved = Math.Max(reserved, res.Quantity);
-                                }
-                            }
-                            foreach (var req in activeRequests)
-                            {
-                                if (!RequestPolicy.CreatesImplicitSellReservation(req))
-                                {
-                                    continue;
-                                }
-
-                                if (req.MatchesEquipmentElement(element.EquipmentElement))
-                                {
-                                    reserved = Math.Max(reserved, req.Quantity);
-                                }
-                            }
-                            int available = Math.Max(0, element.Amount - reserved);
-                            sellableItems.Add(new SellableItem(element.EquipmentElement, available));
-                        }
-                    }
+                    var sellableItems = BuildSellableItems(activeRequests);
 
                     var logic8 = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
                     if (logic8 != null)
@@ -679,7 +382,7 @@ namespace SettlementAutomationCore
                                 var proposal = reg.Provider.AnalyzeMarket(context);
                                 if (proposal != null && proposal.Actions != null && proposal.Actions.Count > 0)
                                 {
-                                    context = ExecuteTradeProposal(proposal, context, logic8, marketReport, reg.ProviderName);
+                                    context = ExecuteTradeProposal(proposal, context, logic8, marketReport, reg.ProviderName, AutomationTransactionStage.FreeTrade);
                                 }
                             }
                             catch (Exception ex)
@@ -701,10 +404,8 @@ namespace SettlementAutomationCore
                     }
                 }
 
-                ReportMarketActivity(settlement, marketReport);
-
                 // ----------------------------------------------------
-                // Step 10: Fief Surplus Phase
+                // Step 11: Fief Surplus Phase
                 // ----------------------------------------------------
                 if (phasePolicy.FiefSurplus)
                 {
@@ -720,6 +421,8 @@ namespace SettlementAutomationCore
                         }
                     }
                 }
+
+                ReportMarketActivity(settlement, marketReport);
             }
             catch (Exception ex)
             {
@@ -806,6 +509,202 @@ namespace SettlementAutomationCore
             }
         }
 
+        public static void ExecutePostBattleAutomation(MapEvent mapEvent)
+        {
+            if (mapEvent == null) return;
+            if (mapEvent.PlayerSide == BattleSideEnum.None) return;
+            if (mapEvent.WinningSide != mapEvent.PlayerSide) return;
+
+            var party = MobileParty.MainParty;
+            if (party == null) return;
+
+            var reservations = GatherReservations(
+                new AutomationReservationContext(
+                    AutomationReservationFlow.PostBattle,
+                    party,
+                    mapEvent: mapEvent));
+
+            var context = new PostBattleAutomationContext(party, mapEvent, reservations);
+            var providers = AutomationRegistry.ActivePostBattleProviders;
+            foreach (var reg in providers)
+            {
+                try
+                {
+                    var result = reg.Provider.ProcessPostBattle(context);
+                    if (result == null || !result.HasActivity)
+                    {
+                        continue;
+                    }
+
+                    foreach (var activity in result.Activities)
+                    {
+                        string message = $"[{reg.ProviderName}] Post-battle: {activity.Message}";
+                        InformationManager.DisplayMessage(new InformationMessage(message));
+                        Helpers.Logger.WriteLog(reg.ProviderName, $"Post-battle: {activity.Message}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error processing post-battle automation from {reg.ProviderName}: {ex.Message}");
+                }
+            }
+        }
+
+        private static IReadOnlyList<ItemReservation> GatherReservations(AutomationReservationContext context)
+        {
+            var reservations = new List<ItemReservation>();
+            if (context == null)
+            {
+                return reservations;
+            }
+
+            var providers = AutomationRegistry.ActiveReservationProviders;
+            foreach (var reg in providers)
+            {
+                try
+                {
+                    var providerReservations = reg.Provider.GetReservations(context);
+                    if (providerReservations == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var reservation in providerReservations.Where(r => r != null && r.Quantity > 0))
+                    {
+                        reservations.Add(reservation);
+                        if (context.Flow == AutomationReservationFlow.Settlement)
+                        {
+                            AutomationRegistry.RegisterReservation(reservation);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error gathering {context.Flow} reservations from {reg.ProviderName}: {ex.Message}");
+                }
+            }
+
+            return reservations;
+        }
+
+        private static void ExecuteTradeOrders(
+            Settlement settlement,
+            IReadOnlyList<(TradeOrder Order, string ProviderName)> tradeOrders,
+            AutomationMarketReport marketReport,
+            AutomationTransactionStage stage,
+            string logLabel)
+        {
+            if (tradeOrders == null || tradeOrders.Count == 0 || settlement == null || Hero.MainHero == null)
+            {
+                return;
+            }
+
+            var party = MobileParty.MainParty;
+            if (party == null)
+            {
+                return;
+            }
+
+            var sellOrders = tradeOrders
+                .Where(entry => entry.Order != null && !entry.Order.IsBuy && !entry.Order.IsSlaughter)
+                .ToList();
+            var slaughterOrders = tradeOrders
+                .Where(entry => entry.Order != null && !entry.Order.IsBuy && entry.Order.IsSlaughter)
+                .ToList();
+
+            var lockKeys = InventoryLockHelper.GetCurrentLockKeys();
+            var executedParts = new List<string>();
+
+            foreach (var entry in slaughterOrders)
+            {
+                var order = entry.Order;
+                var item = order.EquipmentElement.Item;
+                if (item == null || order.Amount <= 0)
+                {
+                    continue;
+                }
+
+                if (InventoryLockHelper.IsLocked(order.EquipmentElement, lockKeys))
+                {
+                    Helpers.Logger.WriteLog("SettlementAutomationCore", $"Skipped locked {logLabel} slaughter order from {entry.ProviderName}: {order.Amount}x {item.Name}");
+                    continue;
+                }
+
+                int available = party.ItemRoster.GetItemNumber(item);
+                int toSlaughter = Math.Min(order.Amount, available);
+                if (toSlaughter <= 0)
+                {
+                    continue;
+                }
+
+                party.ItemRoster.AddToCounts(item, -toSlaughter);
+                int meatCount = item.HorseComponent?.MeatCount ?? 0;
+                int hideCount = item.HorseComponent?.HideCount ?? 0;
+                if (meatCount > 0)
+                {
+                    party.ItemRoster.AddToCounts(DefaultItems.Meat, meatCount * toSlaughter);
+                }
+                if (hideCount > 0)
+                {
+                    party.ItemRoster.AddToCounts(DefaultItems.Hides, hideCount * toSlaughter);
+                }
+
+                executedParts.Add($"{toSlaughter}x {item.Name} slaughtered");
+                marketReport.AddSlaughtered(order.EquipmentElement, toSlaughter, entry.ProviderName, stage);
+            }
+
+            if (sellOrders.Count > 0)
+            {
+                var logic = Helpers.InventoryHelper.CreateAndInitInventoryLogic(party, settlement);
+                if (logic != null)
+                {
+                    bool executedAny = false;
+                    foreach (var entry in sellOrders)
+                    {
+                        var order = entry.Order;
+                        var item = order.EquipmentElement.Item;
+                        if (item == null || order.Amount <= 0)
+                        {
+                            continue;
+                        }
+
+                        if (InventoryLockHelper.IsLocked(order.EquipmentElement, lockKeys))
+                        {
+                            Helpers.Logger.WriteLog("SettlementAutomationCore", $"Skipped locked {logLabel} sell order from {entry.ProviderName}: {order.Amount}x {item.Name}");
+                            continue;
+                        }
+
+                        int estimatedGold = logic.GetItemPrice(order.EquipmentElement, false) * order.Amount;
+                        var command = TransferCommand.Transfer(
+                            order.Amount,
+                            InventoryLogic.InventorySide.PlayerInventory,
+                            InventoryLogic.InventorySide.OtherInventory,
+                            new ItemRosterElement(order.EquipmentElement, order.Amount),
+                            EquipmentIndex.None,
+                            EquipmentIndex.None,
+                            Hero.MainHero.CharacterObject);
+                        logic.AddTransferCommand(command);
+                        executedAny = true;
+                        executedParts.Add($"{order.Amount}x {item.Name} sold");
+                        marketReport.AddSold(order.EquipmentElement, order.Amount, estimatedGold, entry.ProviderName, stage);
+                    }
+
+                    if (executedAny && logic.IsThereAnyChanges())
+                    {
+                        int initialGold = Hero.MainHero?.Gold ?? 0;
+                        logic.DoneLogic();
+                        int finalGold = Hero.MainHero?.Gold ?? 0;
+                        marketReport.AddGoldDelta(finalGold - initialGold);
+                    }
+                }
+            }
+
+            if (executedParts.Count > 0)
+            {
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"{logLabel} completed at {settlement.Name}: {string.Join(", ", executedParts)}");
+            }
+        }
+
         private static void DisplayFiefAutomationMessage(string providerName, string description)
         {
             string message = string.IsNullOrWhiteSpace(description)
@@ -813,6 +712,611 @@ namespace SettlementAutomationCore
                 : description;
             InformationManager.DisplayMessage(new InformationMessage($"[Automation] {message}"));
             Helpers.Logger.WriteLog(providerName, message);
+        }
+
+        private static void ExecuteSettlementCleanup(
+            Settlement settlement,
+            AutomationMarketReport marketReport,
+            IReadOnlyList<AutomationRequest> activeRequests)
+        {
+            if (MobileParty.MainParty == null)
+            {
+                return;
+            }
+
+            var providers = AutomationRegistry.ActiveSettlementCleanupProviders;
+            if (providers.Count == 0)
+            {
+                return;
+            }
+
+            var logic = Helpers.InventoryHelper.CreateAndInitInventoryLogic(MobileParty.MainParty, settlement);
+            if (logic == null)
+            {
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Skipped settlement cleanup at {settlement.Name}: inventory logic was unavailable.");
+                return;
+            }
+
+            var context = TradeContextFactory.Create(MobileParty.MainParty, settlement, logic, BuildSellableItems(activeRequests));
+            foreach (var reg in providers)
+            {
+                try
+                {
+                    var proposal = reg.Provider.AnalyzeSettlementCleanup(context);
+                    if (proposal != null && proposal.Actions != null && proposal.Actions.Count > 0)
+                    {
+                        context = ExecuteTradeProposal(
+                            proposal,
+                            context,
+                            logic,
+                            marketReport,
+                            reg.ProviderName,
+                            AutomationTransactionStage.SettlementCleanup);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error executing settlement cleanup provider {reg.ProviderName}: {ex.Message}");
+                }
+            }
+
+            if (logic.IsThereAnyChanges())
+            {
+                int initialGold = Hero.MainHero?.Gold ?? 0;
+                logic.DoneLogic();
+                int finalGold = Hero.MainHero?.Gold ?? 0;
+                int goldDiff = finalGold - initialGold;
+                string goldDiffSign = goldDiff >= 0 ? "+" : "";
+                marketReport.AddGoldDelta(goldDiff);
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Settlement cleanup completed in {settlement.Name} (Gold change: {goldDiffSign}{goldDiff}d)");
+            }
+        }
+
+        private static List<SellableItem> BuildSellableItems(IReadOnlyList<AutomationRequest> activeRequests)
+        {
+            var explicitReservations = AutomationRegistry.ActiveReservations;
+            var sellableItems = new List<SellableItem>();
+            var playerRoster = MobileParty.MainParty.ItemRoster;
+            var freeTradeLockKeys = InventoryLockHelper.GetCurrentLockKeys();
+            for (int i = 0; i < playerRoster.Count; i++)
+            {
+                var element = playerRoster.GetElementCopyAtIndex(i);
+                if (element.EquipmentElement.Item == null)
+                {
+                    continue;
+                }
+
+                var item = element.EquipmentElement.Item;
+                if (InventoryLockHelper.IsLocked(element.EquipmentElement, freeTradeLockKeys))
+                {
+                    sellableItems.Add(new SellableItem(element.EquipmentElement, 0));
+                    continue;
+                }
+
+                int reserved = 0;
+                foreach (var res in explicitReservations)
+                {
+                    if (res.MatchesItem(item))
+                    {
+                        reserved = Math.Max(reserved, res.Quantity);
+                    }
+                }
+
+                foreach (var req in activeRequests)
+                {
+                    if (!RequestPolicy.CreatesImplicitSellReservation(req))
+                    {
+                        continue;
+                    }
+
+                    if (req.MatchesEquipmentElement(element.EquipmentElement))
+                    {
+                        reserved = Math.Max(reserved, req.Quantity);
+                    }
+                }
+
+                int available = Math.Max(0, element.Amount - reserved);
+                sellableItems.Add(new SellableItem(element.EquipmentElement, available));
+            }
+
+            return sellableItems;
+        }
+
+        private static void ExecuteGroupedRecruitment(Settlement settlement, AutomationPhasePolicy phasePolicy)
+        {
+            if (MobileParty.MainParty == null || Hero.MainHero == null || (!phasePolicy.Recruitment && !phasePolicy.Tavern))
+            {
+                return;
+            }
+
+            var providers = AutomationRegistry.ActiveSettlementRecruitmentProviders;
+            if (providers.Count == 0)
+            {
+                return;
+            }
+
+            var candidates = BuildRecruitmentCandidates(settlement, phasePolicy);
+            if (candidates.Count == 0)
+            {
+                return;
+            }
+
+            var context = new SettlementRecruitmentContext(
+                MobileParty.MainParty,
+                settlement,
+                candidates,
+                Hero.MainHero.Gold,
+                MobileParty.MainParty.MemberRoster.TotalManCount,
+                MobileParty.MainParty.Party.PartySizeLimit,
+                phasePolicy.Recruitment,
+                phasePolicy.Tavern);
+
+            var orders = new List<(SettlementRecruitmentOrder Order, string ProviderName)>();
+            foreach (var reg in providers)
+            {
+                try
+                {
+                    var providerOrders = reg.Provider.GetRecruitmentOrders(context);
+                    if (providerOrders != null)
+                    {
+                        orders.AddRange(providerOrders.Select(order => (order, reg.ProviderName)));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error gathering recruitment orders from {reg.ProviderName}: {ex.Message}");
+                }
+            }
+
+            ExecuteRecruitmentOrders(settlement, orders);
+        }
+
+        private static List<SettlementRecruitmentCandidate> BuildRecruitmentCandidates(Settlement settlement, AutomationPhasePolicy phasePolicy)
+        {
+            var candidates = new List<SettlementRecruitmentCandidate>();
+            int sequence = 0;
+
+            if (phasePolicy.Recruitment && Hero.MainHero != null)
+            {
+                foreach (var notable in settlement.Notables)
+                {
+                    if (notable?.VolunteerTypes == null)
+                    {
+                        continue;
+                    }
+
+                    int maxIndex = -1;
+                    try
+                    {
+                        maxIndex = Campaign.Current.Models.VolunteerModel.MaximumIndexHeroCanRecruitFromHero(Hero.MainHero, notable, -101);
+                    }
+                    catch {}
+
+                    for (int slot = 0; slot < notable.VolunteerTypes.Length; slot++)
+                    {
+                        if (slot > maxIndex)
+                        {
+                            continue;
+                        }
+
+                        var troop = notable.VolunteerTypes[slot];
+                        if (troop == null)
+                        {
+                            continue;
+                        }
+
+                        candidates.Add(new SettlementRecruitmentCandidate(
+                            SettlementRecruitmentSource.NotableVolunteer,
+                            troop,
+                            1,
+                            GetRecruitmentCost(troop),
+                            notable,
+                            slot,
+                            sequence++));
+                    }
+                }
+            }
+
+            if (phasePolicy.Tavern && settlement.Town != null)
+            {
+                try
+                {
+                    var recruitmentBehavior = Campaign.Current?.GetCampaignBehavior<TaleWorlds.CampaignSystem.CampaignBehaviors.RecruitmentCampaignBehavior>();
+                    var data = recruitmentBehavior?.GetMercenaryData(settlement.Town);
+                    if (data?.TroopType != null && data.Number > 0)
+                    {
+                        candidates.Add(new SettlementRecruitmentCandidate(
+                            SettlementRecruitmentSource.TavernMercenary,
+                            data.TroopType,
+                            data.Number,
+                            GetRecruitmentCost(data.TroopType),
+                            null,
+                            -1,
+                            sequence++));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error gathering tavern mercenary candidates at {settlement.Name}: {ex.Message}");
+                }
+            }
+
+            return candidates;
+        }
+
+        private static int GetRecruitmentCost(CharacterObject troop)
+        {
+            try
+            {
+                return (int)(Campaign.Current?.Models?.PartyWageModel.GetTroopRecruitmentCost(troop, Hero.MainHero, false).ResultNumber ?? 0);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static void ExecuteRecruitmentOrders(Settlement settlement, IReadOnlyList<(SettlementRecruitmentOrder Order, string ProviderName)> orders)
+        {
+            if (MobileParty.MainParty == null || Hero.MainHero == null || orders.Count == 0)
+            {
+                return;
+            }
+
+            var recruitedMap = new Dictionary<CharacterObject, int>();
+            int totalCount = 0;
+            var recruitmentBehavior = Campaign.Current?.GetCampaignBehavior<TaleWorlds.CampaignSystem.CampaignBehaviors.RecruitmentCampaignBehavior>();
+            var applyMercMethod = recruitmentBehavior?.GetType().GetMethod("ApplyRecruitMercenary", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+            foreach (var entry in orders)
+            {
+                var order = entry.Order;
+                if (order == null || order.Candidate?.Troop == null || order.Amount <= 0)
+                {
+                    continue;
+                }
+
+                var candidate = order.Candidate;
+                int amount = Math.Min(order.Amount, candidate.AvailableCount);
+                if (amount <= 0)
+                {
+                    continue;
+                }
+
+                int currentPartySize = MobileParty.MainParty.MemberRoster.TotalManCount;
+                int partySizeLimit = MobileParty.MainParty.Party.PartySizeLimit;
+                if (!order.AllowOverPartySize)
+                {
+                    amount = Math.Min(amount, Math.Max(0, partySizeLimit - currentPartySize));
+                }
+
+                int unitCost = Math.Max(0, candidate.UnitCost);
+                if (unitCost > 0)
+                {
+                    amount = Math.Min(amount, Math.Max(0, Hero.MainHero.Gold / unitCost));
+                }
+
+                if (amount <= 0)
+                {
+                    continue;
+                }
+
+                if (candidate.Source == SettlementRecruitmentSource.NotableVolunteer)
+                {
+                    int recruited = ExecuteNotableRecruitment(settlement, candidate, amount, unitCost);
+                    if (recruited > 0)
+                    {
+                        AddRecruitmentLog(recruitedMap, candidate.Troop, recruited);
+                        totalCount += recruited;
+                    }
+                }
+                else if (candidate.Source == SettlementRecruitmentSource.TavernMercenary && recruitmentBehavior != null && applyMercMethod != null)
+                {
+                    int before = MobileParty.MainParty.MemberRoster.GetTroopCount(candidate.Troop);
+                    try
+                    {
+                        applyMercMethod.Invoke(recruitmentBehavior, new object[] { MobileParty.MainParty, settlement, candidate.Troop, amount });
+                    }
+                    catch (Exception ex)
+                    {
+                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Failed recruiting mercenaries from {entry.ProviderName}: {ex.Message}");
+                    }
+
+                    int recruited = Math.Max(0, MobileParty.MainParty.MemberRoster.GetTroopCount(candidate.Troop) - before);
+                    if (recruited > 0)
+                    {
+                        AddRecruitmentLog(recruitedMap, candidate.Troop, recruited);
+                        totalCount += recruited;
+                    }
+                }
+            }
+
+            if (totalCount > 0)
+            {
+                var troopParts = recruitedMap.Select(kvp => $"{kvp.Value}x {kvp.Key.Name}");
+                string msg = $"Recruited in {settlement.Name}: {string.Join(", ", troopParts)} (Total: {totalCount})";
+                InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
+                Helpers.Logger.WriteLog("SettlementAutomationCore", msg);
+            }
+        }
+
+        private static int ExecuteNotableRecruitment(Settlement settlement, SettlementRecruitmentCandidate candidate, int amount, int unitCost)
+        {
+            if (candidate.Notable?.VolunteerTypes == null || Hero.MainHero == null || MobileParty.MainParty == null)
+            {
+                return 0;
+            }
+
+            int recruited = 0;
+            for (int i = 0; i < amount; i++)
+            {
+                if (candidate.SlotIndex < 0 ||
+                    candidate.SlotIndex >= candidate.Notable.VolunteerTypes.Length ||
+                    candidate.Notable.VolunteerTypes[candidate.SlotIndex] != candidate.Troop ||
+                    (unitCost > 0 && Hero.MainHero.Gold < unitCost))
+                {
+                    break;
+                }
+
+                candidate.Notable.VolunteerTypes[candidate.SlotIndex] = null;
+                MobileParty.MainParty.AddElementToMemberRoster(candidate.Troop, 1, false);
+                GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, null, unitCost, true);
+                recruited++;
+            }
+
+            if (recruited > 0)
+            {
+                CampaignEventDispatcher.Instance.OnTroopRecruited(Hero.MainHero, settlement, candidate.Notable, candidate.Troop, recruited);
+            }
+
+            return recruited;
+        }
+
+        private static void AddRecruitmentLog(Dictionary<CharacterObject, int> recruitedMap, CharacterObject troop, int amount)
+        {
+            if (recruitedMap.ContainsKey(troop))
+            {
+                recruitedMap[troop] += amount;
+            }
+            else
+            {
+                recruitedMap[troop] = amount;
+            }
+        }
+
+        private static void ExecutePrisonerDisposition(Settlement settlement, AutomationPhasePolicy phasePolicy)
+        {
+            if (MobileParty.MainParty == null || (!phasePolicy.Tavern && !phasePolicy.DungeonDonation))
+            {
+                return;
+            }
+
+            var providers = AutomationRegistry.ActivePrisonerDispositionProviders;
+            if (providers.Count == 0)
+            {
+                return;
+            }
+
+            var prisoners = BuildPrisonerStacks(MobileParty.MainParty);
+            if (prisoners.Count == 0)
+            {
+                return;
+            }
+
+            var context = new PrisonerDispositionContext(
+                MobileParty.MainParty,
+                settlement,
+                prisoners,
+                MobileParty.MainParty.PrisonRoster.TotalManCount,
+                MobileParty.MainParty.Party.PrisonerSizeLimit,
+                phasePolicy.Tavern,
+                phasePolicy.DungeonDonation);
+
+            var remaining = prisoners.ToDictionary(stack => stack.Prisoner, stack => stack.Amount);
+            var ransomRoster = TroopRoster.CreateDummyTroopRoster();
+            var dungeonRoster = TroopRoster.CreateDummyTroopRoster();
+
+            foreach (var reg in providers)
+            {
+                IReadOnlyList<PrisonerDispositionOrder>? orders = null;
+                try
+                {
+                    orders = reg.Provider.GetPrisonerDispositionOrders(context);
+                }
+                catch (Exception ex)
+                {
+                    Helpers.Logger.WriteLog("SettlementAutomationCore", $"Error gathering prisoner disposition orders from {reg.ProviderName}: {ex.Message}");
+                }
+
+                if (orders == null)
+                {
+                    continue;
+                }
+
+                foreach (var order in orders)
+                {
+                    if (order?.Prisoner == null || order.Amount <= 0)
+                    {
+                        continue;
+                    }
+
+                    if ((order.Action == PrisonerDispositionAction.Ransom && !phasePolicy.Tavern) ||
+                        (order.Action == PrisonerDispositionAction.DonateToDungeon && !phasePolicy.DungeonDonation))
+                    {
+                        continue;
+                    }
+
+                    remaining.TryGetValue(order.Prisoner, out int available);
+                    int amount = Math.Min(order.Amount, available);
+                    if (amount <= 0)
+                    {
+                        continue;
+                    }
+
+                    remaining[order.Prisoner] = available - amount;
+                    if (order.Action == PrisonerDispositionAction.Ransom)
+                    {
+                        ransomRoster.AddToCounts(order.Prisoner, amount);
+                    }
+                    else
+                    {
+                        dungeonRoster.AddToCounts(order.Prisoner, amount);
+                    }
+                }
+            }
+
+            ApplyRansomRoster(settlement, ransomRoster);
+            ApplyDungeonDonationRoster(settlement, dungeonRoster);
+        }
+
+        private static List<PrisonerStack> BuildPrisonerStacks(MobileParty party)
+        {
+            var stacks = new List<PrisonerStack>();
+            var prisonRoster = party.PrisonRoster;
+            for (int i = 0; i < prisonRoster.Count; i++)
+            {
+                var element = prisonRoster.GetElementCopyAtIndex(i);
+                if (element.Character != null && element.Number > 0)
+                {
+                    stacks.Add(new PrisonerStack(element.Character, element.Number));
+                }
+            }
+
+            return stacks;
+        }
+
+        private static void ApplyRansomRoster(Settlement settlement, TroopRoster ransomRoster)
+        {
+            if (MobileParty.MainParty == null || ransomRoster.Count <= 0)
+            {
+                return;
+            }
+
+            try
+            {
+                SellPrisonersAction.ApplyForSelectedPrisoners(MobileParty.MainParty.Party, null, ransomRoster);
+                var ransomParts = new List<string>();
+                int estimatedGold = 0;
+                foreach (var element in ransomRoster.GetTroopRoster())
+                {
+                    ransomParts.Add($"{element.Number}x {element.Character.Name}");
+                    try
+                    {
+                        var model = Campaign.Current?.Models?.RansomValueCalculationModel;
+                        if (model != null)
+                        {
+                            estimatedGold += model.PrisonerRansomValue(element.Character, Hero.MainHero) * element.Number;
+                        }
+                    }
+                    catch {}
+                }
+
+                InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed prisoners: {string.Join(", ", ransomParts)}"));
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Ransomed at {settlement.Name}: {string.Join(", ", ransomParts)} (Est. Gold: +{estimatedGold}d)");
+            }
+            catch (Exception ex)
+            {
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Native ApplyForSelectedPrisoners failed ({ex.Message}). Applying manual ransom fallback.");
+                int totalRansomGold = 0;
+                var ransomParts = new List<string>();
+                foreach (var element in ransomRoster.GetTroopRoster())
+                {
+                    var character = element.Character;
+                    int count = element.Number;
+                    if (character == null || count <= 0)
+                    {
+                        continue;
+                    }
+
+                    int unitValue = 0;
+                    var model = Campaign.Current?.Models?.RansomValueCalculationModel;
+                    if (model != null)
+                    {
+                        unitValue = model.PrisonerRansomValue(character, Hero.MainHero);
+                    }
+                    else
+                    {
+                        unitValue = character.Tier * 15;
+                    }
+
+                    int ransomAmount = unitValue * count;
+                    totalRansomGold += ransomAmount;
+
+                    MobileParty.MainParty.PrisonRoster.AddToCounts(character, -count);
+                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed {count}x {character.Name} for {ransomAmount} denars"));
+                    ransomParts.Add($"{count}x {character.Name} (+{ransomAmount}d)");
+                }
+
+                if (totalRansomGold > 0 && Hero.MainHero != null)
+                {
+                    GiveGoldAction.ApplyBetweenCharacters(null, Hero.MainHero, totalRansomGold, false);
+                    try
+                    {
+                        Campaign.Current?.SkillLevelingManager?.OnPrisonerSell(MobileParty.MainParty, in ransomRoster);
+                    }
+                    catch (Exception xpEx)
+                    {
+                        Helpers.Logger.WriteLog("SettlementAutomationCore", $"Failed to award Roguery XP via SkillLevelingManager: {xpEx.Message}");
+                    }
+                }
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"[Manual Fallback] Ransomed at {settlement.Name}: {string.Join(", ", ransomParts)} (Total: +{totalRansomGold}d)");
+            }
+        }
+
+        private static void ApplyDungeonDonationRoster(Settlement settlement, TroopRoster dungeonRoster)
+        {
+            if (MobileParty.MainParty == null || dungeonRoster.Count <= 0)
+            {
+                return;
+            }
+
+            try
+            {
+                var flattenedPrisoners = new FlattenedTroopRoster();
+                var dungeonLogParts = new List<string>();
+                foreach (var element in dungeonRoster.GetTroopRoster())
+                {
+                    var prisoner = element.Character;
+                    int amount = element.Number;
+                    if (prisoner == null || amount <= 0)
+                    {
+                        continue;
+                    }
+
+                    int donated = 0;
+                    int available = MobileParty.MainParty.PrisonRoster.GetTroopCount(prisoner);
+                    int toDonate = Math.Min(amount, available);
+                    for (int i = 0; i < toDonate; i++)
+                    {
+                        try
+                        {
+                            TransferPrisonerAction.Apply(prisoner, MobileParty.MainParty.Party, settlement.Party);
+                            donated++;
+                        }
+                        catch
+                        {
+                            break;
+                        }
+                    }
+
+                    if (donated > 0)
+                    {
+                        flattenedPrisoners.Add(prisoner, donated, 0);
+                        dungeonLogParts.Add($"{donated}x {prisoner.Name}");
+                    }
+                }
+
+                if (flattenedPrisoners.Count() > 0)
+                {
+                    CampaignEventDispatcher.Instance.OnPrisonerDonatedToSettlement(MobileParty.MainParty, flattenedPrisoners, settlement);
+                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Donated prisoners to Dungeon: {string.Join(", ", dungeonLogParts)}"));
+                    Helpers.Logger.WriteLog("SettlementAutomationCore", $"Donated to Dungeon at {settlement.Name}: {string.Join(", ", dungeonLogParts)}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Dungeon donation phase error: {ex.Message}");
+            }
         }
 
         internal sealed class AutomationPhasePolicy
@@ -1426,12 +1930,44 @@ namespace SettlementAutomationCore
 
         private static bool IsPriceAllowedForRequest(AutomationRequest request, ItemObject item, int price, Settings? settings)
         {
+            int referenceValue = GetPriceReferenceValue(request, item);
             return RequestPolicy.IsPriceAllowedForRequest(
                 request,
-                item,
+                referenceValue,
                 price,
                 settings?.RoutinePriceLimitMultiplier ?? 1.5f,
                 settings?.OpportunisticPriceLimitMultiplier ?? 1.1f);
+        }
+
+        private static int GetPriceReferenceValue(AutomationRequest request, ItemObject item)
+        {
+            if (item == null)
+            {
+                return 0;
+            }
+
+            if (request.PriceReference != RequestPriceReference.CategoryAverageValue)
+            {
+                return item.Value;
+            }
+
+            var allItems = MBObjectManager.Instance?.GetObjectTypeList<ItemObject>();
+            if (allItems == null)
+            {
+                return item.Value;
+            }
+
+            var matchingValues = allItems
+                .Where(candidate => candidate != null && request.MatchesItem(candidate) && candidate.Value > 0)
+                .Select(candidate => candidate.Value)
+                .ToList();
+
+            if (matchingValues.Count == 0)
+            {
+                return item.Value;
+            }
+
+            return Math.Max(1, (int)Math.Round(matchingValues.Average()));
         }
 
         private static void ReportMarketActivity(Settlement settlement, AutomationMarketReport marketReport)
@@ -1733,6 +2269,8 @@ namespace SettlementAutomationCore
                     return "pre-sell";
                 case AutomationTransactionStage.PriorityRequest:
                     return "requests";
+                case AutomationTransactionStage.SettlementCleanup:
+                    return "cleanup";
                 case AutomationTransactionStage.FreeTrade:
                     return "free trade";
                 default:
@@ -1812,7 +2350,13 @@ namespace SettlementAutomationCore
             return updated;
         }
 
-        private static TradeContext ExecuteTradeProposal(TradeProposal proposal, TradeContext context, InventoryLogic logic, AutomationMarketReport marketReport, string providerName)
+        private static TradeContext ExecuteTradeProposal(
+            TradeProposal proposal,
+            TradeContext context,
+            InventoryLogic logic,
+            AutomationMarketReport marketReport,
+            string providerName,
+            AutomationTransactionStage stage)
         {
             var sells = proposal.Actions.Where(a => a.ActionType == TradeActionType.Sell).ToList();
             var slaughters = proposal.Actions.Where(a => a.ActionType == TradeActionType.Slaughter).ToList();
@@ -1848,7 +2392,7 @@ namespace SettlementAutomationCore
 
                     availableGold += toSell * price;
                     sellableItems = ConsumeSellableItems(sellableItems, action.EquipmentElement, toSell);
-                    marketReport.AddSold(action.EquipmentElement, toSell, toSell * price, providerName, AutomationTransactionStage.FreeTrade);
+                    marketReport.AddSold(action.EquipmentElement, toSell, toSell * price, providerName, stage);
                     if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
                     {
                         freeCargo += toSell * action.EquipmentElement.Item.Weight;
@@ -1870,7 +2414,7 @@ namespace SettlementAutomationCore
                     {
                         logic.SlaughterItem(itemRosterEl);
                         sellableItems = ConsumeSellableItems(sellableItems, action.EquipmentElement, action.Quantity);
-                        marketReport.AddSlaughtered(action.EquipmentElement, action.Quantity, providerName, AutomationTransactionStage.FreeTrade);
+                        marketReport.AddSlaughtered(action.EquipmentElement, action.Quantity, providerName, stage);
                         if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
                         {
                             freeCargo += action.Quantity * action.EquipmentElement.Item.Weight;
@@ -1924,7 +2468,7 @@ namespace SettlementAutomationCore
                     logic.AddTransferCommand(command);
 
                     availableGold -= toBuy * price;
-                    marketReport.AddBought(action.EquipmentElement, toBuy, toBuy * price, providerName, AutomationTransactionStage.FreeTrade);
+                    marketReport.AddBought(action.EquipmentElement, toBuy, toBuy * price, providerName, stage);
                     if (isCargo)
                     {
                         freeCargo -= toBuy * action.EquipmentElement.Item.Weight;
@@ -1962,6 +2506,21 @@ namespace SettlementAutomationCore
             {
                 SubModule.QueueBackgroundTrade(settlement);
             }
+        }
+
+        public override void SyncData(IDataStore dataStore) { }
+    }
+
+    public class PostBattleAutomationCampaignBehavior : CampaignBehaviorBase
+    {
+        public override void RegisterEvents()
+        {
+            CampaignEvents.MapEventEnded.AddNonSerializedListener(this, OnMapEventEnded);
+        }
+
+        private void OnMapEventEnded(MapEvent mapEvent)
+        {
+            SubModule.ExecutePostBattleAutomation(mapEvent);
         }
 
         public override void SyncData(IDataStore dataStore) { }

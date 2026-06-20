@@ -2,22 +2,27 @@
 
 Settlement Automation Core owns market execution. Domain modules describe what they want, and Core decides whether the current settlement, budget, cargo space, and herding limits allow the purchase.
 
+For test commands and the known slow `dotnet test` path, see [testing.md](testing.md).
+
 ## Automation Flow
 
 Settlement automation intentionally keeps "decide what we want" separate from "touch the game inventory."
 
 1. Preparation providers run before market decisions. This lets modules finish non-trading setup, such as EquipmentManager equipping the best available gear before anything decides what can be sold.
-2. Core builds an `AutomationRequestContext` with categorized merchant and player inventory snapshots.
-3. Request providers submit item requests.
-4. Pre-sell providers submit sell orders after preparation and request gathering.
-5. Recruitment, garrison, ransom, dungeon, and fief phases run on their own provider interfaces.
-6. Core executes item requests against fresh `InventoryLogic`.
-7. Free trade runs afterward with request reservations applied.
-8. Core asks registered report providers for per-provider, per-phase in-game report lines, then writes those lines itself.
+2. Core gathers early item reservations, then pre-sell providers submit sell orders.
+3. Core asks grouped recruitment providers what to hire from available notable volunteers and tavern mercenaries, then executes accepted recruitment orders.
+4. Garrison donation providers run after recruitment, so over-recruit-to-donate behavior can resolve before other party-size-sensitive work.
+5. Core asks grouped prisoner disposition providers what to do with prisoners, after recruitment and garrison donation have settled the current prisoner capacity.
+6. Core builds an `AutomationRequestContext` with categorized merchant and player inventory snapshots, request providers submit item requests, and Core refreshes reservations.
+7. Core executes item requests against fresh `InventoryLogic`.
+8. Mounts and herding cleanup runs before free trade, then free trade runs with request reservations applied.
+9. Fief automation and provider-owned reporting run around those market phases according to settlement eligibility.
 
 Domain modules should inspect context and submit requests. They should not execute transfers directly.
 
-Modules that need to change party state before trade planning should implement `IAutomationPreparationProvider`. Preparation runs before the visibility snapshot, so later request providers and pre-sell providers see the prepared inventory state.
+Modules that need to change party state before trade planning should implement `IAutomationPreparationProvider`. Preparation runs before pre-sell and before the later request visibility snapshot, so later request providers see prepared inventory plus any troop/prisoner changes from the grouped settlement phases.
+
+Core writes a one-time file-log warning when more than one provider registers for shared-pool interfaces where order conflicts can be surprising: pre-sell trade, free trade, settlement cleanup, settlement recruitment, garrison donation, prisoner disposition, and fief automation. Request, reservation, report, and preparation providers are intentionally additive and do not warn.
 
 EquipmentManager uses preparation for headless auto-equip. It tracks a virtual candidate pool during the single equip transaction, so gear freed by a combat upgrade can be handed down to civilian or stealth outfits before Core asks any provider what should be sold.
 
@@ -49,7 +54,8 @@ Mods expose spend-mode settings only for the item requests they submit. Prioriti
 | PartyManager | Food variety | `Food Variety Spend Mode` | `Essential` |
 | PartyManager | Total food buffer | `Food Buffer Spend Mode` | `Routine` |
 | PartyManager | Riding mounts | `Riding Mount Spend Mode` | `Routine` |
-| EquipmentManager | Top armor | `Top Armor Spend Mode` | `Luxury` |
+| EquipmentManager | Armor upgrades | `Armor Upgrade Spend Mode` | `Luxury` |
+| EquipmentManager | Hand-slot weapon upgrades | `Hand-Slot Weapon Upgrade Spend Mode` | `Luxury` |
 | EquipmentManager | Stealth gear | `Stealth Gear Spend Mode` | `Luxury` |
 
 ## Quantity Modes
@@ -57,7 +63,9 @@ Mods expose spend-mode settings only for the item requests they submit. Prioriti
 - `DesiredInventoryCount`: buy until player inventory contains the requested count.
 - `PurchaseCount`: buy up to this many entries from an ordered merchant candidate list.
 
-Recruitment is intentionally outside this item request pipeline. PartyManager submits recruit orders through the recruitment provider, and Core executes them before item purchases.
+Recruitment is intentionally outside this item request pipeline. PartyManager submits ordered intent through `ISettlementRecruitmentProvider`; Core executes accepted notable-volunteer and tavern-mercenary orders before item purchases.
+
+Prisoner handling is also outside the item request pipeline. PartyManager submits ordered ransom or dungeon-donation intent through `IPrisonerDispositionProvider`; Core executes accepted prisoner orders after recruitment and garrison donation so the prisoner limit reflects the final troop count.
 
 ## Inventory Visibility
 
@@ -95,6 +103,10 @@ Market candidate providers should pass candidates from `context.MerchantInventor
 
 EquipmentManager owns equipment upgrade purchases, including stealth/blackened gear. TradeOptimizer does not buy equipment as a trade commodity.
 
+EquipmentManager can also submit hand-slot weapon upgrade candidates when `Buy Hand-Slot Weapon Upgrades` is enabled. The master switch is off by default, while all weapon subcategory toggles are on by default so players can narrow the eligible categories explicitly. Hand-slot purchases have their own per-visit limit and use the `Hand-Slot Weapon Upgrade Spend Mode`.
+
+Ammo and throwing weapons use projectile-specific comparison settings. Ammo and throwing weapon dropdowns can prefer count, damage, or both. Throwing weapons ignore melee-mode stats by default so javelin-style upgrades are not rejected or reported as drawbacks just because their melee handling is worse.
+
 ## Equipment Keep Rules
 
 EquipmentManager keep rules protect items from automatic sale only. They do not toggle the game's lock icon.
@@ -129,6 +141,7 @@ Current report phases are:
 
 - `PreSell`: completed pre-sell orders from `IPreSellProvider`.
 - `PriorityRequest`: completed item-request purchases from `IAutomationRequestProvider`.
+- `SettlementCleanup`: completed corrective sell or slaughter actions from `ISettlementCleanupProvider`.
 - `FreeTrade`: completed buy, sell, or slaughter actions from `IFreeTradeAnalyzer`.
 
 The report context includes `ProviderName`, `Stage`, `BoughtItems`, `SoldItems`, `SlaughteredItems`, and `CargoStatus`. Item lists contain completed activity only: item name, inventory category, quantity, and gold total. Core still writes the detailed aggregate file log summary after in-game reporting.
@@ -171,7 +184,8 @@ A future structured result hook should probably stay Core-owned too: Core would 
 
 ## Settings Ownership
 
-- Core settings control global budget reserve, cargo enforcement, price limits for Routine and Opportunistic requests, and in-game market report detail.
+- Core settings control global budget reserve, cargo enforcement, reserve carry capacity, price limits for Routine and Opportunistic requests, and in-game market report detail.
+- Feature-mod master switches disable passive automation only. When disabled, that mod should not submit orders, make reservations, react to settlement entry or post-battle events, or format in-game automation reports. Explicit manual UI buttons remain available for mods that provide them.
 - PartyManager settings control food, mounts, recruitment filters, recruitment size targets, and PartyManager request spend modes.
 - EquipmentManager settings control armor upgrade selection, explicit armor reserves, and EquipmentManager request spend modes.
 - TradeOptimizer settings control profit-focused buy/sell behavior.

@@ -75,6 +75,12 @@ namespace SettlementAutomationCore
         ExplicitReserve
     }
 
+    public enum RequestPriceReference
+    {
+        ExactItemValue,
+        CategoryAverageValue
+    }
+
     public class AutomationRequest
     {
         public string RequestorId { get; }
@@ -86,6 +92,8 @@ namespace SettlementAutomationCore
         public int Priority { get; }            // 1 to 9, default 5
         public BudgetPolicyKind BudgetPolicy { get; }
         public int ExplicitGoldReserve { get; }
+        public IReadOnlyList<string> ItemCategoryIds { get; }
+        public RequestPriceReference PriceReference { get; }
         public IReadOnlyList<InventoryItemView> MarketCandidates { get; }
 
         private AutomationRequest(
@@ -98,6 +106,8 @@ namespace SettlementAutomationCore
             int priority,
             BudgetPolicyKind budgetPolicy,
             int explicitGoldReserve,
+            IEnumerable<string>? itemCategoryIds = null,
+            RequestPriceReference priceReference = RequestPriceReference.ExactItemValue,
             IReadOnlyList<InventoryItemView>? marketCandidates = null)
         {
             RequestorId = requestorId;
@@ -109,6 +119,12 @@ namespace SettlementAutomationCore
             Priority = Math.Max(1, Math.Min(9, priority));
             BudgetPolicy = budgetPolicy;
             ExplicitGoldReserve = Math.Max(0, explicitGoldReserve);
+            ItemCategoryIds = (itemCategoryIds ?? Enumerable.Empty<string>())
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.StartsWith("ItemCategory.", StringComparison.OrdinalIgnoreCase) ? id.Substring("ItemCategory.".Length) : id)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            PriceReference = priceReference;
             MarketCandidates = marketCandidates ?? new List<InventoryItemView>();
         }
 
@@ -120,7 +136,9 @@ namespace SettlementAutomationCore
             RequestProfile profile,
             int priority = 5,
             BudgetPolicyKind budgetPolicy = BudgetPolicyKind.CoreReserve,
-            int explicitGoldReserve = 0)
+            int explicitGoldReserve = 0,
+            IEnumerable<string>? itemCategoryIds = null,
+            RequestPriceReference priceReference = RequestPriceReference.ExactItemValue)
         {
             if (type != RequestType.ItemCategory && type != RequestType.SpecificItem)
             {
@@ -136,7 +154,9 @@ namespace SettlementAutomationCore
                 profile,
                 priority,
                 budgetPolicy,
-                explicitGoldReserve);
+                explicitGoldReserve,
+                itemCategoryIds,
+                priceReference);
         }
 
         public static AutomationRequest ForMarketItems(
@@ -158,6 +178,8 @@ namespace SettlementAutomationCore
                 priority,
                 explicitGoldReserve > 0 ? BudgetPolicyKind.ExplicitReserve : BudgetPolicyKind.CoreReserve,
                 explicitGoldReserve,
+                null,
+                RequestPriceReference.ExactItemValue,
                 orderedCandidates);
         }
 
@@ -168,6 +190,11 @@ namespace SettlementAutomationCore
             if (Type == RequestType.MarketItem)
             {
                 return MarketCandidates.Any(c => c.Item.StringId == item.StringId);
+            }
+
+            if (ItemCategoryIds.Count > 0 && !MatchesItemCategory(item))
+            {
+                return false;
             }
 
             if (Type == RequestType.SpecificItem)
@@ -209,6 +236,17 @@ namespace SettlementAutomationCore
             }
 
             return MatchesItem(item);
+        }
+
+        private bool MatchesItemCategory(ItemObject item)
+        {
+            var itemCategoryId = item.ItemCategory?.StringId;
+            if (string.IsNullOrWhiteSpace(itemCategoryId))
+            {
+                return false;
+            }
+
+            return ItemCategoryIds.Any(id => string.Equals(id, itemCategoryId, StringComparison.OrdinalIgnoreCase));
         }
     }
 

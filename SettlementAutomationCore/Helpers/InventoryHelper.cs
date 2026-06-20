@@ -19,7 +19,7 @@ namespace SettlementAutomationCore.Helpers
         public AutomationInventoryListener(Settlement settlement)
         {
             _settlement = settlement;
-            _initialGold = settlement.Town?.Gold ?? settlement.Village?.Bound?.Town?.Gold ?? 50000;
+            _initialGold = InventoryHelper.GetSettlementTradeGold(settlement, 50000);
             _gold = _initialGold;
         }
 
@@ -35,14 +35,7 @@ namespace SettlementAutomationCore.Helpers
 
         public override void SetGold(int gold)
         {
-            // Apply the delta to the real settlement so town gold actually changes in-game
-            int delta = gold - _gold;
-            _gold = gold;
-            var component = _settlement.Town ?? _settlement.Village?.Bound?.Town;
-            if (component != null && delta != 0)
-            {
-                component.ChangeGold(delta);
-            }
+            _gold = InventoryHelper.ApplySettlementTradeGold(_settlement, _gold, gold);
         }
 
         public override PartyBase GetOppositeParty()
@@ -60,8 +53,38 @@ namespace SettlementAutomationCore.Helpers
         public static IMarketData? GetMarketData(Settlement settlement)
         {
             if (settlement.IsTown) return settlement.Town?.MarketData;
-            if (settlement.IsVillage) return settlement.Village?.Bound?.Town?.MarketData;
+            if (settlement.IsVillage) return (settlement.Village?.TradeBound ?? settlement.Village?.Bound)?.Town?.MarketData;
             return null;
+        }
+
+        internal static int ApplySettlementTradeGold(Settlement settlement, int currentGold, int nextGold)
+        {
+            return ApplyTradeGoldDelta(currentGold, nextGold, delta => settlement?.SettlementComponent?.ChangeGold(delta));
+        }
+
+        internal static int ApplyTradeGoldDelta(int currentGold, int nextGold, Action<int>? applyDelta)
+        {
+            int delta = nextGold - currentGold;
+            if (delta != 0)
+            {
+                applyDelta?.Invoke(delta);
+            }
+
+            return nextGold;
+        }
+
+        internal static int GetSettlementTradeGold(Settlement settlement, int fallbackGold)
+        {
+            var component = settlement?.SettlementComponent;
+            if (component != null)
+            {
+                return component.Gold;
+            }
+
+            return settlement?.Town?.Gold
+                ?? settlement?.Village?.TradeBound?.Town?.Gold
+                ?? settlement?.Village?.Bound?.Town?.Gold
+                ?? fallbackGold;
         }
 
         public static InventoryLogic? CreateAndInitInventoryLogic(MobileParty party, Settlement settlement, bool useClones = false)

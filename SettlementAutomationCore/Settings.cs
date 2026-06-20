@@ -29,7 +29,7 @@ namespace SettlementAutomationCore
 
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "SettlementAutomationCore_v3";
+        public override string Id => "SettlementAutomationCore_v0_4";
         public override string DisplayName => "Settlement Automation Core";
         public override string FolderName => "SettlementAutomationCore";
         public override string FormatType => "json";

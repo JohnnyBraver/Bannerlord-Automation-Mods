@@ -7,6 +7,7 @@ namespace SettlementAutomationCore
     {
         PreSell,
         PriorityRequest,
+        SettlementCleanup,
         FreeTrade
     }
 

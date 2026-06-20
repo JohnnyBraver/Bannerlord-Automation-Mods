@@ -24,5 +24,6 @@
     <ProjectReference Include="..\..\PartyManager\PartyManager.csproj" AdditionalProperties="SkipBannerlordModuleCopy=true" />
     <ProjectReference Include="..\..\EquipmentManager\EquipmentManager.csproj" AdditionalProperties="SkipBannerlordModuleCopy=true" />
     <ProjectReference Include="..\..\FiefManager\FiefManager.csproj" AdditionalProperties="SkipBannerlordModuleCopy=true" />
+    <ProjectReference Include="..\..\SmithingOptimizer\SmithingOptimizer.csproj" AdditionalProperties="SkipBannerlordModuleCopy=true" />
   </ItemGroup>
 </Project>
