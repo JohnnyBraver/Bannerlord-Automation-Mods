@@ -72,6 +72,77 @@ namespace PartyManager.Tests
             Assert.Equal(12, request.Quantity);
             Assert.Equal(RequestProfile.Routine, request.Profile);
             Assert.Equal(5, request.Priority);
+            Assert.Equal(new[] { "horse" }, request.ItemCategoryIds.ToArray());
+            Assert.Equal(RequestPriceReference.CategoryAverageValue, request.PriceReference);
+        }
+
+        [Fact]
+        public void BuildRequests_DoesNotBuyUpgradeMountsByDefault()
+        {
+            var snapshot = new PartyNeedsSnapshot(
+                partySize: 30,
+                infantry: 10,
+                ridingMounts: 5,
+                upgradeMounts: 0,
+                currentMountedTroops: 8,
+                troopsWithMountedUpgrade: 18,
+                cavalryFinalTierUpgradeTroops: 8,
+                troopsWithFinalMountedUpgrade: 18,
+                knownFoodItemIds: Enumerable.Empty<string>());
+            var options = DefaultOptions();
+            options.AutoBuyFood = false;
+
+            var requests = PartyNeedsPlanner.BuildRequests(snapshot, options).ToList();
+
+            Assert.Single(requests);
+            Assert.Equal(new[] { "horse" }, requests[0].ItemCategoryIds.ToArray());
+        }
+
+        [Fact]
+        public void BuildRequests_AddsHighTierMountRequestWhenUpgradePolicyAllowsIt()
+        {
+            var snapshot = new PartyNeedsSnapshot(
+                partySize: 30,
+                infantry: 10,
+                ridingMounts: 10,
+                upgradeMounts: 2,
+                currentMountedTroops: 8,
+                troopsWithMountedUpgrade: 18,
+                cavalryFinalTierUpgradeTroops: 8,
+                troopsWithFinalMountedUpgrade: 18,
+                knownFoodItemIds: Enumerable.Empty<string>());
+            var options = DefaultOptions();
+            options.AutoBuyFood = false;
+            options.UpgradeMountPurchaseMode = UpgradeMountPurchaseMode.CurrentMountedTroops;
+
+            var request = PartyNeedsPlanner.BuildRequests(snapshot, options).Single();
+
+            Assert.Equal("Horse", request.TargetId);
+            Assert.Equal(8, request.Quantity);
+            Assert.Equal(new[] { "war_horse" }, request.ItemCategoryIds.ToArray());
+            Assert.Equal(RequestPriceReference.CategoryAverageValue, request.PriceReference);
+        }
+
+        [Theory]
+        [InlineData(UpgradeMountPurchaseMode.Never, 0)]
+        [InlineData(UpgradeMountPurchaseMode.CurrentMountedTroops, 8)]
+        [InlineData(UpgradeMountPurchaseMode.AnyTroopWithMountedUpgrade, 18)]
+        [InlineData(UpgradeMountPurchaseMode.CavalryToFinalTier, 6)]
+        [InlineData(UpgradeMountPurchaseMode.AnyTroopToFinalMountedTier, 20)]
+        public void CalculateUpgradeMountTarget_UsesSelectedBucket(UpgradeMountPurchaseMode mode, int expected)
+        {
+            var snapshot = new PartyNeedsSnapshot(
+                partySize: 30,
+                infantry: 10,
+                ridingMounts: 10,
+                upgradeMounts: 0,
+                currentMountedTroops: 8,
+                troopsWithMountedUpgrade: 18,
+                cavalryFinalTierUpgradeTroops: 6,
+                troopsWithFinalMountedUpgrade: 20,
+                knownFoodItemIds: Enumerable.Empty<string>());
+
+            Assert.Equal(expected, PartyNeedsPlanner.CalculateUpgradeMountTarget(snapshot, mode));
         }
 
         private static PartyNeedsOptions DefaultOptions()
@@ -86,7 +157,9 @@ namespace PartyManager.Tests
                 CriticalFoodProfile = RequestProfile.Critical,
                 FoodVarietyProfile = RequestProfile.Essential,
                 FoodBufferProfile = RequestProfile.Routine,
-                RidingMountProfile = RequestProfile.Routine
+                RidingMountProfile = RequestProfile.Routine,
+                UpgradeMountPurchaseMode = UpgradeMountPurchaseMode.Never,
+                MountPriceReferenceMode = MountPriceReferenceMode.MountCategoryAverage
             };
         }
     }

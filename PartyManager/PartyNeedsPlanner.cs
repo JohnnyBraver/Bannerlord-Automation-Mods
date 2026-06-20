@@ -16,6 +16,8 @@ namespace PartyManager
         public RequestProfile FoodVarietyProfile { get; set; }
         public RequestProfile FoodBufferProfile { get; set; }
         public RequestProfile RidingMountProfile { get; set; }
+        public UpgradeMountPurchaseMode UpgradeMountPurchaseMode { get; set; }
+        public MountPriceReferenceMode MountPriceReferenceMode { get; set; }
 
         public static PartyNeedsOptions FromSettings(Settings settings)
         {
@@ -29,7 +31,9 @@ namespace PartyManager
                 CriticalFoodProfile = settings.CriticalFoodRequestProfile,
                 FoodVarietyProfile = settings.FoodVarietyRequestProfile,
                 FoodBufferProfile = settings.FoodBufferRequestProfile,
-                RidingMountProfile = settings.RidingMountRequestProfile
+                RidingMountProfile = settings.RidingMountRequestProfile,
+                UpgradeMountPurchaseMode = settings.UpgradeMountPurchaseSetting,
+                MountPriceReferenceMode = settings.MountPriceReferenceSetting
             };
         }
     }
@@ -39,13 +43,37 @@ namespace PartyManager
         public int PartySize { get; }
         public int Infantry { get; }
         public int RidingMounts { get; }
+        public int UpgradeMounts { get; }
+        public int CurrentMountedTroops { get; }
+        public int TroopsWithMountedUpgrade { get; }
+        public int CavalryFinalTierUpgradeTroops { get; }
+        public int TroopsWithFinalMountedUpgrade { get; }
         public IReadOnlyList<string> KnownFoodItemIds { get; }
 
         public PartyNeedsSnapshot(int partySize, int infantry, int ridingMounts, IEnumerable<string> knownFoodItemIds)
+            : this(partySize, infantry, ridingMounts, 0, 0, 0, 0, 0, knownFoodItemIds)
+        {
+        }
+
+        public PartyNeedsSnapshot(
+            int partySize,
+            int infantry,
+            int ridingMounts,
+            int upgradeMounts,
+            int currentMountedTroops,
+            int troopsWithMountedUpgrade,
+            int cavalryFinalTierUpgradeTroops,
+            int troopsWithFinalMountedUpgrade,
+            IEnumerable<string> knownFoodItemIds)
         {
             PartySize = partySize;
             Infantry = infantry;
             RidingMounts = ridingMounts;
+            UpgradeMounts = upgradeMounts;
+            CurrentMountedTroops = currentMountedTroops;
+            TroopsWithMountedUpgrade = troopsWithMountedUpgrade;
+            CavalryFinalTierUpgradeTroops = cavalryFinalTierUpgradeTroops;
+            TroopsWithFinalMountedUpgrade = troopsWithFinalMountedUpgrade;
             KnownFoodItemIds = (knownFoodItemIds ?? Enumerable.Empty<string>())
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Distinct(StringComparer.Ordinal)
@@ -111,11 +139,52 @@ namespace PartyManager
                         "Horse",
                         snapshot.Infantry,
                         options.RidingMountProfile,
-                        CalculateMountPriority(snapshot.Infantry, snapshot.RidingMounts)));
+                        CalculateMountPriority(snapshot.Infantry, snapshot.RidingMounts),
+                        itemCategoryIds: new[] { "horse" },
+                        priceReference: GetMountPriceReference(options.MountPriceReferenceMode)));
+                }
+
+                int upgradeTarget = CalculateUpgradeMountTarget(snapshot, options.UpgradeMountPurchaseMode);
+                int missingUpgradeMounts = upgradeTarget - snapshot.UpgradeMounts;
+                if (missingUpgradeMounts > 0)
+                {
+                    requests.Add(AutomationRequest.ForInventoryTarget(
+                        "PartyManager",
+                        RequestType.ItemCategory,
+                        "Horse",
+                        upgradeTarget,
+                        options.RidingMountProfile,
+                        CalculateMountPriority(upgradeTarget, snapshot.UpgradeMounts),
+                        itemCategoryIds: new[] { "war_horse" },
+                        priceReference: GetMountPriceReference(options.MountPriceReferenceMode)));
                 }
             }
 
             return requests;
+        }
+
+        public static int CalculateUpgradeMountTarget(PartyNeedsSnapshot snapshot, UpgradeMountPurchaseMode mode)
+        {
+            if (snapshot == null)
+            {
+                return 0;
+            }
+
+            return mode switch
+            {
+                UpgradeMountPurchaseMode.CurrentMountedTroops => snapshot.CurrentMountedTroops,
+                UpgradeMountPurchaseMode.AnyTroopWithMountedUpgrade => snapshot.TroopsWithMountedUpgrade,
+                UpgradeMountPurchaseMode.CavalryToFinalTier => snapshot.CavalryFinalTierUpgradeTroops,
+                UpgradeMountPurchaseMode.AnyTroopToFinalMountedTier => snapshot.TroopsWithFinalMountedUpgrade,
+                _ => 0
+            };
+        }
+
+        private static RequestPriceReference GetMountPriceReference(MountPriceReferenceMode mode)
+        {
+            return mode == MountPriceReferenceMode.MountCategoryAverage
+                ? RequestPriceReference.CategoryAverageValue
+                : RequestPriceReference.ExactItemValue;
         }
 
         public static int CalculateFoodUnitsForDays(int partySize, int days)

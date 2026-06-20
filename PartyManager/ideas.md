@@ -27,14 +27,14 @@ This mod will handle party configuration, troop recruitment, mounts management, 
 ## Integration with SettlementAutomationCore
 
 ```csharp
-public class PartyManagerProvider : IRecruitOrderProvider, ITradeOrderProvider
+public class PartyManagerProvider : ISettlementRecruitmentProvider, IPrisonerDispositionProvider, IAutomationRequestProvider
 {
     public string ProviderName => "PartyManager";
 
-    // Returns recruit orders for Phase 2
-    public List<RecruitOrder> GetRecruitOrders(MobileParty party, Settlement settlement);
+    // Returns ordered intent for available notable volunteers and tavern mercenaries.
+    public IReadOnlyList<SettlementRecruitmentOrder> GetRecruitmentOrders(SettlementRecruitmentContext context);
 
-    // Returns buy/sell orders (for food, mounts, and herding control) for Phase 3
-    public List<TradeOrder> GetMainOrders(MobileParty party, Settlement settlement, InventoryLogic currentLogic);
+    // Returns ordered intent for prisoner ransom or dungeon donation.
+    public IReadOnlyList<PrisonerDispositionOrder> GetPrisonerDispositionOrders(PrisonerDispositionContext context);
 }
 ```

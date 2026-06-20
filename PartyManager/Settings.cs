@@ -36,6 +36,37 @@ namespace PartyManager
         public override string ToString() => _name;
     }
 
+    public enum UpgradeMountPurchaseMode
+    {
+        Never,
+        CurrentMountedTroops,
+        AnyTroopWithMountedUpgrade,
+        CavalryToFinalTier,
+        AnyTroopToFinalMountedTier
+    }
+
+    public class UpgradeMountPurchaseOption
+    {
+        private readonly string _name;
+        public UpgradeMountPurchaseMode Value { get; }
+        public UpgradeMountPurchaseOption(string name, UpgradeMountPurchaseMode value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
+    public enum MountPriceReferenceMode
+    {
+        ExactHorseValue,
+        MountCategoryAverage
+    }
+
+    public class MountPriceReferenceOption
+    {
+        private readonly string _name;
+        public MountPriceReferenceMode Value { get; }
+        public MountPriceReferenceOption(string name, MountPriceReferenceMode value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
     public enum PostBattleSlaughterMode
     {
         None,
@@ -65,6 +96,23 @@ namespace PartyManager
         private readonly string _name;
         public MercenaryRecruitPolicy Value { get; }
         public MercenaryRecruitPolicyOption(string name, MercenaryRecruitPolicy value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
+    public enum RecruitHireOrder
+    {
+        BestCandidatesFirst,
+        BestValue,
+        CheapestFirst,
+        VolunteersFirst,
+        MercenariesFirst
+    }
+
+    public class RecruitHireOrderOption
+    {
+        private readonly string _name;
+        public RecruitHireOrder Value { get; }
+        public RecruitHireOrderOption(string name, RecruitHireOrder value) { _name = name; Value = value; }
         public override string ToString() => _name;
     }
 
@@ -133,7 +181,7 @@ namespace PartyManager
 
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "PartyManager_v3";
+        public override string Id => "PartyManager_v0_4";
         public override string DisplayName => "Party Manager";
         public override string FolderName => "PartyManager";
         public override string FormatType => "json";
@@ -151,6 +199,21 @@ namespace PartyManager
             new SellRidingMountsOption("All Riding Mounts", SellRidingMountsMode.All)
         };
 
+        private static readonly IReadOnlyList<UpgradeMountPurchaseOption> UpgradeMountPurchaseOptions = new List<UpgradeMountPurchaseOption>
+        {
+            new UpgradeMountPurchaseOption("Never Buy Upgrade Mounts", UpgradeMountPurchaseMode.Never),
+            new UpgradeMountPurchaseOption("Buy for Current Mounted Troops", UpgradeMountPurchaseMode.CurrentMountedTroops),
+            new UpgradeMountPurchaseOption("Buy for Troops With Mounted Upgrades", UpgradeMountPurchaseMode.AnyTroopWithMountedUpgrade),
+            new UpgradeMountPurchaseOption("Buy for Cavalry to Final Tier", UpgradeMountPurchaseMode.CavalryToFinalTier),
+            new UpgradeMountPurchaseOption("Buy for Any Potential Final Mounted Unit", UpgradeMountPurchaseMode.AnyTroopToFinalMountedTier)
+        };
+
+        private static readonly IReadOnlyList<MountPriceReferenceOption> MountPriceReferenceOptions = new List<MountPriceReferenceOption>
+        {
+            new MountPriceReferenceOption("Mount Category Average", MountPriceReferenceMode.MountCategoryAverage),
+            new MountPriceReferenceOption("Exact Horse Value", MountPriceReferenceMode.ExactHorseValue)
+        };
+
         private static readonly IReadOnlyList<PostBattleSlaughterOption> PostBattleSlaughterOptions = new List<PostBattleSlaughterOption>
         {
             new PostBattleSlaughterOption("None (Disabled)", PostBattleSlaughterMode.None),
@@ -165,6 +228,15 @@ namespace PartyManager
             new MercenaryRecruitPolicyOption("Match Recruitment Filters", MercenaryRecruitPolicy.MatchFilters),
             new MercenaryRecruitPolicyOption("Any Mercenary (Respect Tier Limits)", MercenaryRecruitPolicy.Any),
             new MercenaryRecruitPolicyOption("Any Mercenary (Ignore Tier Limits)", MercenaryRecruitPolicy.AnyIgnoreTier)
+        };
+
+        private static readonly IReadOnlyList<RecruitHireOrderOption> RecruitHireOrderOptions = new List<RecruitHireOrderOption>
+        {
+            new RecruitHireOrderOption("Best Candidates First", RecruitHireOrder.BestCandidatesFirst),
+            new RecruitHireOrderOption("Best Value", RecruitHireOrder.BestValue),
+            new RecruitHireOrderOption("Cheapest First", RecruitHireOrder.CheapestFirst),
+            new RecruitHireOrderOption("Volunteers First", RecruitHireOrder.VolunteersFirst),
+            new RecruitHireOrderOption("Mercenaries First", RecruitHireOrder.MercenariesFirst)
         };
 
         private static readonly IReadOnlyList<NobleRecruitPolicyOption> NobleRecruitPolicyOptions = new List<NobleRecruitPolicyOption>
@@ -198,6 +270,10 @@ namespace PartyManager
             new BanditPrisonerKeepPolicyOption("Keep Selected", BanditPrisonerKeepPolicy.KeepSelected)
         };
 
+        [SettingPropertyBool("Enable Party Manager", RequireRestart = false, HintText = "Master switch. When disabled, Party Manager will not recruit, handle prisoners, request supplies, clean up herding, reserve animals, run post-battle actions, or show alerts.", Order = 0)]
+        [SettingPropertyGroup("General", GroupOrder = 6)]
+        public bool ModEnabled { get; set; } = true;
+
         // --- Recruitment settings ---
         [SettingPropertyBool("Auto-Recruit Volunteers", RequireRestart = false, HintText = "Enable auto-recruitment from town/village notables.", Order = 1)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
@@ -220,15 +296,19 @@ namespace PartyManager
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public Dropdown<MercenaryRecruitPolicyOption> MercenaryRecruitDropdown { get; set; } = new Dropdown<MercenaryRecruitPolicyOption>(MercenaryRecruitPolicyOptions, 0); // Default: Do Not Recruit Mercenaries
 
-        [SettingPropertyInteger("Min Tier to Recruit", 1, 6, RequireRestart = false, HintText = "Minimum troop tier to buy.", Order = 6)]
+        [SettingPropertyDropdown("Recruit Hire Order", RequireRestart = false, HintText = "Choose how allowed tavern mercenaries and notable volunteers are ordered before Core applies shared gold and party-space limits.", Order = 6)]
+        [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
+        public Dropdown<RecruitHireOrderOption> RecruitHireOrderDropdown { get; set; } = new Dropdown<RecruitHireOrderOption>(RecruitHireOrderOptions, 0);
+
+        [SettingPropertyInteger("Min Tier to Recruit", 1, 6, RequireRestart = false, HintText = "Minimum troop tier to buy.", Order = 7)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public int MinRecruitTier { get; set; } = 1;
 
-        [SettingPropertyInteger("Max Tier to Recruit", 1, 6, RequireRestart = false, HintText = "Maximum troop tier to buy.", Order = 7)]
+        [SettingPropertyInteger("Max Tier to Recruit", 1, 6, RequireRestart = false, HintText = "Maximum troop tier to buy.", Order = 8)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public int MaxRecruitTier { get; set; } = 6;
 
-        [SettingPropertyDropdown("Evaluation Target Tier", RequireRestart = false, HintText = "Evaluate filters against the troop's current purchase tier or their final upgrade tier.", Order = 8)]
+        [SettingPropertyDropdown("Evaluation Target Tier", RequireRestart = false, HintText = "Evaluate filters against the troop's current purchase tier or their final upgrade tier.", Order = 9)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 5)]
         public Dropdown<EvalTimeOption> EvalTimeDropdown { get; set; } = new Dropdown<EvalTimeOption>(EvalTimeOptions, 0);
 
@@ -280,6 +360,18 @@ namespace PartyManager
         [SettingPropertyGroup("Party Needs", GroupOrder = 6)]
         public Dropdown<RequestProfileOption> RidingMountSpendModeDropdown { get; set; } =
             new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Routine));
+
+        [SettingPropertyDropdown("Upgrade Mount Buying", RequireRestart = false,
+            HintText = "Control whether the party buys higher-tier mounts for troop upgrades. Ordinary riding mounts for infantry are still handled by Auto-Buy Riding Mounts.", Order = 10)]
+        [SettingPropertyGroup("Party Needs", GroupOrder = 6)]
+        public Dropdown<UpgradeMountPurchaseOption> UpgradeMountBuyingDropdown { get; set; } =
+            new Dropdown<UpgradeMountPurchaseOption>(UpgradeMountPurchaseOptions, 0);
+
+        [SettingPropertyDropdown("Mount Price Baseline", RequireRestart = false,
+            HintText = "Choose whether mount price limits compare against the exact horse value or the average value of matching mount categories.", Order = 11)]
+        [SettingPropertyGroup("Party Needs", GroupOrder = 6)]
+        public Dropdown<MountPriceReferenceOption> MountPriceReferenceDropdown { get; set; } =
+            new Dropdown<MountPriceReferenceOption>(MountPriceReferenceOptions, 0);
 
         // --- Recruitment Cultures ---
         [SettingPropertyBool("Recruit Empire", RequireRestart = false, HintText = "Recruit Empire culture troops.", Order = 1)]
@@ -346,20 +438,35 @@ namespace PartyManager
         // --- Mount & Herding settings ---
 
         [SettingPropertyBool("Herding Penalty Protection", RequireRestart = false, HintText = "Automatically sell or slaughter excess animals to avoid herding speed penalty.", Order = 7)]
-        [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
+        [SettingPropertyGroup("Mounts & Herding", GroupOrder = 2)]
         public bool PreventHerdingPenalty { get; set; } = true;
 
         [SettingPropertyBool("Slaughter Animals for Herding", RequireRestart = false, HintText = "Slaughter livestock and pack animals instead of selling them when herding limits are exceeded in settlements.", Order = 8)]
-        [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
+        [SettingPropertyGroup("Mounts & Herding", GroupOrder = 2)]
         public bool SlaughterAnimalsForHerding { get; set; } = true;
 
         [SettingPropertyDropdown("Sell/Slaughter Riding Mounts", RequireRestart = false, HintText = "Control when the mod can sell or slaughter riding mounts.", Order = 9)]
-        [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
+        [SettingPropertyGroup("Mounts & Herding", GroupOrder = 2)]
         public Dropdown<SellRidingMountsOption> SellRidingMountsDropdown { get; set; } = new Dropdown<SellRidingMountsOption>(SellRidingMountsOptions, 1);
 
-        [SettingPropertyDropdown("Post-Battle Auto-Slaughter", RequireRestart = false, HintText = "Automatically slaughter animals after a battle to instantly clear herding penalties.", Order = 10)]
-        [SettingPropertyGroup("Mounts & Logistics", GroupOrder = 2)]
+        [SettingPropertyBool("Preserve Riding Mounts for Foot Reserve", RequireRestart = false,
+            HintText = "Protect riding mounts up to current foot troops plus empty party slots before selling or slaughtering mounts.", Order = 10)]
+        [SettingPropertyGroup("Mounts & Herding", GroupOrder = 2)]
+        public bool PreserveRidingMountsForFootReserve { get; set; } = true;
+
+        [SettingPropertyDropdown("Post-Battle Auto-Slaughter", RequireRestart = false, HintText = "Automatically slaughter animals after a battle to instantly clear herding penalties.", Order = 11)]
+        [SettingPropertyGroup("Mounts & Herding", GroupOrder = 2)]
         public Dropdown<PostBattleSlaughterOption> PostBattleSlaughterDropdown { get; set; } = new Dropdown<PostBattleSlaughterOption>(PostBattleSlaughterOptions, 2);
+
+        [SettingPropertyInteger("Herding Warning Threshold (%)", 0, 80, RequireRestart = false,
+            HintText = "Warn after post-battle cleanup if herding still slows the party by at least this much. Default: 5%.", Order = 12)]
+        [SettingPropertyGroup("Mounts & Herding", GroupOrder = 2)]
+        public int HerdingWarningThresholdPercent { get; set; } = 5;
+
+        [SettingPropertyInteger("Cargo Warning Threshold (%)", 0, 100, RequireRestart = false,
+            HintText = "Warn after post-battle cleanup if overburdened cargo slows the party by at least this much. Default: 5%.", Order = 13)]
+        [SettingPropertyGroup("Mounts & Herding", GroupOrder = 2)]
+        public int CargoWarningThresholdPercent { get; set; } = 5;
 
         // --- Garrison Donation Settings ---
         [SettingPropertyBool("Enable Garrison Donation", RequireRestart = false, HintText = "Over-recruit troops and donate them to garrison to farm influence.", Order = 1)]
@@ -469,12 +576,15 @@ namespace PartyManager
         public SellRidingMountsMode SellRidingMountsSetting => SellRidingMountsDropdown.SelectedValue.Value;
         public PostBattleSlaughterMode PostBattleSlaughterSetting => PostBattleSlaughterDropdown.SelectedValue.Value;
         public MercenaryRecruitPolicy MercenaryRecruitSetting => MercenaryRecruitDropdown.SelectedValue.Value;
+        public RecruitHireOrder RecruitHireOrderSetting => RecruitHireOrderDropdown.SelectedValue.Value;
         public NobleRecruitPolicy NobleRecruitSetting => NobleRecruitDropdown.SelectedValue.Value;
         public RegularRecruitPolicy RegularRecruitSetting => RegularRecruitDropdown.SelectedValue.Value;
         public RequestProfile CriticalFoodRequestProfile => CriticalFoodSpendModeDropdown.SelectedValue.Value;
         public RequestProfile FoodVarietyRequestProfile => FoodVarietySpendModeDropdown.SelectedValue.Value;
         public RequestProfile FoodBufferRequestProfile => FoodBufferSpendModeDropdown.SelectedValue.Value;
         public RequestProfile RidingMountRequestProfile => RidingMountSpendModeDropdown.SelectedValue.Value;
+        public UpgradeMountPurchaseMode UpgradeMountPurchaseSetting => UpgradeMountBuyingDropdown.SelectedValue.Value;
+        public MountPriceReferenceMode MountPriceReferenceSetting => MountPriceReferenceDropdown.SelectedValue.Value;
         public PrisonerKeepPolicy NoblePrisonerKeepPolicySetting => NoblePrisonerKeepPolicyDropdown.SelectedValue.Value;
         public PrisonerKeepPolicy RegularPrisonerKeepPolicySetting => RegularPrisonerKeepPolicyDropdown.SelectedValue.Value;
         public BanditPrisonerKeepPolicy BanditPrisonerKeepPolicySetting => BanditPrisonerKeepPolicyDropdown.SelectedValue.Value;

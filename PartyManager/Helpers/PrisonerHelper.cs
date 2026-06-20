@@ -14,86 +14,84 @@ namespace PartyManager.Helpers
 {
     public static class PrisonerHelper
     {
-        public static List<RansomOrder> GetRansomOrders(MobileParty party, Settlement settlement, Settings settings)
+        public static IReadOnlyList<PrisonerDispositionOrder> GetPrisonerDispositionOrders(PrisonerDispositionContext context, Settings settings)
         {
-            var orders = new List<RansomOrder>();
-            if (settings == null || !settings.AutoRansomPrisoners) return orders;
+            var orders = new List<PrisonerDispositionOrder>();
+            if (settings == null || context == null) return orders;
 
-            var prisonRoster = party.PrisonRoster;
-            for (int i = 0; i < prisonRoster.Count; i++)
+            var remaining = context.Prisoners.ToDictionary(stack => stack.Prisoner, stack => stack.Amount);
+
+            if (context.CanDonateToDungeon && settings.AutoDonatePrisoners)
             {
-                var el = prisonRoster.GetElementCopyAtIndex(i);
-                var prisoner = el.Character;
-                if (prisoner == null || el.Number <= 0) continue;
-
-                // 1. Keep Heroes check
-                if (prisoner.IsHero && settings.KeepHeroPrisoners) continue;
-
-                // 2. Keep Filter check: If we keep it, we do NOT ransom it.
-                if (PrisonerFilter.MatchKeepFilter(prisoner, settings)) continue;
-
-                orders.Add(new RansomOrder(prisoner, el.Number));
-            }
-
-            if (orders.Count > 0)
-            {
-                var summary = string.Join(", ", orders.Select(o => $"{o.Amount}x {o.Prisoner.Name}"));
-                SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", $"Prisoner Ransom Orders compiled for {settlement.Name}: {summary}");
-            }
-
-            return orders;
-        }
-
-        public static List<DungeonOrder> GetDungeonOrders(MobileParty party, Settlement settlement, Settings settings)
-        {
-            var orders = new List<DungeonOrder>();
-            if (settings == null || !settings.AutoDonatePrisoners) return orders;
-
-            var prisonRoster = party.PrisonRoster;
-            var candidates = new List<PrisonerInfo>();
-
-            for (int i = 0; i < prisonRoster.Count; i++)
-            {
-                var el = prisonRoster.GetElementCopyAtIndex(i);
-                var prisoner = el.Character;
-                if (prisoner == null || el.Number <= 0 || prisoner.IsHero) continue; // Never auto-donate heroes
-
-                // Match keep filter first: if we want to KEEP them, do NOT donate them
-                if (PrisonerFilter.MatchKeepFilter(prisoner, settings)) continue;
-
-                if (prisoner.Tier >= settings.MinDonateTier)
+                var donationCandidates = new List<PrisonerInfo>();
+                foreach (var stack in context.Prisoners)
                 {
-                    candidates.Add(new PrisonerInfo(prisoner, el.Number));
+                    var prisoner = stack.Prisoner;
+                    if (prisoner == null || stack.Amount <= 0 || prisoner.IsHero) continue;
+
+                    // Match keep filter first: if we want to KEEP them, do NOT donate them
+                    if (PrisonerFilter.MatchKeepFilter(prisoner, settings)) continue;
+
+                    if (prisoner.Tier >= settings.MinDonateTier)
+                    {
+                        donationCandidates.Add(new PrisonerInfo(prisoner, stack.Amount));
+                    }
+                }
+
+                if (settings.PrioritizeHighTierDonation)
+                {
+                    donationCandidates = donationCandidates.OrderByDescending(c => c.Prisoner.Tier).ToList();
+                }
+                else
+                {
+                    donationCandidates = donationCandidates.OrderBy(c => c.Prisoner.Tier).ToList();
+                }
+
+                foreach (var candidate in donationCandidates)
+                {
+                    remaining.TryGetValue(candidate.Prisoner, out int available);
+                    int amount = Math.Min(candidate.Amount, available);
+                    if (amount <= 0) continue;
+
+                    orders.Add(new PrisonerDispositionOrder(candidate.Prisoner, amount, PrisonerDispositionAction.DonateToDungeon));
+                    remaining[candidate.Prisoner] = available - amount;
                 }
             }
 
-            // Sort candidates: high-tier first or standard
-            if (settings.PrioritizeHighTierDonation)
+            if (context.CanRansom && settings.AutoRansomPrisoners)
             {
-                candidates = candidates.OrderByDescending(c => c.Prisoner.Tier).ToList();
-            }
-            else
-            {
-                candidates = candidates.OrderBy(c => c.Prisoner.Tier).ToList();
-            }
+                foreach (var stack in context.Prisoners)
+                {
+                    var prisoner = stack.Prisoner;
+                    if (prisoner == null || stack.Amount <= 0) continue;
 
-            foreach (var candidate in candidates)
-            {
-                orders.Add(new DungeonOrder(candidate.Prisoner, candidate.Amount));
+                    // 1. Keep Heroes check
+                    if (prisoner.IsHero && settings.KeepHeroPrisoners) continue;
+
+                    // 2. Keep Filter check: If we keep it, we do NOT ransom it.
+                    if (PrisonerFilter.MatchKeepFilter(prisoner, settings)) continue;
+
+                    remaining.TryGetValue(prisoner, out int available);
+                    if (available <= 0) continue;
+
+                    orders.Add(new PrisonerDispositionOrder(prisoner, available, PrisonerDispositionAction.Ransom));
+                    remaining[prisoner] = 0;
+                }
             }
 
             if (orders.Count > 0)
             {
-                var summary = string.Join(", ", orders.Select(o => $"{o.Amount}x {o.Prisoner.Name}"));
-                SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", $"Prisoner Dungeon Donation Orders compiled for {settlement.Name}: {summary}");
+                var summary = string.Join(", ", orders.Select(o => $"{o.Action}: {o.Amount}x {o.Prisoner.Name}"));
+                SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", $"Prisoner disposition orders compiled for {context.Settlement.Name}: {summary}");
             }
 
             return orders;
         }
 
-        public static void ProcessPostBattleDiscard(MobileParty party, Settings settings)
+        public static PostBattleAutomationResult ProcessPostBattleDiscard(MobileParty party, Settings settings)
         {
-            if (settings == null || !settings.AutoDiscardPrisonersPostBattle) return;
+            var result = new PostBattleAutomationResult();
+            if (settings == null || !settings.AutoDiscardPrisonersPostBattle) return result;
 
             int currentCount = party.PrisonRoster.TotalManCount;
             int limit = party.Party.PrisonerSizeLimit;
@@ -191,11 +189,11 @@ namespace PartyManager.Helpers
 
                 if (discardedTotal > 0)
                 {
-                    string msg = $"Auto-discarded {discardedTotal} low-value prisoners post-battle due to party capacity limits.";
-                    InformationManager.DisplayMessage(new InformationMessage($"[PartyManager] {msg}"));
-                    SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", msg);
+                    result.AddActivity($"discarded {discardedTotal} low-value prisoners due to party capacity limits");
                 }
             }
+
+            return result;
         }
 
         public static void ProcessPostAutomationAlerts(Settlement settlement, Settings settings)

@@ -12,19 +12,9 @@ using PartyManager.Helpers;
 
 namespace PartyManager
 {
-    public class PartyManagerProvider : IPreSellProvider, IRecruitOrderProvider, IGarrisonOrderProvider, IRansomOrderProvider, IDungeonOrderProvider, IAutomationRequestProvider
+    public class PartyManagerProvider : ISettlementRecruitmentProvider, IGarrisonOrderProvider, IPrisonerDispositionProvider, IAutomationRequestProvider, ISettlementCleanupProvider, IPostBattleAutomationProvider, IAutomationReservationProvider
     {
         public string ProviderName => "PartyManager";
-
-        // ----------------------------------------------------
-        // IPreSellProvider (Pack Animal Pre-Sell for XP farm split transactions)
-        // ----------------------------------------------------
-        public List<TradeOrder> GetPreSellOrders(MobileParty party, Settlement settlement)
-        {
-            var settings = Settings.Instance;
-            if (settings == null) return new List<TradeOrder>();
-            return TradeHelper.GetPreSellOrders(party, settings);
-        }
 
         // ----------------------------------------------------
         // IAutomationRequestProvider
@@ -32,62 +22,362 @@ namespace PartyManager
         public void SubmitAutomationRequests(AutomationRequestContext context)
         {
             var settings = Settings.Instance;
-            if (settings != null)
+            if (settings != null && settings.ModEnabled)
             {
                 TradeHelper.SubmitAutomationRequests(context.Party, settings);
+            }
+        }
+
+        public TradeProposal AnalyzeSettlementCleanup(TradeContext context)
+        {
+            var settings = Settings.Instance;
+            if (settings == null || !settings.ModEnabled)
+            {
+                return new TradeProposal(new List<TradeAction>());
+            }
+
+            return TradeHelper.AnalyzeHerdingCleanup(context, settings);
+        }
+
+        public PostBattleAutomationResult ProcessPostBattle(PostBattleAutomationContext context)
+        {
+            var result = new PostBattleAutomationResult();
+            var settings = Settings.Instance;
+            if (settings == null || !settings.ModEnabled || context == null || context.Party == null)
+            {
+                return result;
+            }
+
+            AddResultActivities(result, ProcessPostBattleSlaughter(context, settings));
+            AddResultActivities(result, PrisonerHelper.ProcessPostBattleDiscard(context.Party, settings));
+            AddPostBattleSpeedWarnings(result, context.Party, settings);
+            return result;
+        }
+
+        public IReadOnlyList<ItemReservation> GetReservations(AutomationReservationContext context)
+        {
+            var settings = Settings.Instance;
+            if (settings == null || !settings.ModEnabled || context == null || context.Party == null || !settings.PreserveRidingMountsForFootReserve)
+            {
+                return new List<ItemReservation>();
+            }
+
+            AnimalCalculator.CalculatePartyAnimals(context.Party, out int infantry, out _, out _, out _, out _,
+                out _, out _, out _);
+            int freePartySlots = Math.Max(0, context.Party.Party.PartySizeLimit - context.Party.MemberRoster.TotalManCount);
+            int reserve = PartyLogisticsPlanner.CalculateRidingMountReserve(infantry, freePartySlots);
+            if (reserve <= 0)
+            {
+                return new List<ItemReservation>();
+            }
+
+            return new List<ItemReservation>
+            {
+                new ItemReservation(ProviderName, "Horse", true, reserve)
+            };
+        }
+
+        private static void AddResultActivities(PostBattleAutomationResult target, PostBattleAutomationResult source)
+        {
+            if (target == null || source == null)
+            {
+                return;
+            }
+
+            foreach (var activity in source.Activities)
+            {
+                target.AddActivity(activity.Message);
+            }
+        }
+
+        private static PostBattleAutomationResult ProcessPostBattleSlaughter(PostBattleAutomationContext context, Settings settings)
+        {
+            var result = new PostBattleAutomationResult();
+            var party = context.Party;
+            if (settings.PostBattleSlaughterSetting == PostBattleSlaughterMode.None)
+            {
+                return result;
+            }
+
+            int maxAllowed = HerdingCalculator.GetMaxAnimalsAllowed(party);
+            int currentAnimals = HerdingCalculator.GetCurrentAnimalsCount(party);
+            if (currentAnimals <= maxAllowed)
+            {
+                return result;
+            }
+
+            int excess = currentAnimals - maxAllowed;
+            var slaughtered = SlaughterAnimalsField(
+                party,
+                excess,
+                settings.PostBattleSlaughterSetting,
+                settings.PreserveRidingMountsForFootReserve,
+                context.ItemReservations);
+            foreach (var line in slaughtered)
+            {
+                result.AddActivity(line);
+            }
+
+            return result;
+        }
+
+        private static IReadOnlyList<string> SlaughterAnimalsField(
+            MobileParty party,
+            int excess,
+            PostBattleSlaughterMode mode,
+            bool preserveRidingMountReserve,
+            IReadOnlyList<ItemReservation> itemReservations)
+        {
+            var itemRoster = party.ItemRoster;
+            var candidates = new List<AnimalSlaughterCandidate>();
+            var lockKeys = InventoryLockHelper.GetCurrentLockKeys();
+            var reservationStates = BuildReservationStates(itemReservations);
+            AnimalCalculator.CalculatePartyAnimals(party, out int infantry, out _, out int riding, out _, out _,
+                out _, out _, out _);
+            int freePartySlots = Math.Max(0, party.Party.PartySizeLimit - party.MemberRoster.TotalManCount);
+            int processableRiding = PartyLogisticsPlanner.CalculateProcessableRidingMounts(
+                riding,
+                infantry,
+                freePartySlots,
+                SellRidingMountsMode.All,
+                preserveRidingMountReserve);
+
+            for (int i = 0; i < itemRoster.Count; i++)
+            {
+                var el = itemRoster.GetElementCopyAtIndex(i);
+                var item = el.EquipmentElement.Item;
+                if (item == null || el.Amount <= 0) continue;
+                if (InventoryLockHelper.IsLocked(el.EquipmentElement, lockKeys)) continue;
+                int reserved = ConsumeReservedQuantity(item, el.Amount, reservationStates);
+                int available = Math.Max(0, el.Amount - reserved);
+                if (available <= 0) continue;
+
+                bool isLivestock = item.IsAnimal;
+                bool isPack = item.IsMountable && item.HorseComponent != null && item.HorseComponent.IsPackAnimal;
+                bool isRiding = item.IsMountable && item.HorseComponent != null && !item.HorseComponent.IsPackAnimal;
+
+                bool allowed = false;
+                int categoryPriority = 99;
+
+                if (isLivestock && (mode == PostBattleSlaughterMode.Livestock || mode == PostBattleSlaughterMode.LivestockAndPack || mode == PostBattleSlaughterMode.All))
+                {
+                    allowed = true;
+                    categoryPriority = 1;
+                }
+                else if (isPack && (mode == PostBattleSlaughterMode.LivestockAndPack || mode == PostBattleSlaughterMode.All))
+                {
+                    allowed = true;
+                    categoryPriority = 2;
+                }
+                else if (isRiding && mode == PostBattleSlaughterMode.All)
+                {
+                    allowed = processableRiding > 0;
+                    categoryPriority = 3;
+                }
+
+                if (allowed)
+                {
+                    candidates.Add(new AnimalSlaughterCandidate(el.EquipmentElement, available, item.Value, categoryPriority));
+                }
+            }
+
+            var messages = new List<string>();
+            var sortedCandidates = candidates
+                .OrderBy(c => c.Priority)
+                .ThenBy(c => c.Value)
+                .ToList();
+
+            foreach (var cand in sortedCandidates)
+            {
+                if (excess <= 0) break;
+                int toSlaughter = Math.Min(excess, cand.Amount);
+                if (toSlaughter <= 0)
+                {
+                    continue;
+                }
+
+                if (cand.IsRidingMount)
+                {
+                    toSlaughter = Math.Min(toSlaughter, processableRiding);
+                    if (toSlaughter <= 0)
+                    {
+                        continue;
+                    }
+                    processableRiding -= toSlaughter;
+                }
+
+                itemRoster.AddToCounts(cand.Item, -toSlaughter);
+
+                int meatCount = cand.Item.HorseComponent.MeatCount;
+                int hideCount = cand.Item.HorseComponent.HideCount;
+                if (meatCount > 0)
+                {
+                    itemRoster.AddToCounts(DefaultItems.Meat, meatCount * toSlaughter);
+                }
+                if (hideCount > 0)
+                {
+                    itemRoster.AddToCounts(DefaultItems.Hides, hideCount * toSlaughter);
+                }
+
+                excess -= toSlaughter;
+                messages.Add($"field slaughtered {toSlaughter}x {cand.Item.Name} (yielded {meatCount * toSlaughter}x Meat, {hideCount * toSlaughter}x Hides)");
+            }
+
+            return messages;
+        }
+
+        private static List<ReservationState> BuildReservationStates(IReadOnlyList<ItemReservation> itemReservations)
+        {
+            return (itemReservations ?? new List<ItemReservation>())
+                .Where(reservation => reservation != null && reservation.Quantity > 0)
+                .Select(reservation => new ReservationState(reservation, reservation.Quantity))
+                .ToList();
+        }
+
+        private static int ConsumeReservedQuantity(ItemObject item, int stackAmount, List<ReservationState> reservations)
+        {
+            int reserved = 0;
+            foreach (var state in reservations)
+            {
+                int reservableInStack = Math.Max(0, stackAmount - reserved);
+                if (reservableInStack <= 0 || state.Remaining <= 0 || !state.Reservation.MatchesItem(item))
+                {
+                    continue;
+                }
+
+                int applied = Math.Min(state.Remaining, reservableInStack);
+                reserved += applied;
+                state.Remaining -= applied;
+            }
+
+            return reserved;
+        }
+
+        private static void AddPostBattleSpeedWarnings(PostBattleAutomationResult result, MobileParty party, Settings settings)
+        {
+            AnimalCalculator.CalculatePartyAnimals(party, out int infantry, out int cavalry, out int riding, out int pack, out int livestock,
+                out _, out _, out _);
+            int partySize = infantry + cavalry;
+            int herdSize = pack + livestock + Math.Max(0, riding - infantry);
+            int herdingPenalty = PartyLogisticsPlanner.CalculateHerdingPenaltyPercent(partySize, herdSize);
+            if (settings.HerdingWarningThresholdPercent > 0 && herdingPenalty >= settings.HerdingWarningThresholdPercent)
+            {
+                result.AddActivity($"warning: herding still slows the party by about {herdingPenalty}% after cleanup; settings or item locks may be protecting the remaining animals");
+            }
+
+            int cargoPenalty = PartyLogisticsPlanner.CalculateOverburdenPenaltyPercent(
+                party.TotalWeightCarried,
+                party.InventoryCapacity);
+            if (settings.CargoWarningThresholdPercent > 0 && cargoPenalty >= settings.CargoWarningThresholdPercent)
+            {
+                result.AddActivity($"warning: cargo overburden still slows the party by about {cargoPenalty}% after cleanup");
             }
         }
 
 
 
         // ----------------------------------------------------
-        // IRecruitOrderProvider (Recruitment Filter System)
+        // ISettlementRecruitmentProvider (Recruitment Filter System)
         // ----------------------------------------------------
-        public List<RecruitOrder> GetRecruitOrders(MobileParty party, Settlement settlement)
+        public IReadOnlyList<SettlementRecruitmentOrder> GetRecruitmentOrders(SettlementRecruitmentContext context)
         {
-            var orders = new List<RecruitOrder>();
+            var orders = new List<SettlementRecruitmentOrder>();
             var settings = Settings.Instance;
-            if (settings == null || !settings.AutoRecruitVolunteers) return orders;
+            if (settings == null || !settings.ModEnabled || context == null) return orders;
 
             // Stop recruiting at the configured party-size target, plus any garrison donation space.
-            int currentSize = party.MemberRoster.TotalManCount;
-            int maxRecruitableSize = GetMaxRecruitablePartySize(party, settlement, settings);
+            int currentSize = context.PartySize;
+            int maxRecruitableSize = GetMaxRecruitablePartySize(context.Party, context.Settlement, settings);
             int remainingRecruitSlots = Math.Max(0, maxRecruitableSize - currentSize);
             if (remainingRecruitSlots <= 0) return orders;
-            int normalRecruitSlots = Math.Max(0, party.Party.PartySizeLimit - currentSize);
+            int normalRecruitSlots = Math.Max(0, context.PartySizeLimit - currentSize);
 
-            // Cycle through settlement notables
-            foreach (var notable in settlement.Notables)
+            var candidates = SortRecruitmentCandidates(
+                context.Candidates.Where(candidate => IsRecruitmentCandidateAllowed(candidate, context, settings)),
+                settings.RecruitHireOrderSetting);
+
+            int selectedCount = 0;
+            foreach (var candidate in candidates)
             {
                 if (remainingRecruitSlots <= 0) break;
-                if (notable == null || notable.VolunteerTypes == null) continue;
-
-                // Check relation level and recruit slots unlocked
-                int maxIndex = Campaign.Current.Models.VolunteerModel.MaximumIndexHeroCanRecruitFromHero(Hero.MainHero, notable, -101);
-                
-                for (int slot = 0; slot < notable.VolunteerTypes.Length; slot++)
+                int amount = Math.Min(candidate.AvailableCount, remainingRecruitSlots);
+                if (candidate.Source == SettlementRecruitmentSource.NotableVolunteer)
                 {
-                    var troop = notable.VolunteerTypes[slot];
-                    if (troop == null) continue;
-
-                    if (slot > maxIndex)
-                    {
-                        SettlementAutomationCore.Helpers.Logger.WriteLog("PartyManager", 
-                            $"[Recruit Slot Locked] Slot {slot} for notable {notable.Name} is locked. Relation allows recruiting up to index {maxIndex} (unlocked slots: {maxIndex + 1}). Troop: {troop.Name} (Tier {troop.Tier})");
-                        continue;
-                    }
-
-                    if (RecruitmentFilter.MatchTroopFilter(troop, settings))
-                    {
-                        bool allowOverPartySize = orders.Count >= normalRecruitSlots;
-                        orders.Add(new RecruitOrder(notable, slot, allowOverPartySize));
-                        remainingRecruitSlots--;
-                        if (remainingRecruitSlots <= 0) break;
-                    }
+                    amount = Math.Min(amount, 1);
                 }
+                if (amount <= 0) continue;
+
+                bool allowOverPartySize = selectedCount >= normalRecruitSlots || selectedCount + amount > normalRecruitSlots;
+                orders.Add(new SettlementRecruitmentOrder(candidate, amount, allowOverPartySize));
+                selectedCount += amount;
+                remainingRecruitSlots -= amount;
             }
 
             return orders;
+        }
+
+        internal static IReadOnlyList<SettlementRecruitmentCandidate> SortRecruitmentCandidates(
+            IEnumerable<SettlementRecruitmentCandidate> candidates,
+            RecruitHireOrder order)
+        {
+            switch (order)
+            {
+                case RecruitHireOrder.BestValue:
+                    return candidates
+                        .OrderByDescending(candidate => candidate.UnitCost <= 0 ? double.MaxValue : (double)GetCandidateTier(candidate) / candidate.UnitCost)
+                        .ThenByDescending(GetCandidateTier)
+                        .ThenBy(candidate => candidate.Sequence)
+                        .ToList();
+                case RecruitHireOrder.CheapestFirst:
+                    return candidates
+                        .OrderBy(candidate => candidate.UnitCost)
+                        .ThenByDescending(GetCandidateTier)
+                        .ThenBy(candidate => candidate.Sequence)
+                        .ToList();
+                case RecruitHireOrder.VolunteersFirst:
+                    return candidates
+                        .OrderBy(candidate => candidate.Source == SettlementRecruitmentSource.NotableVolunteer ? 0 : 1)
+                        .ThenBy(candidate => candidate.Sequence)
+                        .ToList();
+                case RecruitHireOrder.MercenariesFirst:
+                    return candidates
+                        .OrderBy(candidate => candidate.Source == SettlementRecruitmentSource.TavernMercenary ? 0 : 1)
+                        .ThenBy(candidate => candidate.Sequence)
+                        .ToList();
+                default:
+                    return candidates
+                        .OrderByDescending(GetCandidateTier)
+                        .ThenBy(candidate => candidate.UnitCost)
+                        .ThenBy(candidate => candidate.Sequence)
+                        .ToList();
+            }
+        }
+
+        private static int GetCandidateTier(SettlementRecruitmentCandidate candidate)
+        {
+            return candidate.Troop?.Tier ?? 0;
+        }
+
+        private static bool IsRecruitmentCandidateAllowed(
+            SettlementRecruitmentCandidate candidate,
+            SettlementRecruitmentContext context,
+            Settings settings)
+        {
+            if (candidate?.Troop == null)
+            {
+                return false;
+            }
+
+            if (candidate.Source == SettlementRecruitmentSource.NotableVolunteer)
+            {
+                return context.CanRecruitNotables &&
+                       settings.AutoRecruitVolunteers &&
+                       RecruitmentFilter.MatchTroopFilter(candidate.Troop, settings);
+            }
+
+            return context.CanRecruitMercenaries &&
+                   settings.MercenaryRecruitSetting != MercenaryRecruitPolicy.None &&
+                   RecruitmentFilter.MatchTroopFilter(candidate.Troop, settings);
         }
 
 
@@ -100,7 +390,7 @@ namespace PartyManager
         {
             var orders = new List<GarrisonOrder>();
             var settings = Settings.Instance;
-            if (settings == null || !settings.EnableGarrisonDonation || settlement.Town == null || settlement.Town.GarrisonParty == null)
+            if (settings == null || !settings.ModEnabled || !settings.EnableGarrisonDonation || settlement.Town == null || settlement.Town.GarrisonParty == null)
             {
                 return orders;
             }
@@ -159,69 +449,46 @@ namespace PartyManager
             }
         }
 
-        // ----------------------------------------------------
-        // IRansomOrderProvider (Prisoner Ransoms & Tavern Mercenaries)
-        // ----------------------------------------------------
-        public List<RansomOrder> GetRansomOrders(MobileParty party, Settlement settlement)
+        private class AnimalSlaughterCandidate
         {
-            var settings = Settings.Instance;
-            if (settings == null) return new List<RansomOrder>();
-            return PrisonerHelper.GetRansomOrders(party, settlement, settings);
-        }
+            public EquipmentElement EquipmentElement { get; }
+            public ItemObject Item { get; } = null!;
+            public int Amount { get; }
+            public int Value { get; }
+            public int Priority { get; }
+            public bool IsRidingMount { get; }
 
-
-
-        // ----------------------------------------------------
-        // IDungeonOrderProvider
-        // ----------------------------------------------------
-        public List<DungeonOrder> GetDungeonOrders(MobileParty party, Settlement settlement)
-        {
-            var settings = Settings.Instance;
-            if (settings == null) return new List<DungeonOrder>();
-            return PrisonerHelper.GetDungeonOrders(party, settlement, settings);
-        }
-
-        public List<MercenaryRecruitOrder> GetMercenaryRecruitOrders(MobileParty party, Settlement settlement)
-        {
-            var orders = new List<MercenaryRecruitOrder>();
-            var settings = Settings.Instance;
-            if (settings == null || settings.MercenaryRecruitSetting == MercenaryRecruitPolicy.None || settlement.Town == null) return orders;
-            var mainHero = Hero.MainHero;
-            if (mainHero == null) return orders;
-            var campaign = Campaign.Current;
-            if (campaign == null) return orders;
-
-            int currentSize = party.MemberRoster.TotalManCount;
-            int maxRecruitableSize = GetMaxRecruitablePartySize(party, settlement, settings);
-            int capacity = Math.Max(0, maxRecruitableSize - currentSize);
-            if (capacity <= 0) return orders;
-
-            var recruitmentBehavior = Campaign.Current?.GetCampaignBehavior<TaleWorlds.CampaignSystem.CampaignBehaviors.RecruitmentCampaignBehavior>();
-            if (recruitmentBehavior != null)
+            public AnimalSlaughterCandidate(EquipmentElement equipmentElement, int amount, int value, int priority)
             {
-                var data = recruitmentBehavior.GetMercenaryData(settlement.Town);
-                if (data != null && data.Number > 0 && data.TroopType != null)
-                {
-                    var troop = data.TroopType;
-                    int count = data.Number;
-                    if (RecruitmentFilter.MatchTroopFilter(troop, settings))
-                    {
-                        int cost = (int)campaign.Models.PartyWageModel.GetTroopRecruitmentCost(troop, mainHero, false).ResultNumber;
-                        int budget = mainHero.Gold - 1000;
-                        int toRecruit = Math.Min(count, capacity);
-                        if (cost > 0)
-                        {
-                            toRecruit = Math.Min(toRecruit, budget / cost);
-                        }
-                        if (toRecruit > 0)
-                        {
-                            orders.Add(new MercenaryRecruitOrder(troop, toRecruit));
-                        }
-                    }
-                }
+                EquipmentElement = equipmentElement;
+                Item = equipmentElement.Item;
+                Amount = amount;
+                Value = value;
+                Priority = priority;
+                IsRidingMount = Item != null && Item.IsMountable && Item.HorseComponent != null && !Item.HorseComponent.IsPackAnimal;
             }
+        }
 
-            return orders;
+        private class ReservationState
+        {
+            public ItemReservation Reservation { get; }
+            public int Remaining { get; set; }
+
+            public ReservationState(ItemReservation reservation, int remaining)
+            {
+                Reservation = reservation;
+                Remaining = remaining;
+            }
+        }
+
+        // ----------------------------------------------------
+        // IPrisonerDispositionProvider
+        // ----------------------------------------------------
+        public IReadOnlyList<PrisonerDispositionOrder> GetPrisonerDispositionOrders(PrisonerDispositionContext context)
+        {
+            var settings = Settings.Instance;
+            if (settings == null || !settings.ModEnabled) return new List<PrisonerDispositionOrder>();
+            return PrisonerHelper.GetPrisonerDispositionOrders(context, settings);
         }
 
         private static int GetMaxRecruitablePartySize(MobileParty party, Settlement settlement, Settings settings)
