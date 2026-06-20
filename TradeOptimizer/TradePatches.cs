@@ -36,6 +36,11 @@ namespace TradeOptimizer
             try
             {
                 var settings = Settings.Instance;
+                if (settings == null)
+                {
+                    return;
+                }
+
                 float elapsedDays = Campaign.Current.Models.CampaignTimeModel.CampaignStartTime.ElapsedDaysUntilNow;
                 if (settings != null && elapsedDays < settings.InitialSettlementDaysDelay)
                 {

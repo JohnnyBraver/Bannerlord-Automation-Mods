@@ -32,7 +32,7 @@ namespace FiefManager
             if (town == null) return orders;
 
             var settings = Settings.Instance;
-            if (settings == null) return orders;
+            if (settings == null || !settings.ModEnabled) return orders;
 
             var buildings = town.Buildings.ToList();
             var buildingCandidates = buildings

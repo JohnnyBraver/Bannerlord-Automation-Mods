@@ -39,7 +39,7 @@ namespace FiefManager
 
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "FiefManager_v3";
+        public override string Id => "FiefManager_v0_4";
         public override string DisplayName => "Fief Manager";
         public override string FolderName => "FiefManager";
         public override string FormatType => "json";
@@ -58,6 +58,11 @@ namespace FiefManager
             new UpgradeApproachOption("Cheapest First", BuildingUpgradeApproach.CheapestFirst),
             new UpgradeApproachOption("Most Expensive First", BuildingUpgradeApproach.MostExpensiveFirst)
         };
+
+        [SettingPropertyBool("Enable Fief Manager", RequireRestart = false,
+            HintText = "Master switch. When disabled, Fief Manager will not queue projects or deposit project boost gold.", Order = 0)]
+        [SettingPropertyGroup("General", GroupOrder = 1)]
+        public bool ModEnabled { get; set; } = true;
 
         [SettingPropertyBool("Auto Set Build Queue", RequireRestart = false,
             HintText = "Automatically select default construction projects when the build queue is empty.", Order = 1)]

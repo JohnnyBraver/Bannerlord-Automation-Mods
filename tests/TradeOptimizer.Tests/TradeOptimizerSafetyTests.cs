@@ -47,6 +47,16 @@ namespace TradeOptimizer.Tests
             Assert.DoesNotContain("CreateAndInitInventoryLogic(party, settlement, false)", source);
         }
 
+        [Fact]
+        public void Provider_MapsNewPlayerSideStacksWhenReconstructingSimulatedBuys()
+        {
+            string source = ReadSource("TradeOptimizer", "TradeOptimizerProvider.cs");
+            string collectOrders = SliceMethod(source, "private List<TradeOrder> SimulateAndCollectOrders");
+
+            Assert.Contains("if (!eqElementMap.ContainsKey(key))", collectOrders);
+            Assert.Contains("eqElementMap[key] = el.EquipmentElement;", collectOrders);
+        }
+
         private static string ReadSource(params string[] parts)
         {
             string root = FindRepoRoot();

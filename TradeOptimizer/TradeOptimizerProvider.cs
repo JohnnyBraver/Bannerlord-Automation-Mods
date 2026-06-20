@@ -25,6 +25,11 @@ namespace TradeOptimizer
             }
 
             var settings = Settings.Instance;
+            if (settings != null && !settings.ModEnabled)
+            {
+                return lines;
+            }
+
             var reportMode = settings?.TradeReportDetail ?? TradeReportDetailMode.TopTradeGoods;
             return BuildAutomationReportLines(
                 context.Stage,
@@ -200,7 +205,7 @@ namespace TradeOptimizer
         {
             var orders = new List<TradeOrder>();
             var settings = Settings.Instance;
-            if (settings == null || !settings.AutoTradeOnEnterSettlement) return orders;
+            if (settings == null || !settings.ModEnabled || !settings.AutoTradeOnEnterSettlement) return orders;
 
             // Check if enough campaign days have passed to let the initial economy stabilize
             float elapsedDays = Campaign.Current.Models.CampaignTimeModel.CampaignStartTime.ElapsedDaysUntilNow;
@@ -273,6 +278,10 @@ namespace TradeOptimizer
                     {
                         string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.PlayerInventory, el.EquipmentElement);
                         finalPlayerCounts[key] = finalPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
+                        if (!eqElementMap.ContainsKey(key))
+                        {
+                            eqElementMap[key] = el.EquipmentElement;
+                        }
                     }
                 }
 
@@ -314,10 +323,12 @@ namespace TradeOptimizer
 
                     if (diff > 0)
                     {
+                        if (!eqElementMap.ContainsKey(key)) continue;
                         orders.Add(new TradeOrder(eqElementMap[key], diff, true));
                     }
                     else if (diff < 0)
                     {
+                        if (!eqElementMap.ContainsKey(key)) continue;
                         orders.Add(new TradeOrder(eqElementMap[key], -diff, false));
                     }
                 }
@@ -336,7 +347,7 @@ namespace TradeOptimizer
         public List<TradeOrder> GetPreSellOrders(MobileParty party, Settlement settlement)
         {
             var settings = Settings.Instance;
-            if (settings == null || !settings.ShouldSplitTransactions)
+            if (settings == null || !settings.ModEnabled || !settings.ShouldSplitTransactions)
             {
                 return new List<TradeOrder>();
             }
@@ -348,7 +359,7 @@ namespace TradeOptimizer
         {
             var actions = new List<TradeAction>();
             var settings = Settings.Instance;
-            if (settings == null || !settings.AutoTradeOnEnterSettlement)
+            if (settings == null || !settings.ModEnabled || !settings.AutoTradeOnEnterSettlement)
                 return new TradeProposal(actions);
 
             var party = context.Party;

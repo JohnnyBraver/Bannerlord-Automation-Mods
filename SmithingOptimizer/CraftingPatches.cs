@@ -36,7 +36,8 @@ namespace SmithingOptimizer
         public static void OnNewPieceUnlockedPostfix(WeaponDesignVM __instance, CraftingPiece piece)
         {
             ActiveWeaponDesignVM = __instance;
-            if (Settings.Instance.AutoSwitchEnabled)
+            var settings = Settings.Instance;
+            if (settings != null && settings.ModEnabled && settings.AutoSwitchEnabled)
             {
                 TriggerOptimization(silentOnNoImprovement: true);
             }
@@ -44,11 +45,21 @@ namespace SmithingOptimizer
 
         public static void ManualTrigger()
         {
-            TriggerOptimization(silentOnNoImprovement: false);
+            TriggerOptimization(silentOnNoImprovement: false, requireAutomationEnabled: false);
         }
 
-        private static void TriggerOptimization(bool silentOnNoImprovement)
+        private static void TriggerOptimization(bool silentOnNoImprovement, bool requireAutomationEnabled = true)
         {
+            var settings = Settings.Instance;
+            if (settings == null || (requireAutomationEnabled && !settings.ModEnabled))
+            {
+                if (!silentOnNoImprovement)
+                {
+                    InformationManager.DisplayMessage(new InformationMessage("Smithing Optimizer: Automation is disabled in settings."));
+                }
+                return;
+            }
+
             if (ActiveWeaponDesignVM == null)
             {
                 if (!silentOnNoImprovement)
@@ -71,8 +82,8 @@ namespace SmithingOptimizer
                     craftingLogic,
                     Hero.MainHero,
                     craftingLogic.CurrentCraftingTemplate,
-                    Settings.Instance.LimitToInventory,
-                    Settings.Instance.Goal
+                    settings.LimitToInventory,
+                    settings.Goal
                 );
 
                 if (results == null || results.Count == 0)
@@ -87,11 +98,11 @@ namespace SmithingOptimizer
                 var best = results[0];
 
                 // 3. Compare with current design to see if we improved
-                if (IsBetterThanCurrent(craftingLogic, best, Settings.Instance.Goal))
+                if (IsBetterThanCurrent(craftingLogic, best, settings.Goal))
                 {
                     ApplyDesign(ActiveWeaponDesignVM, craftingLogic, best);
 
-                    string goalText = Settings.Instance.Goal == OptimizationGoal.Damage ? $"Damage: {best.MaxDamage}" : $"Value: {best.Value}d";
+                    string goalText = settings.Goal == OptimizationGoal.Damage ? $"Damage: {best.MaxDamage}" : $"Value: {best.Value}d";
                     InformationManager.DisplayMessage(new InformationMessage(
                         $"Smithing Optimizer: Applied new optimal design! ({goalText})",
                         Color.FromUint(0x40FF40FF) // Green

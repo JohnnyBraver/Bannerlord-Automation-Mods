@@ -23,7 +23,7 @@ namespace SmithingOptimizer
 
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "SmithingOptimizer_v3";
+        public override string Id => "SmithingOptimizer_v0_4";
         public override string DisplayName => "Smithing Optimizer";
         public override string FolderName => "SmithingOptimizer";
         public override string FormatType => "json";
@@ -33,6 +33,11 @@ namespace SmithingOptimizer
             new GoalOption("Profit (XP + Sell Value)", OptimizationGoal.Profit),
             new GoalOption("Damage (Max Swing/Thrust)", OptimizationGoal.Damage)
         };
+
+        [SettingPropertyBool("Enable Smithing Optimizer", RequireRestart = false,
+            HintText = "Master automation switch. When disabled, Smithing Optimizer will not react to unlocks, request supplies, or report purchases. The manual crafting button still works.", Order = 0)]
+        [SettingPropertyGroup("General", GroupOrder = 0)]
+        public bool ModEnabled { get; set; } = true;
 
         [SettingPropertyBool("Auto-switch on New Piece Unlock", RequireRestart = false,
             HintText = "Automatically re-optimize the design when a new crafting piece is unlocked.")]

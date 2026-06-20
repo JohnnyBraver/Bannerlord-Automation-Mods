@@ -32,7 +32,7 @@ namespace SettlementAutomationCore.Tests
             Assert.Contains("RequestType.SpecificItem", provider);
             Assert.DoesNotContain("TransferCommand.Transfer", provider);
             Assert.DoesNotContain("DoneLogic()", provider);
-            Assert.Contains("SmithingOptimizer_v3", settings);
+            Assert.Contains("SmithingOptimizer_v0_4", settings);
             Assert.Contains("AutoBuySmithingSupplies", settings);
         }
 

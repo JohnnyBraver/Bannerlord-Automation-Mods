@@ -50,6 +50,36 @@ namespace SettlementAutomationCore.Tests
             Assert.Empty(offenders);
         }
 
+        [Fact]
+        public void ManualButtonsDoNotRequireFeatureMasterToggles()
+        {
+            string root = FindRepoRoot();
+            string equipmentEngine = File.ReadAllText(Path.Combine(root, "EquipmentManager", "EquipmentEngine.cs"));
+            string tradePatches = File.ReadAllText(Path.Combine(root, "TradeOptimizer", "TradePatches.cs"));
+            string tradingEngine = File.ReadAllText(Path.Combine(root, "TradeOptimizer", "TradingEngine.cs"));
+            string craftingPatches = File.ReadAllText(Path.Combine(root, "SmithingOptimizer", "CraftingPatches.cs"));
+
+            Assert.DoesNotContain("ModEnabled", ExtractMethod(equipmentEngine, "OptimizeEquipment"));
+            Assert.DoesNotContain("ModEnabled", ExtractMethod(tradePatches, "ManualTrigger"));
+            Assert.DoesNotContain("ModEnabled", ExtractMethod(tradingEngine, "RunOptimization"));
+            Assert.Contains("TriggerOptimization(silentOnNoImprovement: false, requireAutomationEnabled: false)", craftingPatches);
+        }
+
+        [Fact]
+        public void PassiveAutomationStillRequiresFeatureMasterToggles()
+        {
+            string root = FindRepoRoot();
+            string equipmentEngine = File.ReadAllText(Path.Combine(root, "EquipmentManager", "EquipmentEngine.cs"));
+            string tradeProvider = File.ReadAllText(Path.Combine(root, "TradeOptimizer", "TradeOptimizerProvider.cs"));
+            string smithingPatches = File.ReadAllText(Path.Combine(root, "SmithingOptimizer", "CraftingPatches.cs"));
+            string smithingProvider = File.ReadAllText(Path.Combine(root, "SmithingOptimizer", "SmithingOptimizerProvider.cs"));
+
+            Assert.Contains("!settings.ModEnabled", ExtractMethod(equipmentEngine, "AutoEquipHeadless"));
+            Assert.Contains("!settings.ModEnabled", ExtractMethod(tradeProvider, "AnalyzeMarket"));
+            Assert.Contains("settings.ModEnabled && settings.AutoSwitchEnabled", smithingPatches);
+            Assert.Contains("!settings.ModEnabled || !settings.AutoBuySmithingSupplies", smithingProvider);
+        }
+
         private static bool IsIgnored(string path)
         {
             var parts = new HashSet<string>(
@@ -73,6 +103,34 @@ namespace SettlementAutomationCore.Tests
             }
 
             throw new DirectoryNotFoundException("Could not find Bannerlord-Mods repository root.");
+        }
+
+        private static string ExtractMethod(string source, string methodName)
+        {
+            int nameIndex = source.IndexOf(methodName, StringComparison.Ordinal);
+            Assert.True(nameIndex >= 0, $"Could not find method {methodName}.");
+
+            int bodyStart = source.IndexOf('{', nameIndex);
+            Assert.True(bodyStart >= 0, $"Could not find body for method {methodName}.");
+
+            int depth = 0;
+            for (int i = bodyStart; i < source.Length; i++)
+            {
+                if (source[i] == '{')
+                {
+                    depth++;
+                }
+                else if (source[i] == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return source.Substring(bodyStart, i - bodyStart + 1);
+                    }
+                }
+            }
+
+            throw new InvalidOperationException($"Could not parse method {methodName}.");
         }
 
         private static string ToRelativePath(string root, string path)

@@ -8,13 +8,14 @@ namespace SettlementAutomationCore.Tests
     public class SettingsVersionTests
     {
         [Fact]
-        public void SettingsIds_UseV3ToAvoidLoadingOldSavedOptions()
+        public void SettingsIds_UseV04ToAvoidLoadingV03SavedOptions()
         {
-            Assert.Equal("SettlementAutomationCore_v3", new SettlementAutomationCore.Settings().Id);
-            Assert.Equal("TradeOptimizer_v3", new TradeOptimizer.Settings().Id);
-            Assert.Equal("PartyManager_v3", new PartyManager.Settings().Id);
-            Assert.Equal("EquipmentManager_v3", new EquipmentManager.Settings().Id);
-            Assert.Equal("FiefManager_v3", new FiefManager.Settings().Id);
+            Assert.Equal("SettlementAutomationCore_v0_4", new SettlementAutomationCore.Settings().Id);
+            Assert.Equal("TradeOptimizer_v0_4", new TradeOptimizer.Settings().Id);
+            Assert.Equal("PartyManager_v0_4", new PartyManager.Settings().Id);
+            Assert.Equal("EquipmentManager_v0_4", new EquipmentManager.Settings().Id);
+            Assert.Equal("FiefManager_v0_4", new FiefManager.Settings().Id);
+            Assert.Equal("SmithingOptimizer_v0_4", new SmithingOptimizer.Settings().Id);
         }
 
         [Fact]
@@ -31,6 +32,16 @@ namespace SettlementAutomationCore.Tests
             var coreSettings = new SettlementAutomationCore.Settings();
 
             Assert.False(coreSettings.DisableSettlementAutomation);
+        }
+
+        [Fact]
+        public void FeatureModMasterToggles_DefaultEnabled()
+        {
+            Assert.True(new TradeOptimizer.Settings().ModEnabled);
+            Assert.True(new PartyManager.Settings().ModEnabled);
+            Assert.True(new EquipmentManager.Settings().ModEnabled);
+            Assert.True(new FiefManager.Settings().ModEnabled);
+            Assert.True(new SmithingOptimizer.Settings().ModEnabled);
         }
 
         [Fact]

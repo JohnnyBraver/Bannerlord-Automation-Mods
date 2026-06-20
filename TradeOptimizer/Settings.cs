@@ -97,7 +97,7 @@ namespace TradeOptimizer
 
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "TradeOptimizer_v3";
+        public override string Id => "TradeOptimizer_v0_4";
         public override string DisplayName => "Trade Optimizer";
         public override string FolderName => "TradeOptimizer";
         public override string FormatType => "json";
@@ -142,6 +142,11 @@ namespace TradeOptimizer
             new TradeReportSortModeOption("Market Value", TradeReportSortMode.MarketValue),
             new TradeReportSortModeOption("Paid Price", TradeReportSortMode.PaidPrice)
         };
+
+        [SettingPropertyBool("Enable Trade Optimizer", RequireRestart = false,
+            HintText = "Master automation switch. When disabled, Trade Optimizer will not run settlement-entry trade or automatic reports. The manual inventory button still works.", Order = 0)]
+        [SettingPropertyGroup("General", GroupOrder = 3)]
+        public bool ModEnabled { get; set; } = true;
 
         [SettingPropertyBool("Auto-trade on Settlement Entry", RequireRestart = false,
             HintText = "Automatically evaluate and execute trades when entering a town or village.", Order = 1)]
