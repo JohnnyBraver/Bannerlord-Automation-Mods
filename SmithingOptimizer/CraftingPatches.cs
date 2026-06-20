@@ -37,7 +37,7 @@ namespace SmithingOptimizer
         {
             ActiveWeaponDesignVM = __instance;
             var settings = Settings.Instance;
-            if (settings != null && settings.ModEnabled && settings.AutoSwitchEnabled)
+            if (settings != null && settings.AutoSwitchEnabled)
             {
                 TriggerOptimization(silentOnNoImprovement: true);
             }
@@ -45,18 +45,14 @@ namespace SmithingOptimizer
 
         public static void ManualTrigger()
         {
-            TriggerOptimization(silentOnNoImprovement: false, requireAutomationEnabled: false);
+            TriggerOptimization(silentOnNoImprovement: false);
         }
 
-        private static void TriggerOptimization(bool silentOnNoImprovement, bool requireAutomationEnabled = true)
+        private static void TriggerOptimization(bool silentOnNoImprovement)
         {
             var settings = Settings.Instance;
-            if (settings == null || (requireAutomationEnabled && !settings.ModEnabled))
+            if (settings == null)
             {
-                if (!silentOnNoImprovement)
-                {
-                    InformationManager.DisplayMessage(new InformationMessage("Smithing Optimizer: Automation is disabled in settings."));
-                }
                 return;
             }
 

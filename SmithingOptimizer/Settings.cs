@@ -34,24 +34,19 @@ namespace SmithingOptimizer
             new GoalOption("Damage (Max Swing/Thrust)", OptimizationGoal.Damage)
         };
 
-        [SettingPropertyBool("Enable Smithing Optimizer", RequireRestart = false,
-            HintText = "Master automation switch. When disabled, Smithing Optimizer will not react to unlocks, request supplies, or report purchases. The manual crafting button still works.", Order = 0)]
-        [SettingPropertyGroup("General", GroupOrder = 0)]
-        public bool ModEnabled { get; set; } = true;
-
         [SettingPropertyBool("Auto-switch on New Piece Unlock", RequireRestart = false,
-            HintText = "Automatically re-optimize the design when a new crafting piece is unlocked.")]
+            HintText = "Automatically re-optimize the design when a new crafting piece is unlocked.", Order = 1)]
         [SettingPropertyGroup("General", GroupOrder = 0)]
         public bool AutoSwitchEnabled { get; set; } = true;
 
         [SettingPropertyDropdown("Optimization Goal", RequireRestart = false,
-            HintText = "Whether to optimize for maximum sell value/XP, or maximum weapon damage.")]
+            HintText = "Whether to optimize for maximum sell value/XP, or maximum weapon damage.", Order = 2)]
         [SettingPropertyGroup("General", GroupOrder = 0)]
         public Dropdown<GoalOption> GoalDropdown { get; set; } =
             new Dropdown<GoalOption>(GoalOptions, 0);
 
         [SettingPropertyBool("Limit to Owned Materials", RequireRestart = false,
-            HintText = "Only suggest designs that can be crafted with your current material stock.")]
+            HintText = "Only suggest designs that can be crafted with your current material stock.", Order = 3)]
         [SettingPropertyGroup("General", GroupOrder = 0)]
         public bool LimitToInventory { get; set; } = true;
 
@@ -81,10 +76,12 @@ namespace SmithingOptimizer
         [SettingPropertyGroup("Automation", GroupOrder = 1)]
         public int SupplyRequestPriority { get; set; } = 5;
 
-        [SettingPropertyInteger("Supply Gold Reserve", 0, 50000, RequireRestart = false,
-            HintText = "Do not buy smithing supplies if the purchase would leave less than this much gold.", Order = 6)]
+        [SettingPropertyInteger("Supply Gold Reserve (k Denars)", 0, 50, RequireRestart = false,
+            HintText = "Do not buy smithing supplies if the purchase would leave less than this much gold (in thousands). Default: 1000 denars (1k).", Order = 6)]
         [SettingPropertyGroup("Automation", GroupOrder = 1)]
-        public int SupplyGoldReserve { get; set; } = 1000;
+        public int SupplyGoldReserveK { get; set; } = 1;
+
+        public int SupplyGoldReserve => SupplyGoldReserveK * 1000;
 
         public OptimizationGoal Goal => GoalDropdown.SelectedValue.Value;
         public RequestProfile SupplyRequestProfile => SupplySpendModeDropdown.SelectedValue.Value;

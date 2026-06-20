@@ -18,7 +18,7 @@ namespace SmithingOptimizer
         public void SubmitAutomationRequests(AutomationRequestContext context)
         {
             var settings = Settings.Instance;
-            if (settings == null || context == null || !settings.ModEnabled || !settings.AutoBuySmithingSupplies)
+            if (settings == null || context == null || !settings.AutoBuySmithingSupplies)
             {
                 return;
             }
@@ -30,7 +30,6 @@ namespace SmithingOptimizer
         public IReadOnlyList<string> BuildAutomationReportLines(AutomationReportContext context)
         {
             if (context == null ||
-                Settings.Instance?.ModEnabled == false ||
                 context.Stage != AutomationTransactionStage.PriorityRequest ||
                 context.BoughtItems.Count == 0)
             {

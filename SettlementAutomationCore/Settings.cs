@@ -43,17 +43,19 @@ namespace SettlementAutomationCore
 
         [SettingPropertyBool("Disable Settlement Automation", RequireRestart = false,
             HintText = "Stops Core-driven automatic settlement-entry actions. Manual buttons can still be used.", Order = 1)]
-        [SettingPropertyGroup("General", GroupOrder = -1)]
+        [SettingPropertyGroup("General", GroupOrder = 0)]
         public bool DisableSettlementAutomation { get; set; } = false;
 
-        [SettingPropertyInteger("Minimum Gold Reserve", 0, 50000, RequireRestart = false,
-            HintText = "Never let your gold balance drop below this amount when buying. Default: 1000 denars.", Order = 1)]
-        [SettingPropertyGroup("Budget Protection", GroupOrder = 0)]
-        public int MinimumGoldReserve { get; set; } = 1000;
+        [SettingPropertyInteger("Minimum Gold Reserve (k Denars)", 0, 50, RequireRestart = false,
+            HintText = "Never let your gold balance drop below this amount when buying (in thousands). Default: 1000 denars (1k).", Order = 2)]
+        [SettingPropertyGroup("General", GroupOrder = 0)]
+        public int MinimumGoldReserveK { get; set; } = 1;
+
+        public int MinimumGoldReserve => MinimumGoldReserveK * 1000;
 
         [SettingPropertyInteger("Min Days of Expenses to Keep", 0, 100, RequireRestart = false,
-            HintText = "Ensure you keep enough gold to cover this many days of party wages/expenses (excluding daily income).", Order = 2)]
-        [SettingPropertyGroup("Budget Protection", GroupOrder = 0)]
+            HintText = "Ensure you keep enough gold to cover this many days of party wages/expenses (excluding daily income).", Order = 3)]
+        [SettingPropertyGroup("General", GroupOrder = 0)]
         public int MinDaysExpensesToKeep { get; set; } = 10;
 
         [SettingPropertyBool("Respect Carry Capacity", RequireRestart = false,
@@ -66,15 +68,25 @@ namespace SettlementAutomationCore
         [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public int ReserveCarryCapacityPercent { get; set; } = 10;
 
-        [SettingPropertyFloatingInteger("Routine Request Price Limit", 0.5f, 5.0f, "#0.00", RequireRestart = false,
-            HintText = "Maximum price/value ratio for routine requests. Critical, essential, and luxury requests ignore this.", Order = 3)]
+        private float _routinePriceLimitMultiplier = 1.25f;
+        [SettingPropertyFloatingInteger("Routine Request Price Limit", 0.5f, 3.0f, "#0.00", RequireRestart = false,
+            HintText = "Maximum price/value ratio for routine requests. Critical, essential, and luxury requests ignore this. Default: 1.25.", Order = 3)]
         [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
-        public float RoutinePriceLimitMultiplier { get; set; } = 1.5f;
+        public float RoutinePriceLimitMultiplier
+        {
+            get => _routinePriceLimitMultiplier;
+            set => _routinePriceLimitMultiplier = (float)System.Math.Round(value / 0.05f) * 0.05f;
+        }
 
-        [SettingPropertyFloatingInteger("Opportunistic Request Price Limit", 0.5f, 5.0f, "#0.00", RequireRestart = false,
-            HintText = "Maximum price/value ratio for opportunistic requests.", Order = 4)]
+        private float _opportunisticPriceLimitMultiplier = 0.75f;
+        [SettingPropertyFloatingInteger("Opportunistic Request Price Limit", 0.25f, 1.5f, "#0.00", RequireRestart = false,
+            HintText = "Maximum price/value ratio for opportunistic requests. Default: 0.75.", Order = 4)]
         [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
-        public float OpportunisticPriceLimitMultiplier { get; set; } = 1.1f;
+        public float OpportunisticPriceLimitMultiplier
+        {
+            get => _opportunisticPriceLimitMultiplier;
+            set => _opportunisticPriceLimitMultiplier = (float)System.Math.Round(value / 0.05f) * 0.05f;
+        }
 
         [SettingPropertyDropdown("Market Report Detail", RequireRestart = false,
             HintText = "Choose Core's in-game market reporting behavior. Off writes no in-game automation report lines. Silent Mods writes module reports plus Core fallback for modules that do not report. Full also writes Core's complete transaction summary.", Order = 1)]

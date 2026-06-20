@@ -1195,11 +1195,9 @@ namespace SettlementAutomationCore
             try
             {
                 SellPrisonersAction.ApplyForSelectedPrisoners(MobileParty.MainParty.Party, null, ransomRoster);
-                var ransomParts = new List<string>();
                 int estimatedGold = 0;
                 foreach (var element in ransomRoster.GetTroopRoster())
                 {
-                    ransomParts.Add($"{element.Number}x {element.Character.Name}");
                     try
                     {
                         var model = Campaign.Current?.Models?.RansomValueCalculationModel;
@@ -1211,14 +1209,14 @@ namespace SettlementAutomationCore
                     catch {}
                 }
 
-                InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed prisoners: {string.Join(", ", ransomParts)}"));
-                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Ransomed at {settlement.Name}: {string.Join(", ", ransomParts)} (Est. Gold: +{estimatedGold}d)");
+                string reportStr = GetFormattedPrisonerReport(ransomRoster);
+                InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed prisoners: {reportStr}"));
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"Ransomed at {settlement.Name}: {reportStr} (Est. Gold: +{estimatedGold}d)");
             }
             catch (Exception ex)
             {
                 Helpers.Logger.WriteLog("SettlementAutomationCore", $"Native ApplyForSelectedPrisoners failed ({ex.Message}). Applying manual ransom fallback.");
                 int totalRansomGold = 0;
-                var ransomParts = new List<string>();
                 foreach (var element in ransomRoster.GetTroopRoster())
                 {
                     var character = element.Character;
@@ -1243,8 +1241,6 @@ namespace SettlementAutomationCore
                     totalRansomGold += ransomAmount;
 
                     MobileParty.MainParty.PrisonRoster.AddToCounts(character, -count);
-                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed {count}x {character.Name} for {ransomAmount} denars"));
-                    ransomParts.Add($"{count}x {character.Name} (+{ransomAmount}d)");
                 }
 
                 if (totalRansomGold > 0 && Hero.MainHero != null)
@@ -1259,7 +1255,9 @@ namespace SettlementAutomationCore
                         Helpers.Logger.WriteLog("SettlementAutomationCore", $"Failed to award Roguery XP via SkillLevelingManager: {xpEx.Message}");
                     }
                 }
-                Helpers.Logger.WriteLog("SettlementAutomationCore", $"[Manual Fallback] Ransomed at {settlement.Name}: {string.Join(", ", ransomParts)} (Total: +{totalRansomGold}d)");
+                string reportStr = GetFormattedPrisonerReport(ransomRoster);
+                InformationManager.DisplayMessage(new InformationMessage($"[Automation] Ransomed prisoners: {reportStr} (Manual Fallback, Total: +{totalRansomGold}d)"));
+                Helpers.Logger.WriteLog("SettlementAutomationCore", $"[Manual Fallback] Ransomed at {settlement.Name}: {reportStr} (Total: +{totalRansomGold}d)");
             }
         }
 
@@ -1273,7 +1271,6 @@ namespace SettlementAutomationCore
             try
             {
                 var flattenedPrisoners = new FlattenedTroopRoster();
-                var dungeonLogParts = new List<string>();
                 foreach (var element in dungeonRoster.GetTroopRoster())
                 {
                     var prisoner = element.Character;
@@ -1302,20 +1299,147 @@ namespace SettlementAutomationCore
                     if (donated > 0)
                     {
                         flattenedPrisoners.Add(prisoner, donated, 0);
-                        dungeonLogParts.Add($"{donated}x {prisoner.Name}");
                     }
                 }
 
                 if (flattenedPrisoners.Count() > 0)
                 {
                     CampaignEventDispatcher.Instance.OnPrisonerDonatedToSettlement(MobileParty.MainParty, flattenedPrisoners, settlement);
-                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Donated prisoners to Dungeon: {string.Join(", ", dungeonLogParts)}"));
-                    Helpers.Logger.WriteLog("SettlementAutomationCore", $"Donated to Dungeon at {settlement.Name}: {string.Join(", ", dungeonLogParts)}");
+                    string reportStr = GetFormattedPrisonerReport(dungeonRoster);
+                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] Donated prisoners to Dungeon: {reportStr}"));
+                    Helpers.Logger.WriteLog("SettlementAutomationCore", $"Donated to Dungeon at {settlement.Name}: {reportStr}");
                 }
             }
             catch (Exception ex)
             {
                 Helpers.Logger.WriteLog("SettlementAutomationCore", $"Dungeon donation phase error: {ex.Message}");
+            }
+        }
+
+        private static void GetPrisonerReportSettings(
+            out string detailMode, 
+            out int maxItems, 
+            out string sortMode)
+        {
+            detailMode = "FullItemList";
+            maxItems = 4;
+            sortMode = "RansomValue";
+
+            try
+            {
+                var provider = MCM.Abstractions.BaseSettingsProvider.Instance;
+                var settings = provider?.GetSettings("PartyManager_v0_4");
+                if (settings != null)
+                {
+                    var detailProp = settings.GetType().GetProperty("PrisonerReportDetail");
+                    if (detailProp != null)
+                    {
+                        detailMode = detailProp.GetValue(settings)?.ToString() ?? "FullItemList";
+                    }
+                    var maxProp = settings.GetType().GetProperty("MaxPrisonersToPrint");
+                    if (maxProp != null)
+                    {
+                        maxItems = (int)maxProp.GetValue(settings);
+                    }
+                    var sortProp = settings.GetType().GetProperty("PrisonerReportSort");
+                    if (sortProp != null)
+                    {
+                        sortMode = sortProp.GetValue(settings)?.ToString() ?? "RansomValue";
+                    }
+                }
+            }
+            catch {}
+        }
+
+        private static string GetFormattedPrisonerReport(TroopRoster roster)
+        {
+            if (roster == null || roster.Count <= 0) return "None";
+
+            GetPrisonerReportSettings(out string detailMode, out int maxItems, out string sortMode);
+
+            if (detailMode == "CategoryCounts")
+            {
+                return FormatPrisonerCategoryCounts(roster.GetTroopRoster());
+            }
+            else
+            {
+                return FormatPrisonerDetailed(roster.GetTroopRoster(), maxItems, sortMode);
+            }
+        }
+
+        private static string FormatPrisonerCategoryCounts(IEnumerable<TroopRosterElement> elements)
+        {
+            int regular = 0;
+            int bandit = 0;
+            int noble = 0;
+            int hero = 0;
+
+            foreach (var el in elements)
+            {
+                if (el.Character == null) continue;
+                if (el.Character.IsHero)
+                {
+                    hero += el.Number;
+                }
+                else if (el.Character.Occupation == Occupation.Bandit)
+                {
+                    bandit += el.Number;
+                }
+                else if (el.Character.Tier >= 6)
+                {
+                    noble += el.Number;
+                }
+                else
+                {
+                    regular += el.Number;
+                }
+            }
+
+            var parts = new List<string>();
+            if (regular > 0) parts.Add($"{regular} Regular");
+            if (noble > 0) parts.Add($"{noble} Elite");
+            if (bandit > 0) parts.Add($"{bandit} Bandit");
+            if (hero > 0) parts.Add($"{hero} Hero");
+
+            return parts.Count > 0 ? string.Join(", ", parts) : "None";
+        }
+
+        private static string FormatPrisonerDetailed(IEnumerable<TroopRosterElement> elements, int maxItems, string sortMode)
+        {
+            var sorted = SortPrisoners(elements, sortMode).ToList();
+            var parts = sorted.Take(maxItems).Select(el => $"{el.Number}x {el.Character.Name}").ToList();
+            if (sorted.Count > maxItems)
+            {
+                int remaining = sorted.Count - maxItems;
+                parts.Add($"+{remaining} more");
+            }
+            return string.Join(", ", parts);
+        }
+
+        private static IEnumerable<TroopRosterElement> SortPrisoners(IEnumerable<TroopRosterElement> elements, string sortMode)
+        {
+            switch (sortMode)
+            {
+                case "Amount":
+                    return elements.OrderByDescending(el => el.Number);
+                case "Tier":
+                    return elements.OrderByDescending(el => el.Character?.Tier ?? 0);
+                case "RansomValue":
+                default:
+                    var model = Campaign.Current?.Models?.RansomValueCalculationModel;
+                    return elements.OrderByDescending(el => {
+                        if (el.Character == null) return 0;
+                        int val = 0;
+                        if (model != null)
+                        {
+                            try { val = model.PrisonerRansomValue(el.Character, Hero.MainHero); } catch {}
+                        }
+                        if (val == 0)
+                        {
+                            val = el.Character.Tier * 15;
+                        }
+                        return val * el.Number;
+                    });
             }
         }
 
