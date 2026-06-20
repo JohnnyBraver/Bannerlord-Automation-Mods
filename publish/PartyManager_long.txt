@@ -1,5 +1,5 @@
 [size=4][b]Description[/b][/size]
-[size=3][color=#D4D4D8]Party Manager is an all-in-one party management and automation tool. It automates troop recruitment from town and village notables (supporting detailed culture and role filters), handles prisoner keeping, ransoming, and donations, and owns party logistics needs such as food restocking, food variety, and riding mounts.[/color][/size]
+[size=3][color=#D4D4D8]Party Manager is an all-in-one party management and automation tool. It automates troop recruitment from notables and taverns, handles prisoner keeping, ransoming, and dungeon donations, and owns party needs such as food restocking, food variety, riding mounts, and mounts/herding cleanup.[/color][/size]
 
 [size=4][b]Installation instructions[/b][/size]
 [size=3][color=#D4D4D8]1. Extract the downloaded archive into your Mount & Blade II Bannerlord game directory (inside the Modules folder).
@@ -7,11 +7,14 @@
 3. Enable "Party Manager" in the game launcher.[/color][/size]
 
 [size=4][b]Main features[/b][/size]
-[size=3][color=#D4D4D8]- Role & Culture Filters: Recruit exactly the troops you want based on shields, shock infantry, cavalry, or specific culture tags.
-- Dropdown Recruitment Policies: Explicit policies for regular, noble, and mercenary recruitment (None, MatchFilters, Any, AnyIgnoreTier).
-- Consolidated Prisoner Management: Policies to ransom all, keep all, or keep selected prisoners matching your recruitment filters. Supports minor faction keep policies and recruitment policy bypasses.
+[size=3][color=#D4D4D8]- Master Toggle: Disable Party Manager entirely without unloading the module.
+- Role & Culture Filters: Recruit exactly the troops you want based on frontline, shock infantry, cavalry, ranged, or specific culture tags.
+- Grouped Hiring: Notable volunteers and tavern mercenaries are planned together, then Core applies shared gold and party-space limits.
+- Hire Order Setting: Sort allowed recruits by best candidate, best value, cheapest first, volunteers first, or mercenaries first.
+- Consolidated Prisoner Management: Plans dungeon donation and tavern ransom together after recruitment, so prisoner capacity reflects the final party size.
 - Post-Automation Alerts: Real-time warnings when your party is near prisoner capacity or single stacks grow too large.
 - Party Needs: Maintains critical food days, requests a variety of known food types, fills the total food buffer, and buys riding mounts for infantry.
+- Mounts & Herding: Can preserve riding mounts for foot troops, prefer selling pack animals before riding mounts, warn on herding/cargo slowdowns, and use category-average mount pricing.
 - Spend Modes: Choose how food and mount requests compete with other automation requests, from Critical through Luxury.[/color][/size]
 
 [size=4][b]Save compatibility[/b][/size]

@@ -7,9 +7,11 @@
 3. Enable "Fief Manager" in the game launcher.[/color][/size]
 
 [size=4][b]Main features[/b][/size]
-[size=3][color=#D4D4D8]- Auto Build Queue: Automatically places projects in the queue when empty.
-- Building Category Priority: Choose whether to prioritize military or economic projects.
-- Auto Project Boosting: Automatically deposits gold to boost project construction speed.
+[size=3][color=#D4D4D8]- Master Toggle: Disable Fief Manager entirely without unloading the module.
+- Auto Build Queue: Automatically fills empty queue slots up to a configurable project count.
+- Building Category Priority: Choose whether to prioritize balanced/default order, military projects, or economic projects.
+- Upgrade Sorting: Choose default order, lowest level first, cheapest first, or most expensive first within the selected priority.
+- Auto Project Boosting: Automatically deposits gold to boost project construction speed when useful.
 - Budget Protection: Configures thresholds to never deposit gold if your player balance is low.[/color][/size]
 
 [size=4][b]Save compatibility[/b][/size]

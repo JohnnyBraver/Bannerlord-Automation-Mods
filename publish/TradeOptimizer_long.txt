@@ -7,10 +7,11 @@
 3. Enable "Trade Optimizer" in the game launcher.[/color][/size]
 
 [size=4][b]Main features[/b][/size]
-[size=3][color=#D4D4D8]- Auto-Trade on Entry: Seamless trade execution whenever entering town/village gates.
+[size=3][color=#D4D4D8]- Automation Toggle: Disable settlement-entry trading and automatic reports without removing the manual inventory button.
+- Auto-Trade on Entry: Seamless trade execution whenever entering town/village gates.
 - Dynamic Profit Calculations: Sells and buys based on average local or global price margins.
-- Budget & Cargo Protection: Restricts spending based on wages protection, safety gold, and party carry capacity.
-- Category Policies: Configure whether food, livestock, and mounts may be bought, sold, both, or ignored as trade goods.
+- Budget & Cargo Protection: Restricts spending based on wages protection, safety gold, shared carry-capacity reserve, and party cargo limits.
+- Category Policies: Configure whether food, livestock, mounts, and crafting materials may be bought, sold, both, or ignored as trade goods.
 - Mixed Free Trade: Can sell overvalued goods and buy undervalued goods in the same market pass.
 - Clear Market Reports: Optional concise trade-good reports or full transaction details, with configurable limits and sorting.[/color][/size]
 

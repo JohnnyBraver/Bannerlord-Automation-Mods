@@ -1,1 +1,1 @@
-Automate profitable buy/sell market passes with configurable trade reporting and commodity policies.
+Automate profitable buy/sell market passes with reporting, cargo reserve, and commodity policies.

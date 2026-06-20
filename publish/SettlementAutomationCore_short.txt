@@ -1,1 +1,1 @@
-Shared town-entry automation core for request ordering, protected market execution, budget checks, and reports.
+Shared settlement automation core for gated phases, protected execution, reservations, and reports.

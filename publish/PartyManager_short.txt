@@ -1,1 +1,1 @@
-Automate recruitment, prisoners, food variety, food buffers, and riding mount restocking.
+Automate grouped recruitment, prisoners, food buffers, riding mounts, and herding cleanup.

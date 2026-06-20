@@ -7,7 +7,8 @@
 3. Enable "Smithing Optimizer" in the game launcher.[/color][/size]
 
 [size=4][b]Main features[/b][/size]
-[size=3][color=#D4D4D8]- Forge Optimize Button: Adds a direct optimize command to the weapon design screen.
+[size=3][color=#D4D4D8]- Automation Toggle: Disable unlock reactions and settlement supply requests without removing the forge optimize button.
+- Forge Optimize Button: Adds a direct optimize command to the weapon design screen.
 - Profit or Damage Goals: Choose whether designs optimize for sell value/XP or weapon damage.
 - Owned-Material Limit: Optionally restricts suggestions to designs you can craft with your current material stock.
 - Unlock Reaction: Can re-optimize automatically when new crafting pieces are unlocked.

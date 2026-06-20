@@ -1,1 +1,1 @@
-Automate construction projects, build queues, and gold reserves for all your towns and castles.
+Automate fief build queues, project sorting, and gold reserves for towns and castles.

@@ -1,5 +1,5 @@
 [size=4][b]Description[/b][/size]
-[size=3][color=#D4D4D8]Settlement Automation Core is the shared automation engine for the Settlement Automation suite. It does not try to decide what your party should buy, sell, recruit, donate, or build by itself. Instead, it gives companion modules a common town-entry pipeline for safe market execution, request ordering, budget protection, cargo checks, reservations, and readable in-game reporting.[/color][/size]
+[size=3][color=#D4D4D8]Settlement Automation Core is the shared automation engine for the Settlement Automation suite. It does not try to decide what your party should buy, sell, recruit, donate, or build by itself. Instead, it gives companion modules a common settlement-entry pipeline for safe market execution, request ordering, budget protection, cargo checks, reservations, grouped troop/prisoner actions, and readable in-game reporting.[/color][/size]
 
 [size=4][b]Installation instructions[/b][/size]
 [size=3][color=#D4D4D8]1. Extract the downloaded archive into your Mount & Blade II Bannerlord game directory (inside the Modules folder).
@@ -7,11 +7,12 @@
 3. Enable "Settlement Automation Core" in the game launcher before enabling dependent Settlement Automation modules.[/color][/size]
 
 [size=4][b]Main features[/b][/size]
-[size=3][color=#D4D4D8]- Shared Town-Entry Pipeline: Runs registered automation modules in a consistent settlement-entry cycle.
+[size=3][color=#D4D4D8]- Shared Settlement-Entry Pipeline: Runs registered automation modules in a consistent gated settlement-entry cycle.
 - Ordered Requests: Handles critical, essential, routine, opportunistic, and luxury item requests in priority order.
 - Budget & Cargo Protection: Applies shared gold reserve, wage buffer, cargo capacity, and herding checks before buying.
 - Sale Reservations: Lets modules protect needed items from free-trade sale flows without touching player item locks.
-- Transaction Phases: Separates pre-sell, priority requests, and free trade so reports and game transactions stay understandable.
+- Grouped Troop & Prisoner Phases: Plans recruitment, garrison donation, tavern ransom, and dungeon donation against shared pools before Core mutates game state.
+- Transaction Phases: Separates pre-sell, requests, cleanup, free trade, and fief actions so reports and game transactions stay understandable.
 - Reporting Framework: Lets modules write their own concise in-game messages while Core can provide fallback summaries.[/color][/size]
 
 [size=4][b]Save compatibility[/b][/size]
