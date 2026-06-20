@@ -39,7 +39,9 @@ namespace EquipmentManager
             long flags,
             bool isMelee,
             bool isRanged,
-            bool isShieldOrAmmo)
+            bool isShieldOrAmmo,
+            bool isAmmo,
+            bool isThrown)
         {
             IsValid = isValid;
             WeaponClass = weaponClass;
@@ -57,6 +59,8 @@ namespace EquipmentManager
             IsMelee = isMelee;
             IsRanged = isRanged;
             IsShieldOrAmmo = isShieldOrAmmo;
+            IsAmmo = isAmmo;
+            IsThrown = isThrown;
         }
 
         public bool IsValid { get; }
@@ -75,6 +79,8 @@ namespace EquipmentManager
         public bool IsMelee { get; }
         public bool IsRanged { get; }
         public bool IsShieldOrAmmo { get; }
+        public bool IsAmmo { get; }
+        public bool IsThrown { get; }
     }
 
     internal static class EquipmentDecisionMath
@@ -109,10 +115,26 @@ namespace EquipmentManager
                 : stats.ProtectionTotal;
         }
 
-        public static bool StrictlyBeatsWeapon(WeaponStats candidate, WeaponStats current)
+        public static bool StrictlyBeatsWeapon(
+            WeaponStats candidate,
+            WeaponStats current,
+            ProjectileUpgradePreference ammoPreference = ProjectileUpgradePreference.CountAndDamage,
+            ProjectileUpgradePreference throwingPreference = ProjectileUpgradePreference.CountAndDamage,
+            bool ignoreThrowingMeleeStats = true)
         {
             if (!candidate.IsValid || !current.IsValid) return false;
             if (candidate.WeaponClass != current.WeaponClass) return false;
+            if (candidate.IsAmmo || current.IsAmmo)
+            {
+                return candidate.IsAmmo && current.IsAmmo && StrictlyBeatsProjectile(candidate, current, ammoPreference);
+            }
+
+            if (candidate.IsThrown || current.IsThrown)
+            {
+                return candidate.IsThrown &&
+                       current.IsThrown &&
+                       StrictlyBeatsThrowingWeapon(candidate, current, throwingPreference, ignoreThrowingMeleeStats);
+            }
 
             bool statsEqualOrBetter =
                 candidate.ThrustSpeed >= current.ThrustSpeed &&
@@ -143,15 +165,27 @@ namespace EquipmentManager
             return (candidate.Flags & current.Flags) == current.Flags;
         }
 
-        public static float GetWeaponScore(WeaponStats stats)
+        public static float GetWeaponScore(
+            WeaponStats stats,
+            ProjectileUpgradePreference ammoPreference = ProjectileUpgradePreference.CountAndDamage,
+            ProjectileUpgradePreference throwingPreference = ProjectileUpgradePreference.CountAndDamage,
+            bool ignoreThrowingMeleeStats = true)
         {
             if (!stats.IsValid) return -9999f;
+            if (stats.IsAmmo)
+            {
+                return GetProjectileScore(stats, ammoPreference);
+            }
+
+            if (stats.IsThrown)
+            {
+                float projectileScore = GetProjectileScore(stats, throwingPreference);
+                return ignoreThrowingMeleeStats ? projectileScore : projectileScore + GetMeleeWeaponScore(stats);
+            }
+
             if (stats.IsMelee)
             {
-                return stats.ThrustDamage * stats.ThrustSpeed * 0.01f +
-                       stats.SwingDamage * stats.SwingSpeed * 0.01f +
-                       stats.Handling * 10f +
-                       stats.WeaponLength;
+                return GetMeleeWeaponScore(stats);
             }
 
             if (stats.IsRanged)
@@ -165,6 +199,63 @@ namespace EquipmentManager
             }
 
             return 0f;
+        }
+
+        private static bool StrictlyBeatsThrowingWeapon(
+            WeaponStats candidate,
+            WeaponStats current,
+            ProjectileUpgradePreference throwingPreference,
+            bool ignoreMeleeStats)
+        {
+            if (!StrictlyBeatsProjectile(candidate, current, throwingPreference)) return false;
+            if (ignoreMeleeStats) return true;
+
+            return candidate.ThrustSpeed >= current.ThrustSpeed &&
+                   candidate.SwingSpeed >= current.SwingSpeed &&
+                   candidate.ThrustDamage >= current.ThrustDamage &&
+                   candidate.SwingDamage >= current.SwingDamage &&
+                   candidate.WeaponLength >= current.WeaponLength &&
+                   candidate.Handling >= current.Handling;
+        }
+
+        private static bool StrictlyBeatsProjectile(WeaponStats candidate, WeaponStats current, ProjectileUpgradePreference preference)
+        {
+            switch (preference)
+            {
+                case ProjectileUpgradePreference.CountOnly:
+                    return candidate.Durability > current.Durability;
+                case ProjectileUpgradePreference.DamageOnly:
+                    return candidate.MissileDamage > current.MissileDamage;
+                default:
+                    bool equalOrBetter =
+                        candidate.Durability >= current.Durability &&
+                        candidate.MissileDamage >= current.MissileDamage;
+                    bool strictlyBetter =
+                        candidate.Durability > current.Durability ||
+                        candidate.MissileDamage > current.MissileDamage;
+                    return equalOrBetter && strictlyBetter;
+            }
+        }
+
+        private static float GetProjectileScore(WeaponStats stats, ProjectileUpgradePreference preference)
+        {
+            switch (preference)
+            {
+                case ProjectileUpgradePreference.CountOnly:
+                    return stats.Durability;
+                case ProjectileUpgradePreference.DamageOnly:
+                    return stats.MissileDamage;
+                default:
+                    return stats.Durability * 10f + stats.MissileDamage;
+            }
+        }
+
+        private static float GetMeleeWeaponScore(WeaponStats stats)
+        {
+            return stats.ThrustDamage * stats.ThrustSpeed * 0.01f +
+                   stats.SwingDamage * stats.SwingSpeed * 0.01f +
+                   stats.Handling * 10f +
+                   stats.WeaponLength;
         }
 
         public static int GetCascadeIterationLimit(int slotTargetCount, int initialQueueCount)

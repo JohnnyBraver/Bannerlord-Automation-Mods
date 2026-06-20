@@ -306,14 +306,32 @@ namespace EquipmentManager
             return EquipmentComparison.GetArmorScore(eqEl, prioritizeStealth);
         }
 
-        private static bool StrictlyBeatsWeapon(EquipmentElement candidate, EquipmentElement current)
+        private static bool StrictlyBeatsWeapon(
+            EquipmentElement candidate,
+            EquipmentElement current,
+            ProjectileUpgradePreference ammoPreference,
+            ProjectileUpgradePreference throwingPreference,
+            bool ignoreThrowingMeleeStats)
         {
-            return EquipmentComparison.StrictlyBeatsWeapon(candidate, current);
+            return EquipmentComparison.StrictlyBeatsWeapon(
+                candidate,
+                current,
+                ammoPreference,
+                throwingPreference,
+                ignoreThrowingMeleeStats);
         }
 
-        private static float GetWeaponScore(EquipmentElement eqEl)
+        private static float GetWeaponScore(
+            EquipmentElement eqEl,
+            ProjectileUpgradePreference ammoPreference,
+            ProjectileUpgradePreference throwingPreference,
+            bool ignoreThrowingMeleeStats)
         {
-            return EquipmentComparison.GetWeaponScore(eqEl);
+            return EquipmentComparison.GetWeaponScore(
+                eqEl,
+                ammoPreference,
+                throwingPreference,
+                ignoreThrowingMeleeStats);
         }
 
         private static string GetSlotName(EquipmentIndex slot)
@@ -336,6 +354,7 @@ namespace EquipmentManager
             {
                 var settings = Settings.Instance;
                 if (settings == null) return;
+                if (!settings.ModEnabled || settings.AutoEquipCategorySetting == AutoEquipCategory.None) return;
 
                 var heroesToProcess = new List<Hero>();
                 heroesToProcess.Add(Hero.MainHero);
@@ -542,8 +561,17 @@ namespace EquipmentManager
                             if (targetSide == InventoryLogic.InventorySide.StealthEquipment && !item.IsStealthItem) continue;
                             if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
 
-                            bool strictlyBeats = StrictlyBeatsWeapon(candidate, currentWeapon);
-                            float score = GetWeaponScore(candidate);
+                            bool strictlyBeats = StrictlyBeatsWeapon(
+                                candidate,
+                                currentWeapon,
+                                settings.AmmoUpgradePreferenceSetting,
+                                settings.ThrowingWeaponUpgradePreferenceSetting,
+                                settings.IgnoreThrowingWeaponMeleeStats);
+                            float score = GetWeaponScore(
+                                candidate,
+                                settings.AmmoUpgradePreferenceSetting,
+                                settings.ThrowingWeaponUpgradePreferenceSetting,
+                                settings.IgnoreThrowingWeaponMeleeStats);
 
                             if (strictlyBeats)
                             {
@@ -555,7 +583,11 @@ namespace EquipmentManager
                             }
                             else
                             {
-                                float currentScore = GetWeaponScore(currentWeapon);
+                                float currentScore = GetWeaponScore(
+                                    currentWeapon,
+                                    settings.AmmoUpgradePreferenceSetting,
+                                    settings.ThrowingWeaponUpgradePreferenceSetting,
+                                    settings.IgnoreThrowingWeaponMeleeStats);
                                 if (score > currentScore && score > bestDrawbackScore)
                                 {
                                     bestDrawbackScore = score;
@@ -580,7 +612,11 @@ namespace EquipmentManager
                         // Check if drawback candidate is still better
                         if (notifications != null && bestDrawback != null)
                         {
-                            float currentScore = GetWeaponScore(currentWeapon);
+                            float currentScore = GetWeaponScore(
+                                currentWeapon,
+                                settings.AmmoUpgradePreferenceSetting,
+                                settings.ThrowingWeaponUpgradePreferenceSetting,
+                                settings.IgnoreThrowingWeaponMeleeStats);
                             if (bestDrawbackScore > currentScore)
                             {
                                 string setName = GetSetName(targetSide);
@@ -604,7 +640,16 @@ namespace EquipmentManager
                 var freedItem = cascadeQueue.Dequeue();
                 if (freedItem.Quantity <= 0) continue;
 
-                if (TryFitFreedItem(transferContext, freedItem, slotTargets, availableItems, cascadeQueue, virtualEquipment))
+                if (TryFitFreedItem(
+                    transferContext,
+                    freedItem,
+                    slotTargets,
+                    availableItems,
+                    cascadeQueue,
+                    virtualEquipment,
+                    settings.AmmoUpgradePreferenceSetting,
+                    settings.ThrowingWeaponUpgradePreferenceSetting,
+                    settings.IgnoreThrowingWeaponMeleeStats))
                 {
                     equippedCount++;
                 }
@@ -715,7 +760,10 @@ namespace EquipmentManager
             List<EquipSlotTarget> slotTargets,
             List<AvailableEquipment> availableItems,
             Queue<AvailableEquipment> cascadeQueue,
-            Dictionary<(Hero Hero, InventoryLogic.InventorySide Side, EquipmentIndex Slot), EquipmentElement> virtualEquipment)
+            Dictionary<(Hero Hero, InventoryLogic.InventorySide Side, EquipmentIndex Slot), EquipmentElement> virtualEquipment,
+            ProjectileUpgradePreference ammoPreference,
+            ProjectileUpgradePreference throwingPreference,
+            bool ignoreThrowingMeleeStats)
         {
             var candidate = freedItem.EquipmentElement;
             var item = candidate.Item;
@@ -729,7 +777,12 @@ namespace EquipmentManager
                 if (slotTarget.IsWeapon)
                 {
                     if (!CanEquipWeaponCandidate(candidate, currentEquipment, target, slotTarget.Slot)) continue;
-                    if (!StrictlyBeatsWeapon(candidate, currentEquipment)) continue;
+                    if (!StrictlyBeatsWeapon(
+                            candidate,
+                            currentEquipment,
+                            ammoPreference,
+                            throwingPreference,
+                            ignoreThrowingMeleeStats)) continue;
 
                     EquipAvailableItem(transferContext, freedItem, target, slotTarget.Slot, currentEquipment, true, availableItems, cascadeQueue, virtualEquipment);
                     SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Cascade equipped {item.Name} on {target.Hero.Name} in Weapon slot {slotTarget.Slot} ({GetSetName(target.Side)} set).");

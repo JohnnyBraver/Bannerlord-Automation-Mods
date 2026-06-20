@@ -20,6 +20,7 @@ namespace EquipmentManager
             public RequestProfile Profile;
             public float ScoreIncrease;
             public bool PrioritizeStealth;
+            public bool IsWeapon;
             public Hero Hero;
             public EquipmentIndex Slot;
         }
@@ -32,6 +33,7 @@ namespace EquipmentManager
             if (context == null) return new List<string>();
 
             var settings = Settings.Instance;
+            if (settings != null && !settings.ModEnabled) return new List<string>();
             return BuildAutomationReportLines(
                 context.Stage,
                 context.Settlement?.Name?.ToString() ?? "Settlement",
@@ -80,6 +82,8 @@ namespace EquipmentManager
         public void PrepareForAutomation(MobileParty party, Settlement settlement)
         {
             if (party == null || settlement == null) return;
+            var settings = Settings.Instance;
+            if (settings == null || !settings.ModEnabled || !settings.AutoEquipBeforeSettlementTrade) return;
 
             try
             {
@@ -98,7 +102,7 @@ namespace EquipmentManager
             if (party == null || settlement == null) return orders;
 
             var settings = Settings.Instance;
-            if (settings == null || !settings.SellUnlockedEquipment) return orders;
+            if (settings == null || !settings.ModEnabled || !settings.SellUnlockedEquipment) return orders;
             if (settings.PreventEquipmentSaleInVillages && settlement.IsVillage) return orders;
 
             var currentLogic = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(party, settlement, true);
@@ -190,7 +194,7 @@ namespace EquipmentManager
         public void SubmitAutomationRequests(AutomationRequestContext context)
         {
             var settings = Settings.Instance;
-            if (settings == null || context == null) return;
+            if (settings == null || !settings.ModEnabled || context == null) return;
 
             var party = context.Party;
             var targets = new List<Hero>();
@@ -209,14 +213,16 @@ namespace EquipmentManager
                 }
             }
 
-            if (!settings.BuyStealthGear && !settings.BuyTopArmor) return;
+            if (!settings.BuyStealthGear && !settings.BuyArmorUpgrades && !settings.BuyHandSlotWeapons) return;
 
             int playerGold = Hero.MainHero?.Gold ?? 0;
             bool canBuyStealth = settings.BuyStealthGear;
-            bool canBuyTopArmor = settings.BuyTopArmor && playerGold >= settings.BuyTopArmorGoldThreshold;
-            if (!canBuyStealth && !canBuyTopArmor) return;
+            bool canBuyArmorUpgrades = settings.BuyArmorUpgrades && playerGold >= settings.ArmorUpgradeGoldReserve;
+            bool canBuyWeapons = settings.BuyHandSlotWeapons && playerGold >= settings.BuyWeaponGoldReserve;
+            if (!canBuyStealth && !canBuyArmorUpgrades && !canBuyWeapons) return;
 
             var armorSlots = new EquipmentIndex[] { EquipmentIndex.Head, EquipmentIndex.Body, EquipmentIndex.Leg, EquipmentIndex.Gloves, EquipmentIndex.Cape };
+            var weaponSlots = new EquipmentIndex[] { EquipmentIndex.Weapon0, EquipmentIndex.Weapon1, EquipmentIndex.Weapon2, EquipmentIndex.Weapon3 };
             var potentialOrders = new List<PotentialBuyOrder>();
 
             foreach (var hero in targets)
@@ -287,8 +293,8 @@ namespace EquipmentManager
                             }
                             else
                             {
-                                if (!canBuyTopArmor) continue;
-                                if ((int)item.Tier < settings.MinTierToBuyTopArmor) continue;
+                                if (!canBuyArmorUpgrades) continue;
+                                if ((int)item.Tier < settings.MinTierToBuyArmorUpgrades) continue;
 
                                 float score = GetArmorScore(candidate);
                                 if (score > bestScore)
@@ -302,7 +308,7 @@ namespace EquipmentManager
 
                         if (foundUpgrade && bestCandidate != null)
                         {
-                            int requiredReserve = prioritizeStealth ? settings.MinimumGoldReserve : settings.BuyTopArmorGoldThreshold;
+                            int requiredReserve = prioritizeStealth ? settings.MinimumGoldReserve : settings.ArmorUpgradeGoldReserve;
                             float currentScore = prioritizeStealth ? GetStealthScore(currentArmor) : GetArmorScore(currentArmor);
                             float scoreIncrease = bestScore - currentScore;
 
@@ -311,12 +317,88 @@ namespace EquipmentManager
                                 Candidate = bestCandidate,
                                 Price = bestCandidate.UnitPrice,
                                 ExplicitGoldReserve = requiredReserve,
-                                Profile = prioritizeStealth ? settings.StealthGearRequestProfile : settings.TopArmorRequestProfile,
+                                Profile = prioritizeStealth ? settings.StealthGearRequestProfile : settings.ArmorUpgradeRequestProfile,
                                 ScoreIncrease = scoreIncrease,
                                 PrioritizeStealth = prioritizeStealth,
+                                IsWeapon = false,
                                 Hero = hero,
                                 Slot = slot
                             });
+                        }
+                    }
+
+                    if (canBuyWeapons && setIndex != 2)
+                    {
+                        foreach (var slot in weaponSlots)
+                        {
+                            var currentWeapon = equipment[slot];
+                            InventoryItemView? bestCandidate = null;
+                            float currentEquippedScore = currentWeapon.IsEmpty
+                                ? -9999f
+                                : EquipmentComparison.GetWeaponScore(
+                                    currentWeapon,
+                                    settings.AmmoUpgradePreferenceSetting,
+                                    settings.ThrowingWeaponUpgradePreferenceSetting,
+                                    settings.IgnoreThrowingWeaponMeleeStats);
+                            float currentInventoryScore = GetBestWeaponScoreInInventory(context.PlayerInventory, slot, side, settings);
+                            float bestScore = Math.Max(currentEquippedScore, currentInventoryScore);
+                            bool foundUpgrade = false;
+
+                            for (int i = 0; i < context.MerchantInventory.Weapons.Count; i++)
+                            {
+                                var marketItem = context.MerchantInventory.Weapons[i];
+                                if (marketItem.Quantity <= 0) continue;
+
+                                var candidate = marketItem.EquipmentElement;
+                                var item = marketItem.Item;
+
+                                if (!IsHandSlotWeaponBuyCandidate(candidate, settings)) continue;
+                                if (side == InventoryLogic.InventorySide.CivilianEquipment && !item.IsCivilian) continue;
+                                if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
+
+                                float score = EquipmentComparison.GetWeaponScore(
+                                    candidate,
+                                    settings.AmmoUpgradePreferenceSetting,
+                                    settings.ThrowingWeaponUpgradePreferenceSetting,
+                                    settings.IgnoreThrowingWeaponMeleeStats);
+                                bool strictUpgrade = !currentWeapon.IsEmpty && EquipmentComparison.StrictlyBeatsWeapon(
+                                    candidate,
+                                    currentWeapon,
+                                    settings.AmmoUpgradePreferenceSetting,
+                                    settings.ThrowingWeaponUpgradePreferenceSetting,
+                                    settings.IgnoreThrowingWeaponMeleeStats);
+                                if (strictUpgrade || score > bestScore)
+                                {
+                                    bestScore = score;
+                                    bestCandidate = marketItem;
+                                    foundUpgrade = true;
+                                }
+                            }
+
+                            if (foundUpgrade && bestCandidate != null)
+                            {
+                                float currentScore = currentWeapon.IsEmpty
+                                    ? 0f
+                                    : EquipmentComparison.GetWeaponScore(
+                                        currentWeapon,
+                                        settings.AmmoUpgradePreferenceSetting,
+                                        settings.ThrowingWeaponUpgradePreferenceSetting,
+                                        settings.IgnoreThrowingWeaponMeleeStats);
+                                float scoreIncrease = Math.Max(1f, bestScore - currentScore);
+
+                                potentialOrders.Add(new PotentialBuyOrder
+                                {
+                                    Candidate = bestCandidate,
+                                    Price = bestCandidate.UnitPrice,
+                                    ExplicitGoldReserve = settings.BuyWeaponGoldReserve,
+                                    Profile = settings.WeaponRequestProfile,
+                                    ScoreIncrease = scoreIncrease,
+                                    PrioritizeStealth = false,
+                                    IsWeapon = true,
+                                    Hero = hero,
+                                    Slot = slot
+                                });
+                            }
                         }
                     }
                 }
@@ -325,25 +407,45 @@ namespace EquipmentManager
             // Submit candidates in preference order; Core buys the best affordable one.
             if (potentialOrders.Count > 0)
             {
-                var requestGroups = EquipmentMarketRequestPlanner.BuildRequestGroups(
-                    potentialOrders.Select(o => new EquipmentMarketCandidateOrder(
-                        o.Candidate,
-                        o.ExplicitGoldReserve,
-                        o.Profile,
-                        o.ScoreIncrease)),
+                SubmitPotentialBuyOrders(
+                    potentialOrders.Where(o => !o.IsWeapon),
+                    Math.Max(1, settings.MaxArmorUpgradesPerVisit),
+                    "armor");
+                SubmitPotentialBuyOrders(
+                    potentialOrders.Where(o => o.IsWeapon),
+                    Math.Max(1, settings.MaxHandSlotWeaponUpgradesPerVisit),
+                    "weapon");
+            }
+        }
+
+        private static void SubmitPotentialBuyOrders(
+            IEnumerable<PotentialBuyOrder> orders,
+            int purchaseCount,
+            string label)
+        {
+            var potentialOrders = orders.ToList();
+            if (potentialOrders.Count == 0) return;
+
+            var requestGroups = EquipmentMarketRequestPlanner.BuildRequestGroups(
+                potentialOrders.Select(o => new EquipmentMarketCandidateOrder(
+                    o.Candidate,
+                    o.ExplicitGoldReserve,
+                    o.Profile,
+                    o.ScoreIncrease)),
+                "EquipmentManager",
+                purchaseCount);
+
+            foreach (var requestGroup in requestGroups)
+            {
+                var bestOrder = potentialOrders
+                    .Where(o => o.Candidate.SnapshotId == requestGroup.TopCandidate.SnapshotId)
+                    .OrderByDescending(o => o.ScoreIncrease)
+                    .First();
+
+                AutomationRegistry.RegisterRequest(requestGroup.Request);
+                SettlementAutomationCore.Helpers.Logger.WriteLog(
                     "EquipmentManager",
-                    1);
-
-                foreach (var requestGroup in requestGroups)
-                {
-                    var bestOrder = potentialOrders
-                        .Where(o => o.Candidate.SnapshotId == requestGroup.TopCandidate.SnapshotId)
-                        .OrderByDescending(o => o.ScoreIncrease)
-                        .First();
-
-                    AutomationRegistry.RegisterRequest(requestGroup.Request);
-                    SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Requested Auto-Buy candidates (Limit 1 per profile/reserve group): top choice {bestOrder.Candidate.Item.Name} as upgrade for {bestOrder.Hero.Name} ({bestOrder.Slot} slot). Candidates: {requestGroup.CandidateCount}. Profile: {requestGroup.Profile}. Reserve: {requestGroup.ExplicitGoldReserve} denars. Price seen: {bestOrder.Price} denars. Score Increase: {requestGroup.TopScoreIncrease:F1}");
-                }
+                    $"Requested Auto-Buy {label} candidates (Limit {purchaseCount} per profile/reserve group): selected upgrade {bestOrder.Candidate.Item.Name} for {bestOrder.Hero.Name} ({GetUpgradeSlotLabel(bestOrder.Slot)}). Candidates: {requestGroup.CandidateCount}. Profile: {requestGroup.Profile}. Reserve: {requestGroup.ExplicitGoldReserve} denars. Price seen: {bestOrder.Price} denars. Score Increase: {requestGroup.TopScoreIncrease:F1}");
             }
         }
 
@@ -381,6 +483,94 @@ namespace EquipmentManager
                 }
             }
             return bestScore;
+        }
+
+        private static float GetBestWeaponScoreInInventory(CategorizedInventoryView playerInventory, EquipmentIndex slot, InventoryLogic.InventorySide side, Settings settings)
+        {
+            float bestScore = -9999f;
+            var playerElements = playerInventory.Weapons;
+            for (int i = 0; i < playerElements.Count; i++)
+            {
+                var rosterElement = playerElements[i];
+                if (rosterElement.Quantity <= 0) continue;
+
+                var eqEl = rosterElement.EquipmentElement;
+                var item = rosterElement.Item;
+
+                if (!IsHandSlotWeaponBuyCandidate(eqEl, settings)) continue;
+                if (side == InventoryLogic.InventorySide.CivilianEquipment && !item.IsCivilian) continue;
+                if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
+
+                float score = EquipmentComparison.GetWeaponScore(
+                    eqEl,
+                    settings.AmmoUpgradePreferenceSetting,
+                    settings.ThrowingWeaponUpgradePreferenceSetting,
+                    settings.IgnoreThrowingWeaponMeleeStats);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                }
+            }
+            return bestScore;
+        }
+
+        internal static bool IsHandSlotWeaponBuyCandidate(EquipmentElement equipmentElement, Settings settings)
+        {
+            var item = equipmentElement.Item;
+            if (item == null) return false;
+            var weapon = item.PrimaryWeapon;
+            if (weapon == null) return false;
+            if (weapon.IsAmmo) return false;
+
+            if (weapon.IsShield || item.ItemType == ItemObject.ItemTypeEnum.Shield)
+            {
+                return settings.BuyShieldUpgrades;
+            }
+
+            switch (item.ItemType)
+            {
+                case ItemObject.ItemTypeEnum.OneHandedWeapon:
+                    return settings.BuyOneHandedWeaponUpgrades;
+                case ItemObject.ItemTypeEnum.TwoHandedWeapon:
+                    return settings.BuyTwoHandedWeaponUpgrades;
+                case ItemObject.ItemTypeEnum.Polearm:
+                    return settings.BuyPolearmUpgrades;
+                case ItemObject.ItemTypeEnum.Thrown:
+                    return settings.BuyThrowingWeaponUpgrades;
+                case ItemObject.ItemTypeEnum.Bow:
+                    return settings.BuyBowUpgrades;
+                case ItemObject.ItemTypeEnum.Crossbow:
+                    return settings.BuyCrossbowUpgrades;
+                default:
+                    return false;
+            }
+        }
+
+        internal static string GetUpgradeSlotLabel(EquipmentIndex slot)
+        {
+            switch (slot)
+            {
+                case EquipmentIndex.Head:
+                    return "Head";
+                case EquipmentIndex.Body:
+                    return "Torso";
+                case EquipmentIndex.Leg:
+                    return "Legs";
+                case EquipmentIndex.Gloves:
+                    return "Gloves";
+                case EquipmentIndex.Cape:
+                    return "Cape/Shoulders";
+                case EquipmentIndex.Weapon0:
+                    return "Weapon 1";
+                case EquipmentIndex.Weapon1:
+                    return "Weapon 2";
+                case EquipmentIndex.Weapon2:
+                    return "Weapon 3";
+                case EquipmentIndex.Weapon3:
+                    return "Weapon 4";
+                default:
+                    return slot.ToString();
+            }
         }
 
         public static bool IsUpgradeForAnyTarget(EquipmentElement eqEl, List<Hero> targets, Settings settings)
@@ -451,9 +641,22 @@ namespace EquipmentManager
                             var currentWeapon = equipment[slot];
                             if (!EquipmentComparison.ShouldEvaluateWeaponSlot(currentWeapon, side)) continue;
 
-                            float candidateScore = EquipmentComparison.GetWeaponScore(eqEl);
-                            float currentScore = EquipmentComparison.GetWeaponScore(currentWeapon);
-                            if (EquipmentComparison.StrictlyBeatsWeapon(eqEl, currentWeapon) || candidateScore > currentScore) return true;
+                            float candidateScore = EquipmentComparison.GetWeaponScore(
+                                eqEl,
+                                settings.AmmoUpgradePreferenceSetting,
+                                settings.ThrowingWeaponUpgradePreferenceSetting,
+                                settings.IgnoreThrowingWeaponMeleeStats);
+                            float currentScore = EquipmentComparison.GetWeaponScore(
+                                currentWeapon,
+                                settings.AmmoUpgradePreferenceSetting,
+                                settings.ThrowingWeaponUpgradePreferenceSetting,
+                                settings.IgnoreThrowingWeaponMeleeStats);
+                            if (EquipmentComparison.StrictlyBeatsWeapon(
+                                    eqEl,
+                                    currentWeapon,
+                                    settings.AmmoUpgradePreferenceSetting,
+                                    settings.ThrowingWeaponUpgradePreferenceSetting,
+                                    settings.IgnoreThrowingWeaponMeleeStats) || candidateScore > currentScore) return true;
                         }
                     }
                 }

@@ -124,6 +124,8 @@ namespace EquipmentManager
             {
                 var party = MobileParty.MainParty;
                 if (party == null) return;
+                var settings = Settings.Instance;
+                if (settings == null || !settings.ModEnabled || !settings.AutoEquipAfterSettlementPurchases) return;
 
                 string settlementName = settlement != null ? settlement.Name.ToString() : "Unknown";
                 SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"[Post-Transaction] Distributing newly bought gear to player & companions in {settlementName}.");
@@ -150,6 +152,12 @@ namespace EquipmentManager
         private void OnMapEventEnded(MapEvent mapEvent)
         {
             if (mapEvent == null) return;
+            var settings = Settings.Instance;
+            if (settings == null || !settings.ModEnabled || !settings.AutoEquipAfterBattleLoot)
+            {
+                _postLootTrigger.ClearPending();
+                return;
+            }
             try
             {
                 _postLootTrigger.OnBattleEnded(
@@ -166,6 +174,12 @@ namespace EquipmentManager
         {
             try
             {
+                var settings = Settings.Instance;
+                if (settings == null || !settings.ModEnabled || !settings.AutoEquipAfterBattleLoot)
+                {
+                    _postLootTrigger.ClearPending();
+                    return;
+                }
                 if (party == null || party != MobileParty.MainParty) return;
                 if (!_postLootTrigger.OnItemsLooted(true, ContainsEquipment(items))) return;
 
@@ -182,6 +196,12 @@ namespace EquipmentManager
             try
             {
                 if (!_postLootTrigger.ShouldRunOnTick()) return;
+                var settings = Settings.Instance;
+                if (settings == null || !settings.ModEnabled || !settings.AutoEquipAfterBattleLoot)
+                {
+                    _postLootTrigger.ClearPending();
+                    return;
+                }
                 var party = MobileParty.MainParty;
                 if (party == null) return;
 

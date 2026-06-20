@@ -64,6 +64,64 @@ namespace EquipmentManager.Tests
             Assert.True(EquipmentDecisionMath.StrictlyBeatsWeapon(supersetCapability, current));
         }
 
+        [Fact]
+        public void StrictlyBeatsWeapon_ForAmmoDefaultRequiresCountAndDamage()
+        {
+            var current = Ammo(durability: 20, missileDamage: 4);
+            var moreAmmoLessDamage = Ammo(durability: 25, missileDamage: 3);
+            var moreDamageSameAmmo = Ammo(durability: 20, missileDamage: 5);
+
+            Assert.False(EquipmentDecisionMath.StrictlyBeatsWeapon(moreAmmoLessDamage, current, ProjectileUpgradePreference.CountAndDamage));
+            Assert.True(EquipmentDecisionMath.StrictlyBeatsWeapon(moreDamageSameAmmo, current, ProjectileUpgradePreference.CountAndDamage));
+            Assert.True(EquipmentDecisionMath.GetWeaponScore(moreAmmoLessDamage, ProjectileUpgradePreference.CountAndDamage) > EquipmentDecisionMath.GetWeaponScore(current, ProjectileUpgradePreference.CountAndDamage));
+        }
+
+        [Fact]
+        public void StrictlyBeatsWeapon_ForAmmoCountOnlyIgnoresDamageDrop()
+        {
+            var current = Ammo(durability: 20, missileDamage: 4);
+            var moreAmmoLessDamage = Ammo(durability: 25, missileDamage: 3);
+
+            Assert.True(EquipmentDecisionMath.StrictlyBeatsWeapon(moreAmmoLessDamage, current, ProjectileUpgradePreference.CountOnly));
+            Assert.True(EquipmentDecisionMath.GetWeaponScore(moreAmmoLessDamage, ProjectileUpgradePreference.CountOnly) > EquipmentDecisionMath.GetWeaponScore(current, ProjectileUpgradePreference.CountOnly));
+        }
+
+        [Fact]
+        public void StrictlyBeatsWeapon_ForAmmoDamageOnlyIgnoresCountDrop()
+        {
+            var current = Ammo(durability: 20, missileDamage: 4);
+            var moreDamageLessAmmo = Ammo(durability: 15, missileDamage: 5);
+
+            Assert.True(EquipmentDecisionMath.StrictlyBeatsWeapon(moreDamageLessAmmo, current, ProjectileUpgradePreference.DamageOnly));
+            Assert.True(EquipmentDecisionMath.GetWeaponScore(moreDamageLessAmmo, ProjectileUpgradePreference.DamageOnly) > EquipmentDecisionMath.GetWeaponScore(current, ProjectileUpgradePreference.DamageOnly));
+        }
+
+        [Fact]
+        public void StrictlyBeatsWeapon_ForThrowingCountOnlyIgnoresDamageAndMeleeDropsByDefault()
+        {
+            var current = ThrowingWeapon(durability: 4, missileDamage: 50, handling: 90);
+            var moreThrowingWeapons = ThrowingWeapon(durability: 5, missileDamage: 45, handling: 70);
+
+            Assert.True(EquipmentDecisionMath.StrictlyBeatsWeapon(
+                moreThrowingWeapons,
+                current,
+                throwingPreference: ProjectileUpgradePreference.CountOnly,
+                ignoreThrowingMeleeStats: true));
+        }
+
+        [Fact]
+        public void StrictlyBeatsWeapon_ForThrowingCanRequireMeleeStats()
+        {
+            var current = ThrowingWeapon(durability: 4, missileDamage: 50, handling: 90);
+            var moreThrowingWeapons = ThrowingWeapon(durability: 5, missileDamage: 45, handling: 70);
+
+            Assert.False(EquipmentDecisionMath.StrictlyBeatsWeapon(
+                moreThrowingWeapons,
+                current,
+                throwingPreference: ProjectileUpgradePreference.CountOnly,
+                ignoreThrowingMeleeStats: false));
+        }
+
         [Theory]
         [InlineData(0, 0, 1)]
         [InlineData(15, 0, 30)]
@@ -88,7 +146,9 @@ namespace EquipmentManager.Tests
             long flags = 0b001,
             bool isMelee = true,
             bool isRanged = false,
-            bool isShieldOrAmmo = false)
+            bool isShieldOrAmmo = false,
+            bool isAmmo = false,
+            bool isThrown = false)
         {
             return new WeaponStats(
                 true,
@@ -106,7 +166,32 @@ namespace EquipmentManager.Tests
                 flags,
                 isMelee,
                 isRanged,
-                isShieldOrAmmo);
+                isShieldOrAmmo,
+                isAmmo,
+                isThrown);
+        }
+
+        private static WeaponStats Ammo(int durability, int missileDamage)
+        {
+            return Weapon(
+                weaponClass: 2,
+                missileDamage: missileDamage,
+                durability: durability,
+                isMelee: false,
+                isShieldOrAmmo: true,
+                isAmmo: true);
+        }
+
+        private static WeaponStats ThrowingWeapon(int durability, int missileDamage, int handling)
+        {
+            return Weapon(
+                weaponClass: 3,
+                missileDamage: missileDamage,
+                durability: durability,
+                handling: handling,
+                isMelee: true,
+                isRanged: true,
+                isThrown: true);
         }
     }
 }

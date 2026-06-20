@@ -23,7 +23,12 @@ namespace EquipmentManager
             return EquipmentDecisionMath.GetArmorScore(ToArmorStats(equipmentElement), prioritizeStealth);
         }
 
-        public static bool StrictlyBeatsWeapon(EquipmentElement candidate, EquipmentElement current)
+        public static bool StrictlyBeatsWeapon(
+            EquipmentElement candidate,
+            EquipmentElement current,
+            ProjectileUpgradePreference ammoPreference = ProjectileUpgradePreference.CountAndDamage,
+            ProjectileUpgradePreference throwingPreference = ProjectileUpgradePreference.CountAndDamage,
+            bool ignoreThrowingMeleeStats = true)
         {
             if (current.IsEmpty || candidate.IsEmpty) return false;
 
@@ -33,12 +38,23 @@ namespace EquipmentManager
 
             return EquipmentDecisionMath.StrictlyBeatsWeapon(
                 ToWeaponStats(candidate),
-                ToWeaponStats(current));
+                ToWeaponStats(current),
+                ammoPreference,
+                throwingPreference,
+                ignoreThrowingMeleeStats);
         }
 
-        public static float GetWeaponScore(EquipmentElement equipmentElement)
+        public static float GetWeaponScore(
+            EquipmentElement equipmentElement,
+            ProjectileUpgradePreference ammoPreference = ProjectileUpgradePreference.CountAndDamage,
+            ProjectileUpgradePreference throwingPreference = ProjectileUpgradePreference.CountAndDamage,
+            bool ignoreThrowingMeleeStats = true)
         {
-            return EquipmentDecisionMath.GetWeaponScore(ToWeaponStats(equipmentElement));
+            return EquipmentDecisionMath.GetWeaponScore(
+                ToWeaponStats(equipmentElement),
+                ammoPreference,
+                throwingPreference,
+                ignoreThrowingMeleeStats);
         }
 
         public static bool ShouldEvaluateWeaponSlot(EquipmentElement currentWeapon, InventoryLogic.InventorySide side)
@@ -117,7 +133,9 @@ namespace EquipmentManager
                 Convert.ToInt64(weapon.WeaponFlags),
                 weapon.IsMeleeWeapon,
                 weapon.IsRangedWeapon,
-                weapon.IsShield || weapon.IsAmmo);
+                weapon.IsShield || weapon.IsAmmo,
+                weapon.IsAmmo,
+                equipmentElement.Item?.ItemType == ItemObject.ItemTypeEnum.Thrown);
         }
     }
 }

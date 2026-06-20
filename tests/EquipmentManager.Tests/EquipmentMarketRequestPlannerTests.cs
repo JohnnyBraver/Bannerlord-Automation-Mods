@@ -39,6 +39,33 @@ namespace EquipmentManager.Tests
             Assert.Equal(new[] { "armor_a", "armor_b" }, groups[1].Request.MarketCandidates.Select(c => c.Item.StringId).ToArray());
         }
 
+        [Fact]
+        public void BuildRequestGroups_ForwardsConfiguredPurchaseCount()
+        {
+            var armorA = MarketItem("armor_a");
+            var armorB = MarketItem("armor_b");
+
+            var group = EquipmentMarketRequestPlanner.BuildRequestGroups(
+                new[]
+                {
+                    new EquipmentMarketCandidateOrder(armorA, 1000, RequestProfile.Luxury, 20),
+                    new EquipmentMarketCandidateOrder(armorB, 1000, RequestProfile.Luxury, 10)
+                },
+                "EquipmentManager",
+                3).Single();
+
+            Assert.Equal(3, group.Request.Quantity);
+            Assert.Equal(new[] { "armor_a", "armor_b" }, group.Request.MarketCandidates.Select(c => c.Item.StringId).ToArray());
+        }
+
+        [Theory]
+        [InlineData(TaleWorlds.Core.EquipmentIndex.Weapon0, "Weapon 1")]
+        [InlineData(TaleWorlds.Core.EquipmentIndex.Weapon1, "Weapon 2")]
+        public void GetUpgradeSlotLabel_FormatsWeaponSlots(TaleWorlds.Core.EquipmentIndex slot, string expected)
+        {
+            Assert.Equal(expected, EquipmentManagerProvider.GetUpgradeSlotLabel(slot));
+        }
+
         [Theory]
         [InlineData("blackened_hood", StealthGearPurchasePolicy.BlackenedOnly, true)]
         [InlineData("leather_hood", StealthGearPurchasePolicy.BlackenedOnly, false)]

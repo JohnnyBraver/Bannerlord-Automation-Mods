@@ -116,9 +116,24 @@ namespace EquipmentManager
         public override string ToString() => _name;
     }
 
+    public enum ProjectileUpgradePreference
+    {
+        CountAndDamage,
+        CountOnly,
+        DamageOnly
+    }
+
+    public class ProjectileUpgradePreferenceOption
+    {
+        private readonly string _name;
+        public ProjectileUpgradePreference Value { get; }
+        public ProjectileUpgradePreferenceOption(string name, ProjectileUpgradePreference value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "EquipmentManager_v3";
+        public override string Id => "EquipmentManager_v0_4";
         public override string DisplayName => "Equipment Manager";
         public override string FolderName => "EquipmentManager";
         public override string FormatType => "json";
@@ -176,6 +191,18 @@ namespace EquipmentManager
             new StealthGearPurchasePolicyOption("Any Stealth-Compatible Gear", StealthGearPurchasePolicy.AnyStealthCompatible)
         };
 
+        private static readonly IReadOnlyList<ProjectileUpgradePreferenceOption> ProjectileUpgradePreferenceOptions = new List<ProjectileUpgradePreferenceOption>
+        {
+            new ProjectileUpgradePreferenceOption("Count & Damage", ProjectileUpgradePreference.CountAndDamage),
+            new ProjectileUpgradePreferenceOption("Count Only", ProjectileUpgradePreference.CountOnly),
+            new ProjectileUpgradePreferenceOption("Damage Only", ProjectileUpgradePreference.DamageOnly)
+        };
+
+        [SettingPropertyBool("Enable Equipment Manager", RequireRestart = false,
+            HintText = "Master automation switch. When disabled, Equipment Manager will not react to settlement entry or post-battle loot. The manual inventory button still works.", Order = 0)]
+        [SettingPropertyGroup("General", GroupOrder = 4)]
+        public bool ModEnabled { get; set; } = true;
+
         [SettingPropertyBool("Auto-Equip Companions", RequireRestart = false,
             HintText = "Automatically equip companions when optimizing party equipment.", Order = 1)]
         [SettingPropertyGroup("General", GroupOrder = 4)]
@@ -186,6 +213,38 @@ namespace EquipmentManager
         [SettingPropertyGroup("General", GroupOrder = 4)]
         public Dropdown<AutoEquipCategoryOption> AutoEquipCategoryDropdown { get; set; } =
             new Dropdown<AutoEquipCategoryOption>(AutoEquipCategoryOptions, 3); // Default: Weapons & Armor
+
+        [SettingPropertyDropdown("Ammo Upgrade Preference", RequireRestart = false,
+            HintText = "Controls whether ammo upgrades prefer stack count, damage, or require both to stay equal or better.", Order = 3)]
+        [SettingPropertyGroup("General", GroupOrder = 4)]
+        public Dropdown<ProjectileUpgradePreferenceOption> AmmoUpgradePreferenceDropdown { get; set; } =
+            new Dropdown<ProjectileUpgradePreferenceOption>(ProjectileUpgradePreferenceOptions, 0);
+
+        [SettingPropertyDropdown("Throwing Weapon Upgrade Preference", RequireRestart = false,
+            HintText = "Controls whether throwing weapon upgrades prefer stack count, missile damage, or require both to stay equal or better.", Order = 4)]
+        [SettingPropertyGroup("General", GroupOrder = 4)]
+        public Dropdown<ProjectileUpgradePreferenceOption> ThrowingWeaponUpgradePreferenceDropdown { get; set; } =
+            new Dropdown<ProjectileUpgradePreferenceOption>(ProjectileUpgradePreferenceOptions, 0);
+
+        [SettingPropertyBool("Ignore Throwing Weapon Melee Stats", RequireRestart = false,
+            HintText = "If enabled, compare throwing weapons by their stack count and missile damage preference without treating melee stats as drawbacks.", Order = 5)]
+        [SettingPropertyGroup("General", GroupOrder = 4)]
+        public bool IgnoreThrowingWeaponMeleeStats { get; set; } = true;
+
+        [SettingPropertyBool("Auto-Equip Before Settlement Trade", RequireRestart = false,
+            HintText = "Run headless auto-equip before settlement automation decides what spare equipment can be sold.", Order = 6)]
+        [SettingPropertyGroup("General", GroupOrder = 4)]
+        public bool AutoEquipBeforeSettlementTrade { get; set; } = true;
+
+        [SettingPropertyBool("Auto-Equip After Settlement Purchases", RequireRestart = false,
+            HintText = "Run headless auto-equip after settlement automation buys equipment upgrades.", Order = 7)]
+        [SettingPropertyGroup("General", GroupOrder = 4)]
+        public bool AutoEquipAfterSettlementPurchases { get; set; } = true;
+
+        [SettingPropertyBool("Auto-Equip After Battle Loot", RequireRestart = false,
+            HintText = "Run headless auto-equip after post-battle loot adds equipment to the party inventory.", Order = 8)]
+        [SettingPropertyGroup("General", GroupOrder = 4)]
+        public bool AutoEquipAfterBattleLoot { get; set; } = true;
 
 
 
@@ -251,46 +310,107 @@ namespace EquipmentManager
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public bool BuyStealthGear { get; set; } = false;
 
-        [SettingPropertyBool("Buy Top Armor Upgrades", RequireRestart = false,
-            HintText = "Automatically buy premium armor upgrades from merchants if you are very wealthy.", Order = 1)]
+        [SettingPropertyBool("Buy Armor Upgrades", RequireRestart = false,
+            HintText = "Automatically buy armor upgrades from merchants if your gold reserve and tier settings allow it.", Order = 1)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
-        public bool BuyTopArmor { get; set; } = false;
+        public bool BuyArmorUpgrades { get; set; } = false;
 
-        [SettingPropertyInteger("Top Armor Gold Reserve", 100000, 5000000, "0", RequireRestart = false,
-            HintText = "Only buy premium armor if the purchase leaves at least this much gold. Requests are only submitted once current gold is at or above this reserve. Default: 1M.", Order = 4)]
+        [SettingPropertyBool("Buy Hand-Slot Weapon Upgrades", RequireRestart = false,
+            HintText = "Automatically buy direct upgrades for equipped battle/civilian hand-slot weapons. Stealth slots are not included.", Order = 3)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
-        public int BuyTopArmorGoldThreshold { get; set; } = 1000000;
+        public bool BuyHandSlotWeapons { get; set; } = false;
 
-        [SettingPropertyInteger("Min Tier to Buy Top Armor", 1, 6, "0", RequireRestart = false,
-            HintText = "Only buy premium armor upgrades if the item tier is at or above this level (e.g. Tier 5 or 6). Default: 5.", Order = 5)]
+        [SettingPropertyBool("Buy One-Handed Weapon Upgrades", RequireRestart = false,
+            HintText = "Allow hand-slot auto-buy to request one-handed melee weapon upgrades.", Order = 1)]
+        [SettingPropertyGroup("Weapon Auto-Buy Categories", GroupOrder = 3)]
+        public bool BuyOneHandedWeaponUpgrades { get; set; } = true;
+
+        [SettingPropertyBool("Buy Two-Handed Weapon Upgrades", RequireRestart = false,
+            HintText = "Allow hand-slot auto-buy to request two-handed melee weapon upgrades.", Order = 2)]
+        [SettingPropertyGroup("Weapon Auto-Buy Categories", GroupOrder = 3)]
+        public bool BuyTwoHandedWeaponUpgrades { get; set; } = true;
+
+        [SettingPropertyBool("Buy Polearm Upgrades", RequireRestart = false,
+            HintText = "Allow hand-slot auto-buy to request polearm upgrades.", Order = 3)]
+        [SettingPropertyGroup("Weapon Auto-Buy Categories", GroupOrder = 3)]
+        public bool BuyPolearmUpgrades { get; set; } = true;
+
+        [SettingPropertyBool("Buy Throwing Weapon Upgrades", RequireRestart = false,
+            HintText = "Allow hand-slot auto-buy to request throwing weapon upgrades.", Order = 4)]
+        [SettingPropertyGroup("Weapon Auto-Buy Categories", GroupOrder = 3)]
+        public bool BuyThrowingWeaponUpgrades { get; set; } = true;
+
+        [SettingPropertyBool("Buy Bow Upgrades", RequireRestart = false,
+            HintText = "Allow hand-slot auto-buy to request bow upgrades. Arrows are still left to normal inventory management.", Order = 5)]
+        [SettingPropertyGroup("Weapon Auto-Buy Categories", GroupOrder = 3)]
+        public bool BuyBowUpgrades { get; set; } = true;
+
+        [SettingPropertyBool("Buy Crossbow Upgrades", RequireRestart = false,
+            HintText = "Allow hand-slot auto-buy to request crossbow upgrades. Bolts are still left to normal inventory management.", Order = 6)]
+        [SettingPropertyGroup("Weapon Auto-Buy Categories", GroupOrder = 3)]
+        public bool BuyCrossbowUpgrades { get; set; } = true;
+
+        [SettingPropertyBool("Buy Shield Upgrades", RequireRestart = false,
+            HintText = "Allow hand-slot auto-buy to request shield upgrades.", Order = 7)]
+        [SettingPropertyGroup("Weapon Auto-Buy Categories", GroupOrder = 3)]
+        public bool BuyShieldUpgrades { get; set; } = true;
+
+        [SettingPropertyInteger("Armor Upgrade Gold Reserve", 100000, 5000000, "0", RequireRestart = false,
+            HintText = "Only buy armor upgrades if the purchase leaves at least this much gold. Requests are only submitted once current gold is at or above this reserve. Default: 1M.", Order = 4)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
-        public int MinTierToBuyTopArmor { get; set; } = 5;
+        public int ArmorUpgradeGoldReserve { get; set; } = 1000000;
+
+        [SettingPropertyInteger("Min Tier to Buy Armor Upgrades", 1, 6, "0", RequireRestart = false,
+            HintText = "Only buy armor upgrades if the item tier is at or above this level (e.g. Tier 5 or 6). Default: 5.", Order = 5)]
+        [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
+        public int MinTierToBuyArmorUpgrades { get; set; } = 5;
+
+        [SettingPropertyInteger("Weapon Gold Reserve", 1000, 5000000, "0", RequireRestart = false,
+            HintText = "Never let your gold drop below this amount when buying hand-slot weapon upgrades. Default: 100,000 denars.", Order = 6)]
+        [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
+        public int BuyWeaponGoldReserve { get; set; } = 100000;
+
+        [SettingPropertyInteger("Max Armor Upgrades per Visit", 1, 10, RequireRestart = false,
+            HintText = "Maximum armor upgrades EquipmentManager may buy during one settlement automation cycle. Default: 1.", Order = 7)]
+        [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
+        public int MaxArmorUpgradesPerVisit { get; set; } = 1;
+
+        [SettingPropertyInteger("Max Hand-Slot Weapon Upgrades per Visit", 1, 10, RequireRestart = false,
+            HintText = "Maximum hand-slot weapon upgrades EquipmentManager may buy during one settlement automation cycle. Default: 1.", Order = 8)]
+        [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
+        public int MaxHandSlotWeaponUpgradesPerVisit { get; set; } = 1;
 
         [SettingPropertyDropdown("Buy Upgrades For", RequireRestart = false,
-            HintText = "Player Only: buy direct upgrades only for Main Hero (companions can still get hand-me-downs). Player & Companions: buy direct upgrades for all.", Order = 3)]
+            HintText = "Player Only: buy direct upgrades only for Main Hero (companions can still get hand-me-downs). Player & Companions: buy direct upgrades for all.", Order = 14)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public Dropdown<BuyEquipmentTargetOption> BuyEquipmentTargetDropdown { get; set; } =
             new Dropdown<BuyEquipmentTargetOption>(BuyEquipmentTargetOptions, 0); // Default: Player Only (index 0)
 
         [SettingPropertyInteger("Stealth Gear Gold Reserve", 1000, 100000, "0", RequireRestart = false,
-            HintText = "Never let your gold drop below this amount when buying stealth gear. Default: 10,000 denars.", Order = 6)]
+            HintText = "Never let your gold drop below this amount when buying stealth gear. Default: 10,000 denars.", Order = 9)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public int MinimumGoldReserve { get; set; } = 10000;
 
         [SettingPropertyDropdown("Stealth Gear Purchase Policy", RequireRestart = false,
-            HintText = "Controls which stealth-compatible armor can be auto-bought for sneaking slots. Default: Blackened Gear Only.", Order = 7)]
+            HintText = "Controls which stealth-compatible armor can be auto-bought for sneaking slots. Default: Blackened Gear Only.", Order = 10)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public Dropdown<StealthGearPurchasePolicyOption> StealthGearPurchasePolicyDropdown { get; set; } =
             new Dropdown<StealthGearPurchasePolicyOption>(StealthGearPurchasePolicyOptions, 0);
 
-        [SettingPropertyDropdown("Top Armor Spend Mode", RequireRestart = false,
-            HintText = "Controls when premium armor upgrade requests run compared to other item requests.", Order = 8)]
+        [SettingPropertyDropdown("Armor Upgrade Spend Mode", RequireRestart = false,
+            HintText = "Controls when armor upgrade requests run compared to other item requests.", Order = 11)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
-        public Dropdown<RequestProfileOption> TopArmorSpendModeDropdown { get; set; } =
+        public Dropdown<RequestProfileOption> ArmorUpgradeSpendModeDropdown { get; set; } =
+            new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Luxury));
+
+        [SettingPropertyDropdown("Hand-Slot Weapon Upgrade Spend Mode", RequireRestart = false,
+            HintText = "Controls when hand-slot weapon upgrade requests run compared to other item requests.", Order = 12)]
+        [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
+        public Dropdown<RequestProfileOption> WeaponSpendModeDropdown { get; set; } =
             new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Luxury));
 
         [SettingPropertyDropdown("Stealth Gear Spend Mode", RequireRestart = false,
-            HintText = "Controls when stealth gear upgrade requests run compared to other item requests.", Order = 9)]
+            HintText = "Controls when stealth gear upgrade requests run compared to other item requests.", Order = 13)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 2)]
         public Dropdown<RequestProfileOption> StealthGearSpendModeDropdown { get; set; } =
             new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Luxury));
@@ -314,11 +434,14 @@ namespace EquipmentManager
 
         // Compatibility wrappers
         public AutoEquipCategory AutoEquipCategorySetting => AutoEquipCategoryDropdown.SelectedValue.Value;
+        public ProjectileUpgradePreference AmmoUpgradePreferenceSetting => AmmoUpgradePreferenceDropdown.SelectedValue.Value;
+        public ProjectileUpgradePreference ThrowingWeaponUpgradePreferenceSetting => ThrowingWeaponUpgradePreferenceDropdown.SelectedValue.Value;
         public KeepDonationCategory KeepDonationCategorySetting => KeepDonationCategoryDropdown.SelectedValue.Value;
 
         public LoadoutPriority LoadoutPrioritySetting => LoadoutPriorityDropdown.SelectedValue.Value;
         public BuyEquipmentTarget BuyEquipmentTargetSetting => BuyEquipmentTargetDropdown.SelectedValue.Value;
-        public RequestProfile TopArmorRequestProfile => TopArmorSpendModeDropdown.SelectedValue.Value;
+        public RequestProfile ArmorUpgradeRequestProfile => ArmorUpgradeSpendModeDropdown.SelectedValue.Value;
+        public RequestProfile WeaponRequestProfile => WeaponSpendModeDropdown.SelectedValue.Value;
         public RequestProfile StealthGearRequestProfile => StealthGearSpendModeDropdown.SelectedValue.Value;
         public StealthGearPurchasePolicy StealthGearPurchasePolicySetting => StealthGearPurchasePolicyDropdown.SelectedValue.Value;
         public EquipmentSaleReportDetailMode EquipmentSaleReportDetail => EquipmentSaleReportDetailDropdown.SelectedValue.Value;
