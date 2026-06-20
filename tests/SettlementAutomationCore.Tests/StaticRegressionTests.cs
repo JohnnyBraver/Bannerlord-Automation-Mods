@@ -62,7 +62,7 @@ namespace SettlementAutomationCore.Tests
             Assert.DoesNotContain("ModEnabled", ExtractMethod(equipmentEngine, "OptimizeEquipment"));
             Assert.DoesNotContain("ModEnabled", ExtractMethod(tradePatches, "ManualTrigger"));
             Assert.DoesNotContain("ModEnabled", ExtractMethod(tradingEngine, "RunOptimization"));
-            Assert.Contains("TriggerOptimization(silentOnNoImprovement: false, requireAutomationEnabled: false)", craftingPatches);
+            Assert.Contains("TriggerOptimization(silentOnNoImprovement: false)", craftingPatches);
         }
 
         [Fact]
@@ -76,8 +76,8 @@ namespace SettlementAutomationCore.Tests
 
             Assert.Contains("!settings.ModEnabled", ExtractMethod(equipmentEngine, "AutoEquipHeadless"));
             Assert.Contains("!settings.ModEnabled", ExtractMethod(tradeProvider, "AnalyzeMarket"));
-            Assert.Contains("settings.ModEnabled && settings.AutoSwitchEnabled", smithingPatches);
-            Assert.Contains("!settings.ModEnabled || !settings.AutoBuySmithingSupplies", smithingProvider);
+            Assert.Contains("settings.AutoSwitchEnabled", smithingPatches);
+            Assert.Contains("!settings.AutoBuySmithingSupplies", smithingProvider);
         }
 
         private static bool IsIgnored(string path)

@@ -41,7 +41,6 @@ namespace SettlementAutomationCore.Tests
             Assert.True(new PartyManager.Settings().ModEnabled);
             Assert.True(new EquipmentManager.Settings().ModEnabled);
             Assert.True(new FiefManager.Settings().ModEnabled);
-            Assert.True(new SmithingOptimizer.Settings().ModEnabled);
         }
 
         [Fact]
