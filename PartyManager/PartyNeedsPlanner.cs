@@ -16,6 +16,7 @@ namespace PartyManager
         public RequestProfile FoodVarietyProfile { get; set; }
         public RequestProfile FoodBufferProfile { get; set; }
         public RequestProfile RidingMountProfile { get; set; }
+        public RequestProfile UpgradeMountProfile { get; set; }
         public UpgradeMountPurchaseMode UpgradeMountPurchaseMode { get; set; }
         public MountPriceReferenceMode MountPriceReferenceMode { get; set; }
 
@@ -32,6 +33,7 @@ namespace PartyManager
                 FoodVarietyProfile = settings.FoodVarietyRequestProfile,
                 FoodBufferProfile = settings.FoodBufferRequestProfile,
                 RidingMountProfile = settings.RidingMountRequestProfile,
+                UpgradeMountProfile = settings.UpgradeMountRequestProfile,
                 UpgradeMountPurchaseMode = settings.UpgradeMountPurchaseSetting,
                 MountPriceReferenceMode = settings.MountPriceReferenceSetting
             };
@@ -153,7 +155,7 @@ namespace PartyManager
                         RequestType.ItemCategory,
                         "Horse",
                         upgradeTarget,
-                        options.RidingMountProfile,
+                        options.UpgradeMountProfile,
                         CalculateMountPriority(upgradeTarget, snapshot.UpgradeMounts),
                         itemCategoryIds: new[] { "war_horse" },
                         priceReference: GetMountPriceReference(options.MountPriceReferenceMode)));

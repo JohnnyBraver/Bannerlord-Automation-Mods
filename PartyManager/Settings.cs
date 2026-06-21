@@ -403,14 +403,20 @@ namespace PartyManager
         public Dropdown<RequestProfileOption> RidingMountSpendModeDropdown { get; set; } =
             new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Routine));
 
+        [SettingPropertyDropdown("Upgrade Mount Spend Mode", RequireRestart = false,
+            HintText = "Controls when troop upgrade mount requests run compared to other item requests. Default: Opportunistic.", Order = 10)]
+        [SettingPropertyGroup("Party Needs", GroupOrder = 2)]
+        public Dropdown<RequestProfileOption> UpgradeMountSpendModeDropdown { get; set; } =
+            new Dropdown<RequestProfileOption>(RequestProfileOptions.All, RequestProfileOptions.IndexOf(RequestProfile.Opportunistic));
+
         [SettingPropertyDropdown("Upgrade Mount Buying", RequireRestart = false,
-            HintText = "Control whether the party buys higher-tier mounts for troop upgrades. Ordinary riding mounts for infantry are still handled by Auto-Buy Riding Mounts.", Order = 10)]
+            HintText = "Control whether the party buys higher-tier mounts for troop upgrades. Ordinary riding mounts for infantry are still handled by Auto-Buy Riding Mounts.", Order = 11)]
         [SettingPropertyGroup("Party Needs", GroupOrder = 2)]
         public Dropdown<UpgradeMountPurchaseOption> UpgradeMountBuyingDropdown { get; set; } =
             new Dropdown<UpgradeMountPurchaseOption>(UpgradeMountPurchaseOptions, 0);
 
         [SettingPropertyDropdown("Mount Price Baseline", RequireRestart = false,
-            HintText = "Choose whether mount price limits compare against the exact horse value or the average value of matching mount categories.", Order = 11)]
+            HintText = "Choose whether mount price limits compare against the exact horse value or the average value of matching mount categories.", Order = 12)]
         [SettingPropertyGroup("Party Needs", GroupOrder = 2)]
         public Dropdown<MountPriceReferenceOption> MountPriceReferenceDropdown { get; set; } =
             new Dropdown<MountPriceReferenceOption>(MountPriceReferenceOptions, 0);
@@ -646,6 +652,7 @@ namespace PartyManager
         public RequestProfile FoodVarietyRequestProfile => FoodVarietySpendModeDropdown.SelectedValue.Value;
         public RequestProfile FoodBufferRequestProfile => FoodBufferSpendModeDropdown.SelectedValue.Value;
         public RequestProfile RidingMountRequestProfile => RidingMountSpendModeDropdown.SelectedValue.Value;
+        public RequestProfile UpgradeMountRequestProfile => UpgradeMountSpendModeDropdown.SelectedValue.Value;
         public UpgradeMountPurchaseMode UpgradeMountPurchaseSetting => UpgradeMountBuyingDropdown.SelectedValue.Value;
         public MountPriceReferenceMode MountPriceReferenceSetting => MountPriceReferenceDropdown.SelectedValue.Value;
         public PrisonerKeepPolicy NoblePrisonerKeepPolicySetting => NoblePrisonerKeepPolicyDropdown.SelectedValue.Value;

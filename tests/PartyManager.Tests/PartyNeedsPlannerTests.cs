@@ -119,6 +119,7 @@ namespace PartyManager.Tests
 
             Assert.Equal("Horse", request.TargetId);
             Assert.Equal(8, request.Quantity);
+            Assert.Equal(RequestProfile.Opportunistic, request.Profile);
             Assert.Equal(new[] { "war_horse" }, request.ItemCategoryIds.ToArray());
             Assert.Equal(RequestPriceReference.CategoryAverageValue, request.PriceReference);
         }
@@ -158,6 +159,7 @@ namespace PartyManager.Tests
                 FoodVarietyProfile = RequestProfile.Essential,
                 FoodBufferProfile = RequestProfile.Routine,
                 RidingMountProfile = RequestProfile.Routine,
+                UpgradeMountProfile = RequestProfile.Opportunistic,
                 UpgradeMountPurchaseMode = UpgradeMountPurchaseMode.Never,
                 MountPriceReferenceMode = MountPriceReferenceMode.MountCategoryAverage
             };
