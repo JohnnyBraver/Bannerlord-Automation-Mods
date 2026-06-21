@@ -621,9 +621,15 @@ namespace PartyManager
         [SettingPropertyGroup("Garrison Donation", GroupOrder = 5)]
         public bool EnableGarrisonDonation { get; set; } = false;
 
-        [SettingPropertyInteger("Max Garrison Roster Size", 50, 1000, RequireRestart = false, HintText = "Do not donate to garrison if it has reached or exceeded this capacity.", Order = 2)]
+        private int _maxGarrisonSize = 400;
+
+        [SettingPropertyInteger("Max Garrison Roster Size", 50, 1000, RequireRestart = false, HintText = "Do not donate to garrison if it has reached or exceeded this capacity. Snapping step: 50.", Order = 2)]
         [SettingPropertyGroup("Garrison Donation", GroupOrder = 5)]
-        public int MaxGarrisonSize { get; set; } = 400;
+        public int MaxGarrisonSize
+        {
+            get => _maxGarrisonSize;
+            set => _maxGarrisonSize = ((value + 25) / 50) * 50;
+        }
 
         [SettingPropertyInteger("Min Garrison Donation Tier", 1, 6, RequireRestart = false, HintText = "Minimum tier of troop to donate to garrison.", Order = 3)]
         [SettingPropertyGroup("Garrison Donation", GroupOrder = 5)]
