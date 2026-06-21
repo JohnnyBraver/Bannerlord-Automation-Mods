@@ -46,12 +46,16 @@ namespace SettlementAutomationCore
         [SettingPropertyGroup("General", GroupOrder = 0)]
         public bool DisableSettlementAutomation { get; set; } = false;
 
-        [SettingPropertyInteger("Minimum Gold Reserve (k Denars)", 0, 50, RequireRestart = false,
-            HintText = "Never let your gold balance drop below this amount when buying (in thousands). Default: 1000 denars (1k).", Order = 2)]
-        [SettingPropertyGroup("General", GroupOrder = 0)]
-        public int MinimumGoldReserveK { get; set; } = 1;
+        private int _minimumGoldReserve = 1000;
 
-        public int MinimumGoldReserve => MinimumGoldReserveK * 1000;
+        [SettingPropertyInteger("Minimum Gold Reserve", 0, 50000, RequireRestart = false,
+            HintText = "Never let your gold balance drop below this amount when buying. Default: 1000 denars. Snapping step: 1,000.", Order = 2)]
+        [SettingPropertyGroup("General", GroupOrder = 0)]
+        public int MinimumGoldReserve
+        {
+            get => _minimumGoldReserve;
+            set => _minimumGoldReserve = ((value + 500) / 1000) * 1000;
+        }
 
         [SettingPropertyInteger("Min Days of Expenses to Keep", 0, 100, RequireRestart = false,
             HintText = "Ensure you keep enough gold to cover this many days of party wages/expenses (excluding daily income).", Order = 3)]
