@@ -230,12 +230,16 @@ namespace TradeOptimizer
         [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
         public int MaxStackSizeToBuy { get; set; } = 100;
 
-        [SettingPropertyInteger("Max Stack Total Value (x500 Denars)", 1, 100, RequireRestart = false,
-            HintText = "Stop buying an item type once its total stack value exceeds this in denars (in 500s). Default: 2000 denars.", Order = 6)]
-        [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
-        public int MaxStackValueToBuyFiveHundred { get; set; } = 4;
+        private int _maxStackValueToBuy = 2000;
 
-        public int MaxStackValueToBuy => MaxStackValueToBuyFiveHundred * 500;
+        [SettingPropertyInteger("Max Stack Total Value", 500, 50000, RequireRestart = false,
+            HintText = "Stop buying an item type once its total stack value exceeds this in denars. Default: 2000 denars. Snapping step: 500.", Order = 6)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
+        public int MaxStackValueToBuy
+        {
+            get => _maxStackValueToBuy;
+            set => _maxStackValueToBuy = ((value + 250) / 500) * 500;
+        }
 
         [SettingPropertyDropdown("Level of Detail", RequireRestart = false,
             HintText = "Top Trade Goods reports only the most important trade goods. Full Item List reports every traded item.", Order = 1)]
