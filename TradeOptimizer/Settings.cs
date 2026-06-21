@@ -182,8 +182,8 @@ namespace TradeOptimizer
             new Dropdown<LootHandlingModeOption>(LootHandlingModeOptions, 2);
 
         private float _buyPriceThresholdFactor = 0.80f;
-        [SettingPropertyFloatingInteger("Buy Price Threshold", 0.5f, 0.80f, "#0.00", RequireRestart = false,
-            HintText = "Buy items priced at or below this fraction of their average price. Maxes out at 0.80 (20% below average - where green begins). Default: 0.80.", Order = 4)]
+        [SettingPropertyFloatingInteger("Buy Price Threshold", 0.5f, 1.30f, "#0.00", RequireRestart = false,
+            HintText = "Buy items priced at or below this fraction of their average price. Maxes out at 1.30. Default: 0.80.", Order = 4)]
         [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
         public float BuyPriceThresholdFactor
         {
@@ -192,8 +192,8 @@ namespace TradeOptimizer
         }
 
         private float _sellPriceThresholdFactor = 1.30f;
-        [SettingPropertyFloatingInteger("Sell Price Threshold", 1.30f, 2.0f, "#0.00", RequireRestart = false,
-            HintText = "Sell items priced at or above this fraction of their average price. Starts at 1.30 (30% above average - where red begins). Default: 1.30.", Order = 5)]
+        [SettingPropertyFloatingInteger("Sell Price Threshold", 0.80f, 2.0f, "#0.00", RequireRestart = false,
+            HintText = "Sell items priced at or above this fraction of their average price. Starts at 0.80. Default: 1.30.", Order = 5)]
         [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
         public float SellPriceThresholdFactor
         {
