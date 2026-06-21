@@ -336,24 +336,32 @@ namespace EquipmentManager
         public Dropdown<BuyEquipmentTargetOption> BuyEquipmentTargetDropdown { get; set; } =
             new Dropdown<BuyEquipmentTargetOption>(BuyEquipmentTargetOptions, 0); // Default: Player Only (index 0)
 
-        [SettingPropertyInteger("Armor Upgrade Gold Reserve (x10k Denars)", 1, 100, "0", RequireRestart = false,
-            HintText = "Only buy armor upgrades if the purchase leaves at least this much gold (in ten-thousands). Default: 1M.", Order = 5)]
-        [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 3)]
-        public int ArmorUpgradeGoldReserveTenK { get; set; } = 100;
+        private int _armorUpgradeGoldReserve = 1000000;
+        private int _buyWeaponGoldReserve = 100000;
+        private int _minimumGoldReserve = 10000;
 
-        public int ArmorUpgradeGoldReserve => ArmorUpgradeGoldReserveTenK * 10000;
+        [SettingPropertyInteger("Armor Upgrade Gold Reserve", 10000, 1000000, "0", RequireRestart = false,
+            HintText = "Only buy armor upgrades if the purchase leaves at least this much gold. Default: 1M. Snapping step: 10,000.", Order = 5)]
+        [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 3)]
+        public int ArmorUpgradeGoldReserve
+        {
+            get => _armorUpgradeGoldReserve;
+            set => _armorUpgradeGoldReserve = ((value + 5000) / 10000) * 10000;
+        }
 
         [SettingPropertyInteger("Min Tier to Buy Armor Upgrades", 1, 6, "0", RequireRestart = false,
             HintText = "Only buy armor upgrades if the item tier is at or above this level (e.g. Tier 5 or 6). Default: 5.", Order = 6)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 3)]
         public int MinTierToBuyArmorUpgrades { get; set; } = 5;
 
-        [SettingPropertyInteger("Weapon Gold Reserve (x10k Denars)", 1, 100, "0", RequireRestart = false,
-            HintText = "Never let your gold drop below this amount when buying hand-slot weapon upgrades (in ten-thousands). Default: 100k.", Order = 7)]
+        [SettingPropertyInteger("Weapon Gold Reserve", 10000, 1000000, "0", RequireRestart = false,
+            HintText = "Never let your gold drop below this amount when buying hand-slot weapon upgrades. Default: 100k. Snapping step: 10,000.", Order = 7)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 3)]
-        public int BuyWeaponGoldReserveTenK { get; set; } = 10;
-
-        public int BuyWeaponGoldReserve => BuyWeaponGoldReserveTenK * 10000;
+        public int BuyWeaponGoldReserve
+        {
+            get => _buyWeaponGoldReserve;
+            set => _buyWeaponGoldReserve = ((value + 5000) / 10000) * 10000;
+        }
 
         [SettingPropertyInteger("Max Armor Upgrades per Visit", 1, 10, RequireRestart = false,
             HintText = "Maximum armor upgrades EquipmentManager may buy during one settlement automation cycle. Default: 1.", Order = 8)]
@@ -365,12 +373,14 @@ namespace EquipmentManager
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 3)]
         public int MaxHandSlotWeaponUpgradesPerVisit { get; set; } = 1;
 
-        [SettingPropertyInteger("Stealth Gear Gold Reserve (x10k Denars)", 1, 100, "0", RequireRestart = false,
-            HintText = "Never let your gold drop below this amount when buying stealth gear (in ten-thousands). Default: 10k.", Order = 10)]
+        [SettingPropertyInteger("Stealth Gear Gold Reserve", 10000, 1000000, "0", RequireRestart = false,
+            HintText = "Never let your gold drop below this amount when buying stealth gear. Default: 10k. Snapping step: 10,000.", Order = 10)]
         [SettingPropertyGroup("Auto-Buy Upgrades", GroupOrder = 3)]
-        public int MinimumGoldReserveTenK { get; set; } = 1;
-
-        public int MinimumGoldReserve => MinimumGoldReserveTenK * 10000;
+        public int MinimumGoldReserve
+        {
+            get => _minimumGoldReserve;
+            set => _minimumGoldReserve = ((value + 5000) / 10000) * 10000;
+        }
 
         [SettingPropertyDropdown("Stealth Gear Purchase Policy", RequireRestart = false,
             HintText = "Controls which stealth-compatible armor can be auto-bought for sneaking slots. Default: Blackened Gear Only.", Order = 11)]
