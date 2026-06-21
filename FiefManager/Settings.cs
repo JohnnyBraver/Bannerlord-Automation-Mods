@@ -101,26 +101,36 @@ namespace FiefManager
         [SettingPropertyGroup("Reserves & Deposit Rules", GroupOrder = 1)]
         public int DaysOfFunding { get; set; } = 10;
 
-        [SettingPropertyInteger("Max Reserve Limit (Town) (k Denars)", 10, 100, "0", RequireRestart = false,
-            HintText = "Maximum gold reserve a town fief is allowed to have (in thousands). Deposits will top up to this limit. Default: 100k.", Order = 4)]
+        private int _maxReserveLimitTown = 100000;
+        private int _maxReserveLimitCastle = 50000;
+        private int _minPlayerGoldReserve = 100000;
+
+        [SettingPropertyInteger("Max Reserve Limit (Town)", 10000, 100000, "0", RequireRestart = false,
+            HintText = "Maximum gold reserve a town fief is allowed to have. Deposits will top up to this limit. Default: 100k. Snapping step: 5,000.", Order = 4)]
         [SettingPropertyGroup("Reserves & Deposit Rules", GroupOrder = 1)]
-        public int MaxReserveLimitTownK { get; set; } = 100;
+        public int MaxReserveLimitTown
+        {
+            get => _maxReserveLimitTown;
+            set => _maxReserveLimitTown = ((value + 2500) / 5000) * 5000;
+        }
 
-        public int MaxReserveLimitTown => MaxReserveLimitTownK * 1000;
-
-        [SettingPropertyInteger("Max Reserve Limit (Castle) (k Denars)", 5, 50, "0", RequireRestart = false,
-            HintText = "Maximum gold reserve a castle fief is allowed to have (in thousands). Deposits will top up to this limit. Default: 50k.", Order = 5)]
+        [SettingPropertyInteger("Max Reserve Limit (Castle)", 5000, 50000, "0", RequireRestart = false,
+            HintText = "Maximum gold reserve a castle fief is allowed to have. Deposits will top up to this limit. Default: 50k. Snapping step: 5,000.", Order = 5)]
         [SettingPropertyGroup("Reserves & Deposit Rules", GroupOrder = 1)]
-        public int MaxReserveLimitCastleK { get; set; } = 50;
+        public int MaxReserveLimitCastle
+        {
+            get => _maxReserveLimitCastle;
+            set => _maxReserveLimitCastle = ((value + 2500) / 5000) * 5000;
+        }
 
-        public int MaxReserveLimitCastle => MaxReserveLimitCastleK * 1000;
-
-        [SettingPropertyInteger("Min Player Gold Reserve (x10k Denars)", 0, 50, "0", RequireRestart = false,
-            HintText = "Do not deposit gold to fiefs if player's gold is below this threshold (in ten-thousands). Default: 100k.", Order = 6)]
+        [SettingPropertyInteger("Min Player Gold Reserve", 0, 500000, "0", RequireRestart = false,
+            HintText = "Do not deposit gold to fiefs if player's gold is below this threshold. Default: 100k. Snapping step: 10,000.", Order = 6)]
         [SettingPropertyGroup("Reserves & Deposit Rules", GroupOrder = 1)]
-        public int MinPlayerGoldReserveTenK { get; set; } = 10;
-
-        public int MinPlayerGoldReserve => MinPlayerGoldReserveTenK * 10000;
+        public int MinPlayerGoldReserve
+        {
+            get => _minPlayerGoldReserve;
+            set => _minPlayerGoldReserve = ((value + 5000) / 10000) * 10000;
+        }
 
 
         public BuildingPriorityCategory Priority => PriorityDropdown.SelectedValue.Value;
