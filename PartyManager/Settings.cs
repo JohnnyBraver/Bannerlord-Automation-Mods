@@ -218,7 +218,7 @@ namespace PartyManager
         private static readonly IReadOnlyList<PrisonerReportDetailModeOption> PrisonerReportDetailModeOptions = new List<PrisonerReportDetailModeOption>
         {
             new PrisonerReportDetailModeOption("Category Counts", PrisonerReportDetailMode.CategoryCounts),
-            new PrisonerReportDetailModeOption("Full Item List", PrisonerReportDetailMode.FullItemList)
+            new PrisonerReportDetailModeOption("Full Troop List", PrisonerReportDetailMode.FullItemList)
         };
 
         private static readonly IReadOnlyList<PrisonerReportSortModeOption> PrisonerReportSortModeOptions = new List<PrisonerReportSortModeOption>
@@ -581,7 +581,7 @@ namespace PartyManager
         [SettingPropertyGroup("Prisoners/Actions & Alerts", GroupOrder = 4)]
         public int PrisonerStackAlertPercentLimit { get; set; } = 10;
 
-        [SettingPropertyDropdown("Prisoner Report Detail", RequireRestart = false, HintText = "Detailed log format: Category Counts (simple summary) or Full Item List (detailed troop breakdown).", Order = 10)]
+        [SettingPropertyDropdown("Prisoner Report Detail", RequireRestart = false, HintText = "Detailed log format: Category Counts (simple summary) or Full Troop List (detailed troop breakdown).", Order = 10)]
         [SettingPropertyGroup("Prisoners/Actions & Alerts", GroupOrder = 4)]
         public Dropdown<PrisonerReportDetailModeOption> PrisonerReportDetailDropdown { get; set; } = new Dropdown<PrisonerReportDetailModeOption>(PrisonerReportDetailModeOptions, 1);
 
