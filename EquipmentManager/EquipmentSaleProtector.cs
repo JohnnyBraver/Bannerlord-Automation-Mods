@@ -120,6 +120,11 @@ namespace EquipmentManager
             var item = equipmentElement.Item;
             if (item == null) return false;
 
+            if (item.StringId == "stealth_throwing_stone")
+            {
+                return true;
+            }
+
             var modifier = equipmentElement.ItemModifier;
             if (settings.KeepPositiveModifiers && modifier != null && modifier.PriceMultiplier > 1.0f)
             {
@@ -228,7 +233,7 @@ namespace EquipmentManager
 
         private static bool IsEquipment(ItemObject item)
         {
-            return item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null;
+            return item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null || item.StringId == "stealth_throwing_stone";
         }
 
         private static float GetArmorScore(EquipmentElement equipmentElement, bool prioritizeStealth)

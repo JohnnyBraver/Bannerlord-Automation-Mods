@@ -557,6 +557,8 @@ namespace EquipmentManager
                             var item = candidate.Item;
                             if (item == null || item.PrimaryWeapon == null) continue;
 
+                            if (item.StringId == "stealth_throwing_stone") continue;
+
                             if (targetSide == InventoryLogic.InventorySide.CivilianEquipment && !item.IsCivilian) continue;
                             if (targetSide == InventoryLogic.InventorySide.StealthEquipment && !item.IsStealthItem) continue;
                             if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
@@ -813,6 +815,7 @@ namespace EquipmentManager
         {
             var item = candidate.Item;
             if (item == null || item.PrimaryWeapon == null) return false;
+            if (item.StringId == "stealth_throwing_stone") return false;
             if (!EquipmentComparison.ShouldEvaluateWeaponSlot(currentWeapon, target.Side)) return false;
             if (target.Side == InventoryLogic.InventorySide.CivilianEquipment && !item.IsCivilian) return false;
             if (target.Side == InventoryLogic.InventorySide.StealthEquipment && !item.IsStealthItem) return false;

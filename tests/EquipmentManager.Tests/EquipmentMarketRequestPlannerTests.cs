@@ -78,6 +78,19 @@ namespace EquipmentManager.Tests
             Assert.Equal(expected, EquipmentManagerProvider.IsAllowedStealthBuyCandidate(equipmentElement, policy));
         }
 
+        [Fact]
+        public void IsUpgradeForAnyTarget_ReturnsFalseForStealthThrowingStone()
+        {
+            var item = new ItemObject("stealth_throwing_stone");
+            var eqEl = new EquipmentElement(item, null, null!, false);
+            var targets = new System.Collections.Generic.List<TaleWorlds.CampaignSystem.Hero>();
+            var settings = new Settings();
+
+            bool result = EquipmentManagerProvider.IsUpgradeForAnyTarget(eqEl, targets, settings);
+
+            Assert.False(result);
+        }
+
         private static InventoryItemView MarketItem(string id)
         {
             var item = new ItemObject(id);

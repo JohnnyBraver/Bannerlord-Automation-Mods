@@ -578,6 +578,8 @@ namespace EquipmentManager
             var item = eqEl.Item;
             if (item == null) return false;
 
+            if (item.StringId == "stealth_throwing_stone") return false;
+
             var armorSlots = new EquipmentIndex[] { EquipmentIndex.Head, EquipmentIndex.Body, EquipmentIndex.Leg, EquipmentIndex.Gloves, EquipmentIndex.Cape };
             var weaponSlots = new EquipmentIndex[] { EquipmentIndex.Weapon0, EquipmentIndex.Weapon1, EquipmentIndex.Weapon2, EquipmentIndex.Weapon3 };
             

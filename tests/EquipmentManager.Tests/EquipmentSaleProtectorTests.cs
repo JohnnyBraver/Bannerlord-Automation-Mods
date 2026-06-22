@@ -47,6 +47,26 @@ namespace EquipmentManager.Tests
             Assert.False(settings.KeepSpareSneakingArmorSets);
         }
 
+        [Fact]
+        public void BuildProtectionPlan_ProtectsStealthThrowingStone()
+        {
+            var item = Item("stealth_throwing_stone");
+            var element = new EquipmentElement(item, null, null!, false);
+            var protectionItems = new[]
+            {
+                new EquipmentProtectionItem(element, 5, 10f)
+            };
+
+            var plan = EquipmentSaleProtector.BuildProtectionPlan(
+                protectionItems,
+                new System.Collections.Generic.List<TaleWorlds.CampaignSystem.Hero>(),
+                new Settings(),
+                hasWeaponDonationPerk: false,
+                hasArmorDonationPerk: false);
+
+            Assert.Equal(0, plan.GetSellableQuantity(element, 5));
+        }
+
         private static EquipmentElement Equipment(string id)
         {
             return new EquipmentElement(Item(id), null, null!, false);
