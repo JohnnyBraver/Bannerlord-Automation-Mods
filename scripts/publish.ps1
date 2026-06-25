@@ -16,7 +16,7 @@ $mods = @(
 )
 
 Write-Host "Building solution in Release configuration and deploying to the game..." -ForegroundColor Cyan
-& dotnet build -c Release -m:1
+& dotnet build -c Release -m:1 -p:UIExtenderExPath="E:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord\Modules\Bannerlord.UIExtenderEx\bin\Win64_Shipping_Client\Bannerlord.UIExtenderEx.dll" -p:MCMv5Path="E:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord\Modules\Bannerlord.MBOptionScreen\bin\Win64_Shipping_Client\MCMv5.dll"
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Build failed. Cannot publish release zips."
     exit $LASTEXITCODE
