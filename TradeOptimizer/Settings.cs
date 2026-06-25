@@ -39,8 +39,7 @@ namespace TradeOptimizer
     public enum TradingStance
     {
         Balanced,
-        MaxProfit,
-        HighTurnover
+        MaxProfit
     }
 
     public class TradingStanceOption
@@ -135,8 +134,7 @@ namespace TradeOptimizer
         private static readonly IReadOnlyList<TradingStanceOption> TradingStanceOptions = new List<TradingStanceOption>
         {
             new TradingStanceOption("Balanced", TradingStance.Balanced),
-            new TradingStanceOption("Max Profit", TradingStance.MaxProfit),
-            new TradingStanceOption("High Turnover", TradingStance.HighTurnover)
+            new TradingStanceOption("Max Profit", TradingStance.MaxProfit)
         };
 
         private static readonly IReadOnlyList<LootHandlingModeOption> LootHandlingModeOptions = new List<LootHandlingModeOption>
@@ -233,7 +231,7 @@ namespace TradeOptimizer
 
         private float _goodDealThreshold = 0.50f;
         [SettingPropertyFloatingInteger("Good Deal Threshold", 0.10f, 0.80f, "#0.00", RequireRestart = false,
-            HintText = "Only buy items priced at or below this fraction of their average price once usable cargo capacity is >= 80% (or >= 40% in High Turnover). Default: 0.50.", Order = 7)]
+            HintText = "Only buy items priced at or below this fraction of their average price once usable cargo capacity is >= Cargo Limit Threshold. Default: 0.50.", Order = 7)]
         [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
         public float GoodDealThreshold
         {
@@ -243,12 +241,22 @@ namespace TradeOptimizer
 
         private float _goodSellThreshold = 2.00f;
         [SettingPropertyFloatingInteger("Good Sell Threshold", 1.50f, 3.00f, "#0.00", RequireRestart = false,
-            HintText = "Force sell conflict items if current price is at or above this multiplier of their average price/cost basis. Default: 2.00.", Order = 8)]
+            HintText = "Force sell conflict items if current price is at or above this multiplier of their average price/cost basis under Balanced stance. Default: 2.00.", Order = 8)]
         [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
         public float GoodSellThreshold
         {
             get => _goodSellThreshold;
             set => _goodSellThreshold = (float)System.Math.Round(value / 0.10f) * 0.10f;
+        }
+
+        private float _cargoLimitThreshold = 0.80f;
+        [SettingPropertyFloatingInteger("Cargo Limit Threshold", 0.10f, 0.90f, "#0.00", RequireRestart = false,
+            HintText = "The usable capacity threshold at which Balanced stance starts restricting buying and liquidating conflict items. Default: 0.80.", Order = 9)]
+        [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
+        public float CargoLimitThreshold
+        {
+            get => _cargoLimitThreshold;
+            set => _cargoLimitThreshold = (float)System.Math.Round(value / 0.05f) * 0.05f;
         }
 
         [SettingPropertyDropdown("Food Trading Policy", RequireRestart = false,

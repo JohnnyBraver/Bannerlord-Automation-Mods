@@ -91,13 +91,13 @@ namespace TradeOptimizer.Tests
         }
 
         [Fact]
-        public void TradingEngine_ImplementsHighTurnoverStanceAndGoodSellThreshold()
+        public void TradingEngine_ImplementsCargoLimitThresholdAndGoodSellThreshold()
         {
             string source = ReadSource("TradeOptimizer", "TradingEngine.cs");
 
-            Assert.Contains("TradingStance.HighTurnover", source);
+            Assert.Contains("CargoLimitThreshold", source);
             Assert.Contains("GoodSellThreshold", source);
-            Assert.Contains("0.40f", source);
+            Assert.Contains("TradingStance.MaxProfit", source);
         }
 
         private static string FindRepoRoot()
