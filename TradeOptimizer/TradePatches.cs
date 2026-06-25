@@ -106,34 +106,8 @@ namespace TradeOptimizer
             }
 
             // Determine accuracy level from settings and trade perks
-            bool hasTier1 = false;
-            bool hasTier2 = false;
-            if (Hero.MainHero != null)
-            {
-                try
-                {
-                    var defaultPerksType = typeof(PerkObject).Assembly.GetType("TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks");
-                    var tradeType = defaultPerksType?.GetNestedType("Trade", BindingFlags.Public | BindingFlags.NonPublic);
-                    if (tradeType != null)
-                    {
-                        var appraiserProp = tradeType.GetProperty("Appraiser", BindingFlags.Public | BindingFlags.Static);
-                        var wholesellerProp = tradeType.GetProperty("WholeSeller", BindingFlags.Public | BindingFlags.Static);
-                        var caravanProp = tradeType.GetProperty("CaravanMaster", BindingFlags.Public | BindingFlags.Static);
-                        var marketProp = tradeType.GetProperty("MarketDealer", BindingFlags.Public | BindingFlags.Static);
-
-                        var appraiserPerk = appraiserProp?.GetValue(null) as PerkObject;
-                        var wholesellerPerk = wholesellerProp?.GetValue(null) as PerkObject;
-                        var caravanPerk = caravanProp?.GetValue(null) as PerkObject;
-                        var marketPerk = marketProp?.GetValue(null) as PerkObject;
-
-                        if (appraiserPerk != null && Hero.MainHero.GetPerkValue(appraiserPerk)) hasTier1 = true;
-                        if (wholesellerPerk != null && Hero.MainHero.GetPerkValue(wholesellerPerk)) hasTier1 = true;
-                        if (caravanPerk != null && Hero.MainHero.GetPerkValue(caravanPerk)) hasTier2 = true;
-                        if (marketPerk != null && Hero.MainHero.GetPerkValue(marketPerk)) hasTier2 = true;
-                    }
-                }
-                catch { }
-            }
+            bool hasTier1 = PricingService.HasTier1Perks();
+            bool hasTier2 = PricingService.HasTier2Perks();
 
             var settings = Settings.Instance;
             bool alwaysGlobal = settings?.PricingReference == PricingReferenceMode.AlwaysGlobal;

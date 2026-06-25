@@ -21,6 +21,21 @@ namespace TradeOptimizer
         public override string ToString() => _name;
     }
 
+    public enum CostBasisMode
+    {
+        PerkBased,
+        Always,
+        Never
+    }
+
+    public class CostBasisModeOption
+    {
+        private readonly string _name;
+        public CostBasisMode Value { get; }
+        public CostBasisModeOption(string name, CostBasisMode value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
     public enum TradingStance
     {
         Balanced,
@@ -109,6 +124,13 @@ namespace TradeOptimizer
             new PricingReferenceModeOption("Always Local (Regional)", PricingReferenceMode.AlwaysLocal)
         };
 
+        private static readonly IReadOnlyList<CostBasisModeOption> CostBasisModeOptions = new List<CostBasisModeOption>
+        {
+            new CostBasisModeOption("Perk-Based (Vanilla-like)", CostBasisMode.PerkBased),
+            new CostBasisModeOption("Always Use (QoL/Cheat)", CostBasisMode.Always),
+            new CostBasisModeOption("Never Use", CostBasisMode.Never)
+        };
+
         private static readonly IReadOnlyList<TradingStanceOption> TradingStanceOptions = new List<TradingStanceOption>
         {
             new TradingStanceOption("Balanced", TradingStance.Balanced),
@@ -169,21 +191,27 @@ namespace TradeOptimizer
         public Dropdown<PricingReferenceModeOption> PricingReferenceDropdown { get; set; } =
             new Dropdown<PricingReferenceModeOption>(PricingReferenceModeOptions, 0);
 
+        [SettingPropertyDropdown("Cost Basis Mode", RequireRestart = false,
+            HintText = "Perk-Based: uses purchase cost if Tier 1 perks owned. Always: always uses purchase cost. Never: always sells relative to market averages.", Order = 2)]
+        [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
+        public Dropdown<CostBasisModeOption> CostBasisDropdown { get; set; } =
+            new Dropdown<CostBasisModeOption>(CostBasisModeOptions, 0);
+
         [SettingPropertyDropdown("Trading Stance", RequireRestart = false,
-            HintText = "Balanced: sells at margin, holds cheap items unless cargo is >= 80%. Max Profit: always holds cheap items.", Order = 2)]
+            HintText = "Balanced: sells at margin, holds cheap items unless cargo is >= 80%. Max Profit: always holds cheap items.", Order = 3)]
         [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
         public Dropdown<TradingStanceOption> TradingStanceDropdown { get; set; } =
             new Dropdown<TradingStanceOption>(TradingStanceOptions, 0);
 
         [SettingPropertyDropdown("Loot Handling Mode", RequireRestart = false,
-            HintText = "Liquidate: sell loot immediately. XP Farm: sell loot to crash price, rebuy in Transaction 2. Profit: evaluate normal.", Order = 3)]
+            HintText = "Liquidate: sell loot immediately. XP Farm: sell loot to crash price, rebuy in Transaction 2. Profit: evaluate normal.", Order = 4)]
         [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
         public Dropdown<LootHandlingModeOption> LootHandlingDropdown { get; set; } =
             new Dropdown<LootHandlingModeOption>(LootHandlingModeOptions, 2);
 
         private float _buyPriceThresholdFactor = 0.80f;
         [SettingPropertyFloatingInteger("Buy Price Threshold", 0.5f, 1.30f, "#0.00", RequireRestart = false,
-            HintText = "Buy items priced at or below this fraction of their average price. Maxes out at 1.30. Default: 0.80.", Order = 4)]
+            HintText = "Buy items priced at or below this fraction of their average price. Maxes out at 1.30. Default: 0.80.", Order = 5)]
         [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
         public float BuyPriceThresholdFactor
         {
@@ -193,12 +221,22 @@ namespace TradeOptimizer
 
         private float _sellPriceThresholdFactor = 1.30f;
         [SettingPropertyFloatingInteger("Sell Price Threshold", 0.80f, 2.0f, "#0.00", RequireRestart = false,
-            HintText = "Sell items priced at or above this fraction of their average price. Starts at 0.80. Default: 1.30.", Order = 5)]
+            HintText = "Sell items priced at or above this fraction of their average price. Starts at 0.80. Default: 1.30.", Order = 6)]
         [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
         public float SellPriceThresholdFactor
         {
             get => _sellPriceThresholdFactor;
             set => _sellPriceThresholdFactor = (float)System.Math.Round(value / 0.05f) * 0.05f;
+        }
+
+        private float _goodDealThreshold = 0.50f;
+        [SettingPropertyFloatingInteger("Good Deal Threshold", 0.10f, 0.80f, "#0.00", RequireRestart = false,
+            HintText = "Only buy items priced at or below this fraction of their average price once usable cargo capacity is >= 80%. Default: 0.50.", Order = 7)]
+        [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
+        public float GoodDealThreshold
+        {
+            get => _goodDealThreshold;
+            set => _goodDealThreshold = (float)System.Math.Round(value / 0.05f) * 0.05f;
         }
 
         [SettingPropertyDropdown("Food Trading Policy", RequireRestart = false,
@@ -265,6 +303,7 @@ namespace TradeOptimizer
 
         // Helper properties for cleaner logic access
         public PricingReferenceMode PricingReference => PricingReferenceDropdown.SelectedValue.Value;
+        public CostBasisMode CostBasis => CostBasisDropdown.SelectedValue.Value;
         public TradingStance Stance => TradingStanceDropdown.SelectedValue.Value;
         public LootHandlingMode LootHandling => LootHandlingDropdown.SelectedValue.Value;
         public bool ShouldSplitTransactions => LootHandling == LootHandlingMode.XPFarm;

@@ -74,43 +74,14 @@ namespace TradeOptimizer
             int partySize = MobileParty.MainParty?.MemberRoster?.TotalManCount ?? 1;
             float netWeightAdded = 0f;
 
+            float startWeight = MobileParty.MainParty != null ? SettlementAutomationCore.Helpers.InventoryHelper.GetRosterWeight(MobileParty.MainParty.ItemRoster) : 0f;
+            float usableCapacity = startWeight + tradeContext.FreeCargoCapacity;
+
             // The Core-owned context has already accounted for reserves and cargo policy.
             int currentBalance = tradeContext.AvailableGold;
             WriteLog($"Initial Balance: {currentBalance} (Hero Gold: {Hero.MainHero?.Gold ?? 0}, Logic TotalAmount: {logic?.TotalAmount ?? 0})");
 
-            // Query perks once at the start
-            bool hasTier1Perks = false;
-            bool hasTier2Perks = false;
-            if (Hero.MainHero != null)
-            {
-                try
-                {
-                    var defaultPerksType = typeof(PerkObject).Assembly.GetType("TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks");
-                    var tradeType = defaultPerksType?.GetNestedType("Trade", BindingFlags.Public | BindingFlags.NonPublic);
-                    if (tradeType != null)
-                    {
-                        var appraiserProp = tradeType.GetProperty("Appraiser", BindingFlags.Public | BindingFlags.Static);
-                        var wholesellerProp = tradeType.GetProperty("WholeSeller", BindingFlags.Public | BindingFlags.Static);
-                        var caravanProp = tradeType.GetProperty("CaravanMaster", BindingFlags.Public | BindingFlags.Static);
-                        var marketProp = tradeType.GetProperty("MarketDealer", BindingFlags.Public | BindingFlags.Static);
-                        
-                        var appraiserPerk = appraiserProp?.GetValue(null) as PerkObject;
-                        var wholesellerPerk = wholesellerProp?.GetValue(null) as PerkObject;
-                        var caravanPerk = caravanProp?.GetValue(null) as PerkObject;
-                        var marketPerk = marketProp?.GetValue(null) as PerkObject;
-                        
-                        if (appraiserPerk != null && Hero.MainHero.GetPerkValue(appraiserPerk)) hasTier1Perks = true;
-                        if (wholesellerPerk != null && Hero.MainHero.GetPerkValue(wholesellerPerk)) hasTier1Perks = true;
-                        if (caravanPerk != null && Hero.MainHero.GetPerkValue(caravanPerk)) hasTier2Perks = true;
-                        if (marketPerk != null && Hero.MainHero.GetPerkValue(marketPerk)) hasTier2Perks = true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    WriteLog($"[Perk Check Error] Failed checking trade perks: {ex.Message}");
-                }
-            }
-            WriteLog($"Trade Perks Status: hasTier1={hasTier1Perks}, hasTier2={hasTier2Perks}");
+            WriteLog($"Trade Perks Status: hasTier1={PricingService.HasTier1Perks()}, hasTier2={PricingService.HasTier2Perks()}");
 
             var localExcludedItems = new HashSet<string>();
             if (excludedItems != null)
@@ -166,40 +137,13 @@ namespace TradeOptimizer
                         else
                         {
                             float costBasis = item.ItemCost;
-                            float baseReferencePrice = 0f;
-                            var refMode = settings.PricingReference;
-
-                            if (refMode == PricingReferenceMode.AlwaysGlobal)
-                            {
-                                baseReferencePrice = PricingService.GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
-                            }
-                            else if (refMode == PricingReferenceMode.AlwaysLocal)
-                            {
-                                baseReferencePrice = PricingService.GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
-                            }
-                            else // PerkBased
-                            {
-                                if (hasTier1Perks && costBasis > 0)
-                                {
-                                    baseReferencePrice = costBasis;
-                                }
-                                else if (hasTier1Perks)
-                                {
-                                    baseReferencePrice = PricingService.GetTrackedAveragePrice(item.ItemRosterElement);
-                                }
-
-                                if (baseReferencePrice <= 0f)
-                                {
-                                    if (hasTier1Perks && hasTier2Perks)
-                                    {
-                                        baseReferencePrice = PricingService.GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
-                                    }
-                                    else
-                                    {
-                                        baseReferencePrice = PricingService.GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
-                                    }
-                                }
-                            }
+                            float baseReferencePrice = PricingService.GetReferencePrice(
+                                logic,
+                                item.ItemRosterElement.EquipmentElement,
+                                item.ItemRosterElement,
+                                costBasis,
+                                isSelling: true
+                            );
 
                             if (baseReferencePrice <= 0f)
                             {
@@ -224,28 +168,13 @@ namespace TradeOptimizer
                         if (!isLoot || settings.LootHandling == LootHandlingMode.Profit)
                         {
                             int buyPrice = logic != null ? logic.GetItemPrice(item.ItemRosterElement.EquipmentElement, true) : currentPrice;
-                            float avgPriceForBuy = 0f;
-                            var refMode = settings.PricingReference;
-
-                            if (refMode == PricingReferenceMode.AlwaysGlobal)
-                            {
-                                avgPriceForBuy = PricingService.GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
-                            }
-                            else if (refMode == PricingReferenceMode.AlwaysLocal)
-                            {
-                                avgPriceForBuy = PricingService.GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
-                            }
-                            else // PerkBased
-                            {
-                                if (hasTier1Perks && hasTier2Perks)
-                                {
-                                    avgPriceForBuy = PricingService.GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
-                                }
-                                else
-                                {
-                                    avgPriceForBuy = PricingService.GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
-                                }
-                            }
+                            float avgPriceForBuy = PricingService.GetReferencePrice(
+                                logic,
+                                item.ItemRosterElement.EquipmentElement,
+                                null,
+                                0f,
+                                isSelling: false
+                            );
 
                             bool isBuyCandidate = avgPriceForBuy > 0f && buyPrice <= avgPriceForBuy * settings.BuyPriceThresholdFactor;
 
@@ -259,17 +188,17 @@ namespace TradeOptimizer
                                 }
                                 else // Balanced
                                 {
-                                    float capacity = MobileParty.MainParty?.InventoryCapacity ?? 0f;
-                                    float currentWeight = SettlementAutomationCore.Helpers.InventoryHelper.GetRosterWeight(MobileParty.MainParty?.ItemRoster) + netWeightAdded;
-                                    bool isCargoFull = capacity > 0f && (currentWeight / capacity) >= 0.80f;
+                                    float currentWeightNow = startWeight + netWeightAdded;
+                                    float fullness = usableCapacity > 0f ? (currentWeightNow / usableCapacity) : 0f;
+                                    bool isCargoFull = fullness >= 0.80f;
                                     if (!isCargoFull)
                                     {
-                                        WriteLog($"[Sell Check Conflict] {itemObj.Name}: Profitable to sell, price below buy threshold. Stance: Balanced (Cargo {currentWeight:F0}/{capacity:F0} < 80%) -> KEEP & ACCUMULATE.");
+                                        WriteLog($"[Sell Check Conflict] {itemObj.Name}: Profitable to sell, price below buy threshold. Stance: Balanced (Usable Cargo Fullness {fullness:P0} < 80%) -> KEEP & ACCUMULATE.");
                                         break;
                                     }
                                     else
                                     {
-                                        WriteLog($"[Sell Check Conflict] {itemObj.Name}: Profitable to sell, price below buy threshold. Stance: Balanced (Cargo {currentWeight:F0}/{capacity:F0} >= 80%) -> SELL TO FREE SPACE.");
+                                        WriteLog($"[Sell Check Conflict] {itemObj.Name}: Profitable to sell, price below buy threshold. Stance: Balanced (Usable Cargo Fullness {fullness:P0} >= 80%) -> SELL TO FREE SPACE.");
                                     }
                                 }
                             }
@@ -346,6 +275,8 @@ namespace TradeOptimizer
                 // Logistics goals (food restocking, speed mounts) are now handled by the Core's AutomationRequest
                 // pipeline. The free-trade phase only maximizes profit arbitrage.
 
+                var extraSoldQuantities = new Dictionary<string, int>();
+
                 while (true)
                 {
                     buyLoopIterations++;
@@ -357,6 +288,7 @@ namespace TradeOptimizer
 
                     SPItemVM? bestItem = null;
                     float bestProfitDensity = -1f;
+                    bool hasSwapped = false;
 
                     foreach (var item in merchantItems)
                     {
@@ -383,8 +315,23 @@ namespace TradeOptimizer
 
                         float itemWeight = itemObj.Weight;
                         var playerItem = vm.RightItemListVM?.FirstOrDefault(r => r.ItemRosterElement.EquipmentElement.Item == itemObj);
-                        int currentlyOwned = (playerItem != null ? playerItem.ItemCount : 0) + boughtSoFar;
+                        
                         int currentPrice = logic != null ? logic.GetItemPrice(item.ItemRosterElement.EquipmentElement, true) : itemObj.Value;
+                        float avgPrice = PricingService.GetReferencePrice(
+                            logic,
+                            item.ItemRosterElement.EquipmentElement,
+                            null,
+                            0f,
+                            isSelling: false
+                        );
+
+                        float unitProfit = avgPrice - currentPrice;
+                        float itemWeightDivisor = itemWeight > 0.01f ? itemWeight : 0.01f;
+                        float profitDensity = unitProfit / itemWeightDivisor;
+
+                        string key = GetTradeIdentityKey(item.ItemRosterElement.EquipmentElement);
+                        int extraSoldForThis = extraSoldQuantities.TryGetValue(key, out int esVal) ? esVal : 0;
+                        int currentlyOwned = (playerItem != null ? playerItem.ItemCount : 0) + boughtSoFar - extraSoldForThis;
 
                         string skipReason = "";
                         
@@ -407,7 +354,128 @@ namespace TradeOptimizer
                                 float freeCargo = tradeContext.FreeCargoCapacity - netWeightAdded;
                                 if (freeCargo < itemWeight)
                                 {
-                                    skipReason = "Overburdened";
+                                    // Try margin replacement: sell lower-margin owned items to merchant to make room for bestItem
+                                    SPItemVM? swapItem = null;
+                                    float worstOwnProfitDensity = float.MaxValue;
+
+                                    if (vm.RightItemListVM != null)
+                                    {
+                                        foreach (var ownItem in vm.RightItemListVM)
+                                        {
+                                            if (ownItem == null || ownItem.ItemRosterElement.EquipmentElement.Item == null) continue;
+
+                                            var ownItemObj = ownItem.ItemRosterElement.EquipmentElement.Item;
+                                            if (!TradeCandidatePolicy.CanTradeByMode(
+                                                    ownItemObj,
+                                                    settings.FoodTradingMode,
+                                                    settings.LivestockTradingMode,
+                                                    settings.MountsTradingMode,
+                                                    settings.CraftingMaterialsTradingMode,
+                                                    false))
+                                            {
+                                                continue;
+                                            }
+
+                                            var sellableEntry = tradeContext.SellableItems.FirstOrDefault(s => s.Matches(ownItem.ItemRosterElement.EquipmentElement));
+                                            string ownKey = GetTradeIdentityKey(ownItem.ItemRosterElement.EquipmentElement);
+                                            int extraSold = extraSoldQuantities.TryGetValue(ownKey, out int es) ? es : 0;
+                                            int maxSellable = (sellableEntry?.AvailableQuantity ?? 0) - extraSold;
+                                            if (maxSellable <= 0) continue;
+
+                                            float ownAvgPrice = PricingService.GetReferencePrice(
+                                                logic,
+                                                ownItem.ItemRosterElement.EquipmentElement,
+                                                ownItem.ItemRosterElement,
+                                                ownItem.ItemCost,
+                                                isSelling: true
+                                            );
+                                            
+                                            int ownSellPrice = logic != null ? logic.GetItemPrice(ownItem.ItemRosterElement.EquipmentElement, false) : 0;
+                                            if (ownSellPrice <= 0) continue;
+
+                                            float ownWeight = ownItemObj.Weight;
+                                            float ownWeightDivisor = ownWeight > 0.01f ? ownWeight : 0.01f;
+                                            float ownFutureProfitDensity = (ownAvgPrice - ownSellPrice) / ownWeightDivisor;
+
+                                            if (ownFutureProfitDensity < worstOwnProfitDensity)
+                                            {
+                                                worstOwnProfitDensity = ownFutureProfitDensity;
+                                                swapItem = ownItem;
+                                            }
+                                        }
+                                    }
+
+                                    if (swapItem != null && worstOwnProfitDensity < profitDensity)
+                                    {
+                                        var swapItemObj = swapItem.ItemRosterElement.EquipmentElement.Item;
+                                        int swapPrice = logic != null ? logic.GetItemPrice(swapItem.ItemRosterElement.EquipmentElement, false) : 0;
+
+                                        WriteLog($"[Margin Swap] Selling 1x {swapItemObj.Name} (Future Profit Density: {worstOwnProfitDensity:F1}) to buy 1x {itemObj.Name} (Buy Profit Density: {profitDensity:F1})");
+
+                                        if (!settings.SimulationMode && logic != null && Hero.MainHero != null)
+                                        {
+                                            var command = TransferCommand.Transfer(
+                                                1,
+                                                InventoryLogic.InventorySide.PlayerInventory,
+                                                InventoryLogic.InventorySide.OtherInventory,
+                                                new ItemRosterElement(swapItem.ItemRosterElement.EquipmentElement, 1),
+                                                EquipmentIndex.None,
+                                                EquipmentIndex.None,
+                                                Hero.MainHero.CharacterObject
+                                            );
+                                            logic.AddTransferCommand(command);
+                                        }
+                                        else if (!settings.SimulationMode)
+                                        {
+                                            swapItem.ExecuteSellSingle();
+                                        }
+
+                                        currentBalance += swapPrice;
+                                        netWeightAdded -= swapItemObj.Weight;
+
+                                        string swapKey = GetTradeIdentityKey(swapItem.ItemRosterElement.EquipmentElement);
+                                        extraSoldQuantities[swapKey] = (extraSoldQuantities.TryGetValue(swapKey, out int esq) ? esq : 0) + 1;
+
+                                        // Record swap-sell in report
+                                        var existingSold = report.SoldItems.FirstOrDefault(s => s.Name == swapItemObj.Name.ToString());
+                                        if (existingSold != null)
+                                        {
+                                            existingSold.Count++;
+                                            existingSold.Gold += swapPrice;
+                                        }
+                                        else
+                                        {
+                                            report.SoldItems.Add(new TradedItemInfo
+                                            {
+                                                Name = swapItemObj.Name.ToString(),
+                                                Count = 1,
+                                                Gold = swapPrice,
+                                                MarketPrice = PricingService.GetWorldAveragePrice(swapItem.ItemRosterElement.EquipmentElement)
+                                            });
+                                        }
+                                        report.SoldNormalItems.Add(swapItemObj.Name.ToString());
+
+                                        hasSwapped = true;
+                                        break; 
+                                    }
+                                    else
+                                    {
+                                        skipReason = "Overburdened";
+                                    }
+                                }
+                            }
+                        }
+
+                        if (skipReason == "")
+                        {
+                            float currentWeightNow = startWeight + netWeightAdded;
+                            float fullness = usableCapacity > 0f ? (currentWeightNow / usableCapacity) : 0f;
+                            if (fullness >= 0.80f)
+                            {
+                                float goodDealLimit = avgPrice * settings.GoodDealThreshold;
+                                if (currentPrice > goodDealLimit)
+                                {
+                                    skipReason = $"CargoNearLimit (fullness={fullness:P0}, price={currentPrice} > limit={goodDealLimit:F1})";
                                 }
                             }
                         }
@@ -428,30 +496,7 @@ namespace TradeOptimizer
                             skipReason = "SoldInSameStop";
                         }
 
-                        float avgPrice = 0f;
-                        if (skipReason == "")
-                        {
-                            var refMode = settings.PricingReference;
-                            if (refMode == PricingReferenceMode.AlwaysGlobal)
-                            {
-                                avgPrice = PricingService.GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
-                            }
-                            else if (refMode == PricingReferenceMode.AlwaysLocal)
-                            {
-                                avgPrice = PricingService.GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
-                            }
-                            else // PerkBased
-                            {
-                                if (hasTier1Perks && hasTier2Perks)
-                                {
-                                    avgPrice = PricingService.GetWorldAveragePrice(item.ItemRosterElement.EquipmentElement);
-                                }
-                                else
-                                {
-                                    avgPrice = PricingService.GetLocalCategoryAveragePrice(logic, item.ItemRosterElement.EquipmentElement);
-                                }
-                            }
-                        }
+                        // avgPrice already resolved early in loop
 
                         if (skipReason == "" && avgPrice <= 0f)
                         {
@@ -485,15 +530,16 @@ namespace TradeOptimizer
                             continue;
                         }
 
-                        float unitProfit = avgPrice - currentPrice;
-                        float itemWeightDivisor = itemWeight > 0.01f ? itemWeight : 0.01f;
-                        float profitDensity = unitProfit / itemWeightDivisor;
-
                         if (profitDensity > bestProfitDensity)
                         {
                             bestProfitDensity = profitDensity;
                             bestItem = item;
                         }
+                    }
+
+                    if (hasSwapped)
+                    {
+                        continue;
                     }
 
                     if (bestItem == null) break;
@@ -532,32 +578,13 @@ namespace TradeOptimizer
                     currentBalance -= price;
                     netWeightAdded += bestItemObj.Weight;
 
-                    float dbgAvg = 0f;
-                    if (settings.PricingReference == PricingReferenceMode.AlwaysGlobal)
-                    {
-                        dbgAvg = PricingService.GetWorldAveragePrice(bestItem.ItemRosterElement.EquipmentElement);
-                    }
-                    else if (settings.PricingReference == PricingReferenceMode.AlwaysLocal)
-                    {
-                        if (logic != null)
-                        {
-                            dbgAvg = PricingService.GetLocalCategoryAveragePrice(logic, bestItem.ItemRosterElement.EquipmentElement);
-                        }
-                    }
-                    else
-                    {
-                        if (Hero.MainHero != null && Hero.MainHero.GetPerkValue(DefaultPerks.Trade.WholeSeller))
-                        {
-                            dbgAvg = PricingService.GetWorldAveragePrice(bestItem.ItemRosterElement.EquipmentElement);
-                        }
-                        else
-                        {
-                            if (logic != null)
-                            {
-                                dbgAvg = PricingService.GetLocalCategoryAveragePrice(logic, bestItem.ItemRosterElement.EquipmentElement);
-                            }
-                        }
-                    }
+                    float dbgAvg = PricingService.GetReferencePrice(
+                        logic,
+                        bestItem.ItemRosterElement.EquipmentElement,
+                        null,
+                        0f,
+                        isSelling: false
+                    );
                 }
 
                 foreach (var pair in boughtQuantities)
