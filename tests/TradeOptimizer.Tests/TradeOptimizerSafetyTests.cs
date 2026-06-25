@@ -90,6 +90,16 @@ namespace TradeOptimizer.Tests
             throw new InvalidOperationException($"Could not slice method for marker: {marker}");
         }
 
+        [Fact]
+        public void TradingEngine_ImplementsHighTurnoverStanceAndGoodSellThreshold()
+        {
+            string source = ReadSource("TradeOptimizer", "TradingEngine.cs");
+
+            Assert.Contains("TradingStance.HighTurnover", source);
+            Assert.Contains("GoodSellThreshold", source);
+            Assert.Contains("0.40f", source);
+        }
+
         private static string FindRepoRoot()
         {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);

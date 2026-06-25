@@ -128,6 +128,7 @@ namespace TradeOptimizer
                     {
                         int currentPrice = logic != null ? logic.GetItemPrice(item.ItemRosterElement.EquipmentElement, false) : 0;
                         bool loopSell = false;
+                        float baseReferencePrice = 0f;
 
                         if (isLoot && (settings.LootHandling == LootHandlingMode.Liquidate || settings.LootHandling == LootHandlingMode.XPFarm))
                         {
@@ -137,7 +138,7 @@ namespace TradeOptimizer
                         else
                         {
                             float costBasis = item.ItemCost;
-                            float baseReferencePrice = PricingService.GetReferencePrice(
+                            baseReferencePrice = PricingService.GetReferencePrice(
                                 logic,
                                 item.ItemRosterElement.EquipmentElement,
                                 item.ItemRosterElement,
@@ -180,25 +181,34 @@ namespace TradeOptimizer
 
                             if (isBuyCandidate)
                             {
-                                var stance = settings.Stance;
-                                if (stance == TradingStance.MaxProfit)
+                                bool isGoodSell = baseReferencePrice > 0f && currentPrice >= baseReferencePrice * settings.GoodSellThreshold;
+                                if (isGoodSell)
                                 {
-                                    WriteLog($"[Sell Check Conflict] {itemObj.Name}: Profitable to sell, but price is below buy threshold. Stance: Max Profit -> KEEP & ACCUMULATE.");
-                                    break;
+                                    WriteLog($"[Sell Check Conflict Override] {itemObj.Name}: Price={currentPrice} >= Good Sell Threshold ({baseReferencePrice * settings.GoodSellThreshold:F1}). Override conflict -> SELL.");
                                 }
-                                else // Balanced
+                                else
                                 {
-                                    float currentWeightNow = startWeight + netWeightAdded;
-                                    float fullness = usableCapacity > 0f ? (currentWeightNow / usableCapacity) : 0f;
-                                    bool isCargoFull = fullness >= 0.80f;
-                                    if (!isCargoFull)
+                                    var stance = settings.Stance;
+                                    if (stance == TradingStance.MaxProfit)
                                     {
-                                        WriteLog($"[Sell Check Conflict] {itemObj.Name}: Profitable to sell, price below buy threshold. Stance: Balanced (Usable Cargo Fullness {fullness:P0} < 80%) -> KEEP & ACCUMULATE.");
+                                        WriteLog($"[Sell Check Conflict] {itemObj.Name}: Profitable to sell, but price is below buy threshold. Stance: Max Profit -> KEEP & ACCUMULATE.");
                                         break;
                                     }
                                     else
                                     {
-                                        WriteLog($"[Sell Check Conflict] {itemObj.Name}: Profitable to sell, price below buy threshold. Stance: Balanced (Usable Cargo Fullness {fullness:P0} >= 80%) -> SELL TO FREE SPACE.");
+                                        float limit = (stance == TradingStance.HighTurnover) ? 0.40f : 0.80f;
+                                        float currentWeightNow = startWeight + netWeightAdded;
+                                        float fullness = usableCapacity > 0f ? (currentWeightNow / usableCapacity) : 0f;
+                                        bool isCargoFull = fullness >= limit;
+                                        if (!isCargoFull)
+                                        {
+                                            WriteLog($"[Sell Check Conflict] {itemObj.Name}: Profitable to sell, price below buy threshold. Stance: {stance} (Usable Cargo Fullness {fullness:P0} < {limit:P0}) -> KEEP & ACCUMULATE.");
+                                            break;
+                                        }
+                                        else
+                                        {
+                                            WriteLog($"[Sell Check Conflict] {itemObj.Name}: Profitable to sell, price below buy threshold. Stance: {stance} (Usable Cargo Fullness {fullness:P0} >= {limit:P0}) -> SELL TO FREE SPACE.");
+                                        }
                                     }
                                 }
                             }
@@ -470,7 +480,8 @@ namespace TradeOptimizer
                         {
                             float currentWeightNow = startWeight + netWeightAdded;
                             float fullness = usableCapacity > 0f ? (currentWeightNow / usableCapacity) : 0f;
-                            if (fullness >= 0.80f)
+                            float limit = (settings.Stance == TradingStance.HighTurnover) ? 0.40f : 0.80f;
+                            if (fullness >= limit)
                             {
                                 float goodDealLimit = avgPrice * settings.GoodDealThreshold;
                                 if (currentPrice > goodDealLimit)
