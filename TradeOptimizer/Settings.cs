@@ -112,7 +112,7 @@ namespace TradeOptimizer
 
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "TradeOptimizer_v0_4";
+        public override string Id => "TradeOptimizer_v0_4_1";
         public override string DisplayName => "Trade Optimizer";
         public override string FolderName => "TradeOptimizer";
         public override string FormatType => "json";
@@ -229,14 +229,14 @@ namespace TradeOptimizer
             set => _sellPriceThresholdFactor = (float)System.Math.Round(value / 0.05f) * 0.05f;
         }
 
-        private float _goodDealThreshold = 0.50f;
-        [SettingPropertyFloatingInteger("Good Deal Threshold", 0.10f, 0.80f, "#0.00", RequireRestart = false,
+        private float _goodBuyThreshold = 0.50f;
+        [SettingPropertyFloatingInteger("Good Buy Threshold", 0.10f, 0.80f, "#0.00", RequireRestart = false,
             HintText = "Only buy items priced at or below this fraction of their average price once usable cargo capacity is >= Cargo Limit Threshold. Default: 0.50.", Order = 7)]
         [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
-        public float GoodDealThreshold
+        public float GoodBuyThreshold
         {
-            get => _goodDealThreshold;
-            set => _goodDealThreshold = (float)System.Math.Round(value / 0.05f) * 0.05f;
+            get => _goodBuyThreshold;
+            set => _goodBuyThreshold = (float)System.Math.Round(value / 0.05f) * 0.05f;
         }
 
         private float _goodSellThreshold = 2.00f;
@@ -249,9 +249,9 @@ namespace TradeOptimizer
             set => _goodSellThreshold = (float)System.Math.Round(value / 0.10f) * 0.10f;
         }
 
-        private float _cargoLimitThreshold = 0.80f;
+        private float _cargoLimitThreshold = 0.75f;
         [SettingPropertyFloatingInteger("Cargo Limit Threshold", 0.10f, 0.90f, "#0.00", RequireRestart = false,
-            HintText = "The usable capacity threshold at which Balanced stance starts restricting buying and liquidating conflict items. Default: 0.80.", Order = 9)]
+            HintText = "The usable capacity threshold at which Balanced stance starts restricting buying and liquidating conflict items. Default: 0.75.", Order = 9)]
         [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
         public float CargoLimitThreshold
         {

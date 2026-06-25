@@ -11,7 +11,7 @@ namespace SettlementAutomationCore.Tests
         public void SettingsIds_UseV04ToAvoidLoadingV03SavedOptions()
         {
             Assert.Equal("SettlementAutomationCore_v0_4", new SettlementAutomationCore.Settings().Id);
-            Assert.Equal("TradeOptimizer_v0_4", new TradeOptimizer.Settings().Id);
+            Assert.Equal("TradeOptimizer_v0_4_1", new TradeOptimizer.Settings().Id);
             Assert.Equal("PartyManager_v0_4", new PartyManager.Settings().Id);
             Assert.Equal("EquipmentManager_v0_4", new EquipmentManager.Settings().Id);
             Assert.Equal("FiefManager_v0_4", new FiefManager.Settings().Id);

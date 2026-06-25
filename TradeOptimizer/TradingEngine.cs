@@ -483,10 +483,10 @@ namespace TradeOptimizer
                             float limit = settings.CargoLimitThreshold;
                             if (fullness >= limit)
                             {
-                                float goodDealLimit = avgPrice * settings.GoodDealThreshold;
-                                if (currentPrice > goodDealLimit)
+                                float goodBuyLimit = avgPrice * settings.GoodBuyThreshold;
+                                if (currentPrice > goodBuyLimit)
                                 {
-                                    skipReason = $"CargoNearLimit (fullness={fullness:P0}, price={currentPrice} > limit={goodDealLimit:F1})";
+                                    skipReason = $"CargoNearLimit (fullness={fullness:P0}, price={currentPrice} > limit={goodBuyLimit:F1})";
                                 }
                             }
                         }
