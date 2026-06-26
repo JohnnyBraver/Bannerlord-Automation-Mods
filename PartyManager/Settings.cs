@@ -210,7 +210,7 @@ namespace PartyManager
 
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "PartyManager_v0_4";
+        public override string Id => "PartyManager_v0_4_0_1";
         public override string DisplayName => "Party Manager";
         public override string FolderName => "PartyManager";
         public override string FormatType => "json";
@@ -420,6 +420,21 @@ namespace PartyManager
         [SettingPropertyGroup("Party Needs", GroupOrder = 2)]
         public Dropdown<MountPriceReferenceOption> MountPriceReferenceDropdown { get; set; } =
             new Dropdown<MountPriceReferenceOption>(MountPriceReferenceOptions, 0);
+
+        [SettingPropertyBool("Auto-Buy Boats", RequireRestart = false, HintText = "Automatically buy boats/ships up to the party's ideal capacity when visiting towns.", Order = 13)]
+        [SettingPropertyGroup("Party Needs", GroupOrder = 2)]
+        public bool AutoBuyBoats { get; set; } = true;
+
+        private int _minGoldReserveForBoats = 50000;
+
+        [SettingPropertyInteger("Min Gold Reserve for Boats", 5000, 500000, RequireRestart = false,
+            HintText = "Do not auto-buy boats if the player's gold is at or below this amount. Snapping step: 1000.", Order = 14)]
+        [SettingPropertyGroup("Party Needs", GroupOrder = 2)]
+        public int MinGoldReserveForBoats
+        {
+            get => _minGoldReserveForBoats;
+            set => _minGoldReserveForBoats = ((value + 500) / 1000) * 1000;
+        }
 
         // --- Recruitment Cultures ---
         [SettingPropertyBool("Recruit Empire", RequireRestart = false, HintText = "Recruit Empire culture troops.", Order = 1)]

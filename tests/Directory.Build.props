@@ -46,6 +46,9 @@
     <Reference Include="TaleWorlds.Localization">
       <HintPath>$(BannerlordGameBin)\TaleWorlds.Localization.dll</HintPath>
     </Reference>
+    <Reference Include="TaleWorlds.SaveSystem">
+      <HintPath>$(BannerlordGameBin)\TaleWorlds.SaveSystem.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
 </Project>

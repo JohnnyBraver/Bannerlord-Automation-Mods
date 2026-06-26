@@ -58,6 +58,7 @@ namespace PartyManager
             var settings = Settings.Instance;
             if (settings == null || !settings.ModEnabled) return;
             PrisonerHelper.ProcessPostAutomationAlerts(settlement, settings);
+            BoatHelper.AutoBuyBoats(settlement, settings);
         }
     }
 }
