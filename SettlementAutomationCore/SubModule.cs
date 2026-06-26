@@ -2487,7 +2487,7 @@ namespace SettlementAutomationCore
             var buys = proposal.Actions.Where(a => a.ActionType == TradeActionType.Buy).ToList();
 
             int availableGold = context.AvailableGold;
-            float freeCargo = context.FreeCargoCapacity;
+            float cargoBalance = context.CargoCapacityBalance;
             int freeAnimalSlots = context.FreeAnimalSlots;
             bool enforceCargo = context.EnforceCargoLimit;
             IReadOnlyList<SellableItem> sellableItems = context.SellableItems;
@@ -2519,7 +2519,7 @@ namespace SettlementAutomationCore
                     marketReport.AddSold(action.EquipmentElement, toSell, toSell * price, providerName, stage);
                     if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
                     {
-                        freeCargo += toSell * action.EquipmentElement.Item.Weight;
+                        cargoBalance += toSell * action.EquipmentElement.Item.Weight;
                     }
                     else
                     {
@@ -2541,7 +2541,7 @@ namespace SettlementAutomationCore
                         marketReport.AddSlaughtered(action.EquipmentElement, action.Quantity, providerName, stage);
                         if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
                         {
-                            freeCargo += action.Quantity * action.EquipmentElement.Item.Weight;
+                            cargoBalance += action.Quantity * action.EquipmentElement.Item.Weight;
                         }
                         else
                         {
@@ -2567,7 +2567,7 @@ namespace SettlementAutomationCore
                     float itemWeight = action.EquipmentElement.Item.Weight;
                     if (itemWeight > 0)
                     {
-                        int maxWeightBuy = (int)(freeCargo / itemWeight);
+                        int maxWeightBuy = (int)(Math.Max(0f, cargoBalance) / itemWeight);
                         toBuy = Math.Min(toBuy, maxWeightBuy);
                     }
                 }
@@ -2595,7 +2595,7 @@ namespace SettlementAutomationCore
                     marketReport.AddBought(action.EquipmentElement, toBuy, toBuy * price, providerName, stage);
                     if (isCargo)
                     {
-                        freeCargo -= toBuy * action.EquipmentElement.Item.Weight;
+                        cargoBalance -= toBuy * action.EquipmentElement.Item.Weight;
                     }
                     else
                     {
@@ -2609,7 +2609,7 @@ namespace SettlementAutomationCore
                 context.Party,
                 logic,
                 availableGold,
-                freeCargo,
+                cargoBalance,
                 enforceCargo,
                 freeAnimalSlots,
                 context.MaxPackAnimalPurchases,

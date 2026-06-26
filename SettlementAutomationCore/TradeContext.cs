@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
@@ -34,7 +35,9 @@ namespace SettlementAutomationCore
         public int AvailableGold { get; }        // Gold minus expense reserve
 
         // Cargo
-        public float FreeCargoCapacity { get; }  // Remaining weight capacity
+        public float CargoCapacityBalance { get; } // usableCargoLimit - currentWeight (can go negative)
+        public bool NeedsToSellCargo => CargoCapacityBalance < 0f;
+        public float FreeCargoHeadroom => Math.Max(0f, CargoCapacityBalance); // clamped for buy-headroom checks
         public bool EnforceCargoLimit { get; }   // From Core settings
 
         // Animals
@@ -49,7 +52,7 @@ namespace SettlementAutomationCore
             MobileParty party,
             InventoryLogic logic,
             int availableGold,
-            float freeCargoCapacity,
+            float cargoCapacityBalance,
             bool enforceCargoLimit,
             int freeAnimalSlots,
             int maxPackAnimalPurchases,
@@ -59,7 +62,7 @@ namespace SettlementAutomationCore
             Party = party;
             Logic = logic;
             AvailableGold = availableGold;
-            FreeCargoCapacity = freeCargoCapacity;
+            CargoCapacityBalance = cargoCapacityBalance;
             EnforceCargoLimit = enforceCargoLimit;
             FreeAnimalSlots = freeAnimalSlots;
             MaxPackAnimalPurchases = maxPackAnimalPurchases;

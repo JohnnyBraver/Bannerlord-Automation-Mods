@@ -1,11 +1,11 @@
 using System;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 using TaleWorlds.MountAndBlade;
 using SettlementAutomationCore;
 using PartyManager.Helpers;
-
 namespace PartyManager
 {
     public class SubModule : MBSubModuleBase
@@ -58,6 +58,32 @@ namespace PartyManager
             var settings = Settings.Instance;
             if (settings == null || !settings.ModEnabled) return;
             PrisonerHelper.ProcessPostAutomationAlerts(settlement, settings);
+            ProcessPostAutomationSpeedWarnings(MobileParty.MainParty, settings);
+        }
+
+        private static void ProcessPostAutomationSpeedWarnings(MobileParty party, Settings settings)
+        {
+            if (party == null || settings == null) return;
+
+            AnimalCalculator.CalculatePartyAnimals(party, out int infantry, out int cavalry, out int riding, out int pack, out int livestock,
+                out _, out _, out _);
+            int partySize = infantry + cavalry;
+            int herdSize = pack + livestock + Math.Max(0, riding - infantry);
+            int herdingPenalty = PartyLogisticsPlanner.CalculateHerdingPenaltyPercent(partySize, herdSize);
+            if (settings.HerdingWarningThresholdPercent > 0 && herdingPenalty >= settings.HerdingWarningThresholdPercent)
+            {
+                string msg = $"herding still slows the party by about {herdingPenalty}% after cleanup; settings or item locks may be protecting the remaining animals";
+                TaleWorlds.Library.InformationManager.DisplayMessage(new TaleWorlds.Library.InformationMessage($"[PartyManager] WARNING: {msg}", new TaleWorlds.Library.Color(0.9f, 0.6f, 0.2f)));
+            }
+
+            int cargoPenalty = PartyLogisticsPlanner.CalculateOverburdenPenaltyPercent(
+                party.TotalWeightCarried,
+                party.InventoryCapacity);
+            if (settings.CargoWarningThresholdPercent > 0 && cargoPenalty >= settings.CargoWarningThresholdPercent)
+            {
+                string msg = $"cargo overburden still slows the party by about {cargoPenalty}% after cleanup";
+                TaleWorlds.Library.InformationManager.DisplayMessage(new TaleWorlds.Library.InformationMessage($"[PartyManager] WARNING: {msg}", new TaleWorlds.Library.Color(0.9f, 0.6f, 0.2f)));
+            }
         }
     }
 }

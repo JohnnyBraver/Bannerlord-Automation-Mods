@@ -70,7 +70,7 @@ namespace SettlementAutomationCore
                     }
                 }
             }
-            return (infantry * 2) + (cavalry * 1);
+            return infantry + cavalry;
         }
 
         public static int GetCurrentAnimalsCount(MobileParty party)
