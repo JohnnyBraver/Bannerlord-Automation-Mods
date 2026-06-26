@@ -1,3 +1,6 @@
+using System;
+using System.Linq;
+using System.Reflection;
 using TaleWorlds.Core;
 using TradeOptimizer;
 using Xunit;
@@ -109,6 +112,62 @@ namespace TradeOptimizer.Tests
 
             Assert.NotEqual(fineKey, crackedKey);
             Assert.Equal("flax::fine", fineKey);
+        }
+
+        [Fact]
+        public void IsCommodityCandidate_AcceptsTradeGoodsAnimalsAndMounts()
+        {
+            var good = new ItemObject("wool");
+            var animal = new ItemObject("hog");
+            var mount = new ItemObject("horse");
+            var weapon = new ItemObject("sword");
+
+            SetPrivateField(good, "Type", ItemObject.ItemTypeEnum.Goods);
+
+            var animalCategory = (ItemCategory)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(ItemCategory));
+            SetPrivateField(animalCategory, "<IsAnimal>k__BackingField", true);
+            SetPrivateField(animal, "<ItemCategory>k__BackingField", animalCategory);
+
+            var animalHorseComponent = (HorseComponent)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(HorseComponent));
+            SetPrivateField(animal, "<ItemComponent>k__BackingField", animalHorseComponent);
+
+            var horseComponent = (HorseComponent)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(HorseComponent));
+            var monster = (Monster)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(Monster));
+            SetPrivateField(horseComponent, "<Monster>k__BackingField", monster);
+            SetPrivateField(horseComponent, "<IsRideable>k__BackingField", true);
+            SetPrivateField(mount, "<ItemComponent>k__BackingField", horseComponent);
+
+            SetPrivateField(weapon, "Type", ItemObject.ItemTypeEnum.OneHandedWeapon);
+
+            Assert.True(good.IsTradeGood, "good should be trade good");
+            Assert.True(animal.IsAnimal, "animal should be animal");
+            Assert.True(mount.IsMountable, "mount should be mountable");
+
+            Assert.True(TradeCandidatePolicy.IsCommodityCandidate(good));
+            Assert.True(TradeCandidatePolicy.IsCommodityCandidate(animal));
+            Assert.True(TradeCandidatePolicy.IsCommodityCandidate(mount));
+            Assert.False(TradeCandidatePolicy.IsCommodityCandidate(weapon));
+        }
+
+        private static void SetPrivateField(object obj, string fieldName, object value)
+        {
+            var field = obj.GetType().GetField(fieldName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (field != null)
+            {
+                field.SetValue(obj, value);
+                return;
+            }
+            var baseType = obj.GetType().BaseType;
+            while (baseType != null)
+            {
+                field = baseType.GetField(fieldName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (field != null)
+                {
+                    field.SetValue(obj, value);
+                    return;
+                }
+                baseType = baseType.BaseType;
+            }
         }
     }
 }

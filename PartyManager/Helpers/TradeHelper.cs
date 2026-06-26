@@ -39,65 +39,67 @@ namespace PartyManager.Helpers
             AnimalCalculator.CalculatePartyAnimals(party, out int infantry, out int cavalry, out int riding, out int pack, out int livestock,
                 out var ridingItems, out var packItems, out var livestockItems);
 
-            int totalAnimals = riding + pack + livestock;
-            int maxAllowed = (infantry * 2) + (cavalry * 1);
             int freePartySlots = Math.Max(0, party.Party.PartySizeLimit - party.MemberRoster.TotalManCount);
+            var ridingMode = settings.SellRidingMountsSetting;
+            int excessRiding = PartyLogisticsPlanner.CalculateProcessableRidingMounts(
+                riding,
+                infantry,
+                freePartySlots,
+                ridingMode,
+                settings.PreserveRidingMountsForFootReserve);
 
-            if (totalAnimals > maxAllowed)
+            int herdSize = pack + livestock + Math.Max(0, riding - infantry);
+            int partySize = infantry + cavalry;
+            int herdingExcess = Math.Max(0, herdSize - partySize);
+            bool slaughter = settings.SlaughterAnimalsForHerding;
+
+            // 1. Process Riding Mounts that we explicitly want to sell under settings
+            int soldRiding = 0;
+            if (excessRiding > 0)
             {
-                int excess = totalAnimals - maxAllowed;
-                bool slaughter = settings.SlaughterAnimalsForHerding;
+                foreach (var el in ridingItems)
+                {
+                    if (excessRiding <= 0) break;
+                    int available = GetSellableQuantity(el, context);
+                    int toSell = Math.Min(excessRiding, available);
+                    if (toSell <= 0) continue;
+                    actions.Add(new TradeAction(el.EquipmentElement, toSell, TradeActionType.Sell));
+                    soldRiding += toSell;
+                    excessRiding -= toSell;
+                }
+            }
 
-                // 1. Process Livestock first
+            // Calculate how much herding excess is reduced by the sold riding mounts
+            int currentHerdedRiding = Math.Max(0, riding - infantry);
+            int newHerdedRiding = Math.Max(0, (riding - soldRiding) - infantry);
+            int herdingReductionFromRiding = currentHerdedRiding - newHerdedRiding;
+            int remainingHerdingExcess = Math.Max(0, herdingExcess - herdingReductionFromRiding);
+
+            // 2. Process Livestock first for the remaining herding excess
+            if (remainingHerdingExcess > 0)
+            {
                 foreach (var el in livestockItems)
                 {
-                    if (excess <= 0) break;
+                    if (remainingHerdingExcess <= 0) break;
                     int available = GetSellableQuantity(el, context);
-                    int toProcess = Math.Min(excess, available);
+                    int toProcess = Math.Min(remainingHerdingExcess, available);
                     if (toProcess <= 0) continue;
                     actions.Add(new TradeAction(el.EquipmentElement, toProcess, slaughter ? TradeActionType.Slaughter : TradeActionType.Sell));
-                    excess -= toProcess;
+                    remainingHerdingExcess -= toProcess;
                 }
+            }
 
-                // 2. Process Pack Animals before riding mounts. Pack animals help cargo, but riding mounts
-                // prevent immediate speed loss after recruiting more foot troops.
-                if (excess > 0)
+            // 3. Process Pack Animals for the remaining herding excess
+            if (remainingHerdingExcess > 0)
+            {
+                foreach (var el in packItems)
                 {
-                    foreach (var el in packItems)
-                    {
-                        if (excess <= 0) break;
-                        int available = GetSellableQuantity(el, context);
-                        int toProcess = Math.Min(excess, available);
-                        if (toProcess <= 0) continue;
-                        actions.Add(new TradeAction(el.EquipmentElement, toProcess, slaughter ? TradeActionType.Slaughter : TradeActionType.Sell));
-                        excess -= toProcess;
-                    }
-                }
-
-                // 3. Process Riding Mounts (respecting SellRidingMountsSetting and foot reserve)
-                var ridingMode = settings.SellRidingMountsSetting;
-                if (excess > 0 && ridingMode != SellRidingMountsMode.Never)
-                {
-                    int excessRiding = PartyLogisticsPlanner.CalculateProcessableRidingMounts(
-                        riding,
-                        infantry,
-                        freePartySlots,
-                        ridingMode,
-                        settings.PreserveRidingMountsForFootReserve);
-
-                    if (excessRiding > 0)
-                    {
-                        foreach (var el in ridingItems)
-                        {
-                            if (excess <= 0 || excessRiding <= 0) break;
-                            int available = GetSellableQuantity(el, context);
-                            int toSell = Math.Min(Math.Min(excess, excessRiding), available);
-                            if (toSell <= 0) continue;
-                            actions.Add(new TradeAction(el.EquipmentElement, toSell, TradeActionType.Sell));
-                            excess -= toSell;
-                            excessRiding -= toSell;
-                        }
-                    }
+                    if (remainingHerdingExcess <= 0) break;
+                    int available = GetSellableQuantity(el, context);
+                    int toProcess = Math.Min(remainingHerdingExcess, available);
+                    if (toProcess <= 0) continue;
+                    actions.Add(new TradeAction(el.EquipmentElement, toProcess, slaughter ? TradeActionType.Slaughter : TradeActionType.Sell));
+                    remainingHerdingExcess -= toProcess;
                 }
             }
 

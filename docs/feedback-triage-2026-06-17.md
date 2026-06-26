@@ -47,6 +47,13 @@ Raw notes from live testing and feedback. This is intentionally temporary: keep 
   - PartyManager can expose the setting, but Core should own the actual loot transfer so post-battle inventory changes use one shared path.
   - Desired behavior: automatically claim all battle loot for the main party, then let existing post-loot/post-battle processing run.
   - Need verify whether the correct hook is native loot collection/distribution or the loot inventory screen's take-all/accept path.
+- Add recruitment spent gold notification reporting modes.
+  - Currently: Recruitment uses silent gold deductions (`disableNotification: true` in `ExecuteNotableRecruitment`) to avoid spamming the message log with individual notifications when recruiting multiple units in a single automation cycle.
+  - Idea: Offer a reporting setting to control how spent gold is shown:
+    - **Silent**: No in-game notifications (current behavior).
+    - **Individual**: Display native spent messages for each unit recruited.
+    - **Consolidated**: Deduct and display total spent gold per recruitment batch once after the cycle is complete.
+
 
 ## Code Review Follow-ups
 
