@@ -233,7 +233,7 @@ namespace EquipmentManager
 
         private static bool IsEquipment(ItemObject item)
         {
-            return item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null || item.StringId == "stealth_throwing_stone";
+            return item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null || item.StringId == "stealth_throwing_stone" || item.ItemComponent is BannerComponent;
         }
 
         private static float GetArmorScore(EquipmentElement equipmentElement, bool prioritizeStealth)

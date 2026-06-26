@@ -661,6 +661,16 @@ namespace EquipmentManager
                                     settings.IgnoreThrowingWeaponMeleeStats) || candidateScore > currentScore) return true;
                         }
                     }
+
+                    if (item.ItemComponent is BannerComponent bannerComponent)
+                    {
+                        var slot = EquipmentIndex.ExtraWeaponSlot;
+                        var currentBanner = equipment[slot];
+                        if (EquipmentComparison.StrictlyBeatsBanner(eqEl, currentBanner) || (currentBanner.IsEmpty && bannerComponent.BannerEffect != null))
+                        {
+                            return true;
+                        }
+                    }
                 }
             }
 

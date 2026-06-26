@@ -90,7 +90,10 @@ namespace SettlementAutomationCore.Transactions
                     Game.Current?.EventManager?.TriggerEvent(new InventoryEquipmentTypeChangedEvent(!inventoryVm.IsCivilianMode));
                 }
 
-                Campaign.Current?.CurrentMenuContext?.Refresh();
+                if (MobileParty.MainParty?.MapEvent == null)
+                {
+                    Campaign.Current?.CurrentMenuContext?.Refresh();
+                }
             }
             catch (Exception ex)
             {

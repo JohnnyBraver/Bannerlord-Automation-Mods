@@ -23,6 +23,36 @@ namespace EquipmentManager
             return EquipmentDecisionMath.GetArmorScore(ToArmorStats(equipmentElement), prioritizeStealth);
         }
 
+        public static bool StrictlyBeatsBanner(EquipmentElement candidate, EquipmentElement current)
+        {
+            if (candidate.IsEmpty || candidate.Item == null) return false;
+            var candidateComponent = candidate.Item.ItemComponent as BannerComponent;
+            if (candidateComponent == null || candidateComponent.BannerEffect == null) return false;
+
+            if (current.IsEmpty || current.Item == null)
+            {
+                return true;
+            }
+
+            var currentComponent = current.Item.ItemComponent as BannerComponent;
+            if (currentComponent == null)
+            {
+                return true;
+            }
+
+            if (currentComponent.BannerEffect == null)
+            {
+                return false;
+            }
+
+            if (candidateComponent.BannerEffect.StringId == currentComponent.BannerEffect.StringId)
+            {
+                return candidateComponent.BannerLevel > currentComponent.BannerLevel;
+            }
+
+            return false;
+        }
+
         public static bool StrictlyBeatsWeapon(
             EquipmentElement candidate,
             EquipmentElement current,

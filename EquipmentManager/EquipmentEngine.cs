@@ -15,7 +15,7 @@ namespace EquipmentManager
 {
     public static class EquipmentEngine
     {
-        private struct EquipTarget
+        internal struct EquipTarget
         {
             public Hero Hero;
             public InventoryLogic.InventorySide Side;
@@ -27,9 +27,10 @@ namespace EquipmentManager
             public EquipTarget Target;
             public EquipmentIndex Slot;
             public bool IsWeapon;
+            public bool IsBanner;
         }
 
-        private sealed class AvailableEquipment
+        internal sealed class AvailableEquipment
         {
             public EquipmentElement EquipmentElement { get; }
             public int Quantity { get; set; }
@@ -53,7 +54,7 @@ namespace EquipmentManager
             }
         }
 
-        private abstract class EquipmentTransferContext
+        internal abstract class EquipmentTransferContext
         {
             public abstract List<AvailableEquipment> BuildAvailableEquipmentPool();
             public abstract void EquipItem(AvailableEquipment available, EquipTarget target, EquipmentIndex slot);
@@ -174,7 +175,7 @@ namespace EquipmentManager
                     var item = eqEl.Item;
                     if (item == null) continue;
 
-                    bool isEquipment = item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null;
+                    bool isEquipment = item.ItemComponent is BannerComponent || item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null;
                     if (!isEquipment) continue;
 
                     protectionItems.Add(new EquipmentProtectionItem(eqEl, itemVM.ItemCount, itemVM.ItemCost));
@@ -187,7 +188,7 @@ namespace EquipmentManager
             var settlement = inventoryLogic.CurrentSettlementComponent?.Settlement;
             bool skipSell = settlement != null && settings.PreventEquipmentSaleInVillages && settlement.IsVillage;
 
-            if (settings.SellUnlockedEquipment && vm.RightItemListVM != null && !skipSell)
+            if (settings.SellUnlockedEquipment && vm.RightItemListVM != null && !skipSell && vm.IsOtherInventoryGoldRelevant)
             {
                 var itemsToSell = new List<SellCandidate>();
                 foreach (var itemVM in vm.RightItemListVM)
@@ -198,7 +199,7 @@ namespace EquipmentManager
                     var item = itemVM.ItemRosterElement.EquipmentElement.Item;
                     if (item == null) continue;
 
-                    bool isEquipment = item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null;
+                    bool isEquipment = item.ItemComponent is BannerComponent || item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null;
                     if (isEquipment)
                     {
                         int sellQuantity = protectionPlan?.GetSellableQuantity(itemVM.ItemRosterElement.EquipmentElement, itemVM.ItemCount) ?? itemVM.ItemCount;
@@ -384,7 +385,7 @@ namespace EquipmentManager
         }
 
 
-        private static int EvaluateAndEquip(EquipmentTransferContext transferContext, List<Hero> heroesToProcess, Settings settings, List<string>? notifications)
+        internal static int EvaluateAndEquip(EquipmentTransferContext transferContext, List<Hero> heroesToProcess, Settings settings, List<string>? notifications)
         {
             int equippedCount = 0;
             var armorSlots = new EquipmentIndex[] { EquipmentIndex.Head, EquipmentIndex.Body, EquipmentIndex.Leg, EquipmentIndex.Gloves, EquipmentIndex.Cape };
@@ -555,7 +556,7 @@ namespace EquipmentManager
 
                             var candidate = available.EquipmentElement;
                             var item = candidate.Item;
-                            if (item == null || item.PrimaryWeapon == null) continue;
+                            if (item == null || item.ItemComponent is BannerComponent || item.PrimaryWeapon == null) continue;
 
                             if (item.StringId == "stealth_throwing_stone") continue;
 
@@ -626,6 +627,48 @@ namespace EquipmentManager
                             }
                         }
                     }
+
+                    // C. Banner Slot
+                    {
+                        var slot = EquipmentIndex.ExtraWeaponSlot;
+                        var currentBanner = GetCurrentEquipment(virtualEquipment, target, slot);
+
+                        AvailableEquipment? bestStrictUpgrade = null;
+                        float bestStrictScore = -9999f;
+
+                        foreach (var available in availableItems)
+                        {
+                            if (available.Quantity <= 0) continue;
+
+                            var candidate = available.EquipmentElement;
+                            var item = candidate.Item;
+                            if (item == null || item.ItemComponent is not BannerComponent bannerComponent) continue;
+
+                            if (targetSide == InventoryLogic.InventorySide.CivilianEquipment && !item.IsCivilian) continue;
+                            if (targetSide == InventoryLogic.InventorySide.StealthEquipment && !item.IsStealthItem) continue;
+
+                            bool strictlyBeats = EquipmentComparison.StrictlyBeatsBanner(candidate, currentBanner);
+                            if (strictlyBeats)
+                            {
+                                float score = bannerComponent.BannerLevel;
+                                if (score > bestStrictScore)
+                                {
+                                    bestStrictScore = score;
+                                    bestStrictUpgrade = available;
+                                }
+                            }
+                        }
+
+                        if (bestStrictUpgrade != null)
+                        {
+                            var upgradeElement = bestStrictUpgrade.EquipmentElement;
+                            EquipAvailableItem(transferContext, bestStrictUpgrade, target, slot, currentBanner, false, availableItems, cascadeQueue, virtualEquipment);
+                            equippedCount++;
+
+                            string setName = GetSetName(targetSide);
+                            SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Equipped {upgradeElement.Item.Name} on {hero.Name} in Banner slot ({setName} set).");
+                        }
+                    }
                 }
             }
 
@@ -674,7 +717,7 @@ namespace EquipmentManager
                 {
                     foreach (var slot in armorSlots)
                     {
-                        slotTargets.Add(new EquipSlotTarget { Target = target, Slot = slot, IsWeapon = false });
+                        slotTargets.Add(new EquipSlotTarget { Target = target, Slot = slot, IsWeapon = false, IsBanner = false });
                     }
                 }
             }
@@ -685,8 +728,9 @@ namespace EquipmentManager
                 {
                     foreach (var slot in weaponSlots)
                     {
-                        slotTargets.Add(new EquipSlotTarget { Target = target, Slot = slot, IsWeapon = true });
+                        slotTargets.Add(new EquipSlotTarget { Target = target, Slot = slot, IsWeapon = true, IsBanner = false });
                     }
+                    slotTargets.Add(new EquipSlotTarget { Target = target, Slot = EquipmentIndex.ExtraWeaponSlot, IsWeapon = false, IsBanner = true });
                 }
             }
 
@@ -776,6 +820,19 @@ namespace EquipmentManager
                 var target = slotTarget.Target;
                 var currentEquipment = GetCurrentEquipment(virtualEquipment, target, slotTarget.Slot);
 
+                if (slotTarget.IsBanner)
+                {
+                    if (item.ItemComponent is not BannerComponent bannerComponent) continue;
+                    if (target.Side == InventoryLogic.InventorySide.CivilianEquipment && !item.IsCivilian) continue;
+                    if (target.Side == InventoryLogic.InventorySide.StealthEquipment && !item.IsStealthItem) continue;
+
+                    if (!EquipmentComparison.StrictlyBeatsBanner(candidate, currentEquipment)) continue;
+
+                    EquipAvailableItem(transferContext, freedItem, target, slotTarget.Slot, currentEquipment, false, availableItems, cascadeQueue, virtualEquipment);
+                    SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"Cascade equipped {item.Name} on {target.Hero.Name} in Banner slot ({GetSetName(target.Side)} set).");
+                    return true;
+                }
+
                 if (slotTarget.IsWeapon)
                 {
                     if (!CanEquipWeaponCandidate(candidate, currentEquipment, target, slotTarget.Slot)) continue;
@@ -814,7 +871,7 @@ namespace EquipmentManager
         private static bool CanEquipWeaponCandidate(EquipmentElement candidate, EquipmentElement currentWeapon, EquipTarget target, EquipmentIndex slot)
         {
             var item = candidate.Item;
-            if (item == null || item.PrimaryWeapon == null) return false;
+            if (item == null || item.ItemComponent is BannerComponent || item.PrimaryWeapon == null) return false;
             if (item.StringId == "stealth_throwing_stone") return false;
             if (!EquipmentComparison.ShouldEvaluateWeaponSlot(currentWeapon, target.Side)) return false;
             if (target.Side == InventoryLogic.InventorySide.CivilianEquipment && !item.IsCivilian) return false;

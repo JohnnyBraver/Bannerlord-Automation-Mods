@@ -1,4 +1,8 @@
 # Scripts/publish.ps1
+param(
+    [string[]]$Mods = @()
+)
+
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -6,7 +10,7 @@ $publishDir = Join-Path $repoRoot "publish"
 $tempPublishDir = Join-Path $repoRoot ".tmp_publish"
 $gameModulesRoot = "E:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord\Modules"
 
-$mods = @(
+$allMods = @(
     "SettlementAutomationCore",
     "SmithingOptimizer",
     "FiefManager",
@@ -15,13 +19,67 @@ $mods = @(
     "EquipmentManager"
 )
 
-Write-Host "Building solution in Release configuration and deploying to the game..." -ForegroundColor Cyan
-& dotnet build -c Release -m:1 -p:UIExtenderExPath="E:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord\Modules\Bannerlord.UIExtenderEx\bin\Win64_Shipping_Client\Bannerlord.UIExtenderEx.dll" -p:MCMv5Path="E:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord\Modules\Bannerlord.MBOptionScreen\bin\Win64_Shipping_Client\MCMv5.dll"
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Build failed. Cannot publish release zips."
-    exit $LASTEXITCODE
+# 1. Determine which mods to process
+$selectedMods = @()
+if ($Mods.Count -gt 0) {
+    foreach ($mod in $Mods) {
+        if ($allMods -contains $mod) {
+            $selectedMods += $mod
+        } else {
+            Write-Error "Invalid mod name: '$mod'. Valid mods are: $($allMods -join ', ')"
+            exit 1
+        }
+    }
+    Write-Host "Explicitly selected mods for build and packaging: $($selectedMods -join ', ')" -ForegroundColor Cyan
+} else {
+    # Auto-detect using git status
+    try {
+        $gitStatus = git status --porcelain
+        if ($LASTEXITCODE -eq 0 -and $gitStatus) {
+            $changedDirs = New-Object System.Collections.Generic.HashSet[string]
+            foreach ($line in $gitStatus) {
+                # Format: " M path/to/file" or "?? path/to/file"
+                if ($line -match '^\s*\S+\s+(.+)$') {
+                    $path = $Matches[1]
+                    $parts = $path -split '/'
+                    if ($parts.Count -gt 0 -and $allMods -contains $parts[0]) {
+                        $changedDirs.Add($parts[0]) | Out-Null
+                    }
+                }
+            }
+            if ($changedDirs.Count -gt 0) {
+                $selectedMods = @($changedDirs)
+                Write-Host "Auto-detected modified mods from git status: $($selectedMods -join ', ')" -ForegroundColor Cyan
+            }
+        }
+    } catch {
+        # Git failed or not available
+    }
+
+    if ($selectedMods.Count -eq 0) {
+        $selectedMods = $allMods
+        Write-Host "No modifications detected or git status empty. Processing all mods." -ForegroundColor Cyan
+    }
 }
 
+# 2. Build selected mods
+Write-Host "Building selected mods..." -ForegroundColor Cyan
+foreach ($mod in $selectedMods) {
+    $projectPath = Join-Path (Join-Path $repoRoot $mod) "$mod.csproj"
+    if (-not (Test-Path $projectPath)) {
+        Write-Error "Could not find project file for $mod at $projectPath"
+        exit 1
+    }
+
+    Write-Host "Building $mod..." -ForegroundColor Green
+    & dotnet build $projectPath -c Release -m:1 -p:UIExtenderExPath="E:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord\Modules\Bannerlord.UIExtenderEx\bin\Win64_Shipping_Client\Bannerlord.UIExtenderEx.dll" -p:MCMv5Path="E:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord\Modules\Bannerlord.MBOptionScreen\bin\Win64_Shipping_Client\MCMv5.dll"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Build failed for $mod."
+        exit $LASTEXITCODE
+    }
+}
+
+# 3. Package selected zips
 Write-Host "Packaging release zips..." -ForegroundColor Cyan
 if (-not (Test-Path $publishDir)) {
     New-Item -ItemType Directory -Path $publishDir | Out-Null
@@ -29,7 +87,7 @@ if (-not (Test-Path $publishDir)) {
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-foreach ($mod in $mods) {
+foreach ($mod in $selectedMods) {
     Write-Host "Packaging $mod..." -ForegroundColor Green
     
     # Setup clean temp publishing directory for this mod
@@ -64,4 +122,4 @@ if (Test-Path $tempPublishDir) {
     Remove-Item -Recurse -Force $tempPublishDir | Out-Null
 }
 
-Write-Host "All release zips successfully built, packaged, and deployed to the game!" -ForegroundColor Green
+Write-Host "Build, deployment, and packaging completed successfully for: $($selectedMods -join ', ')" -ForegroundColor Green
