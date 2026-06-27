@@ -375,6 +375,7 @@ namespace TradeOptimizer
                                             if (ownItem == null || ownItem.ItemRosterElement.EquipmentElement.Item == null) continue;
 
                                             var ownItemObj = ownItem.ItemRosterElement.EquipmentElement.Item;
+                                            if (ownItemObj == itemObj) continue;
                                             if (!TradeCandidatePolicy.CanTradeByMode(
                                                     ownItemObj,
                                                     settings.FoodTradingMode,

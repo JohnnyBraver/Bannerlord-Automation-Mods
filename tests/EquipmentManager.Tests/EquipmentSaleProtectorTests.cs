@@ -101,6 +101,44 @@ namespace EquipmentManager.Tests
             Assert.Equal(0, plan.GetSellableQuantity(element, 1));
         }
 
+        [Fact]
+        public void BuildProtectionPlan_ProtectsNotMerchandiseItems()
+        {
+            var item = Item("not_merch_item");
+            var field = typeof(ItemObject).GetField("_notMerchandise", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (field != null)
+            {
+                field.SetValue(item, true);
+            }
+            var backingField = typeof(ItemObject).GetField("<NotMerchandise>k__BackingField", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (backingField != null)
+            {
+                backingField.SetValue(item, true);
+            }
+
+            var armorComponent = (ArmorComponent)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(ArmorComponent));
+            var componentField = typeof(ItemObject).GetField("<ItemComponent>k__BackingField", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (componentField != null)
+            {
+                componentField.SetValue(item, armorComponent);
+            }
+
+            var element = new EquipmentElement(item, null, null!, false);
+            var protectionItems = new[]
+            {
+                new EquipmentProtectionItem(element, 1, 10f)
+            };
+
+            var plan = EquipmentSaleProtector.BuildProtectionPlan(
+                protectionItems,
+                new System.Collections.Generic.List<TaleWorlds.CampaignSystem.Hero>(),
+                new Settings(),
+                hasWeaponDonationPerk: false,
+                hasArmorDonationPerk: false);
+
+            Assert.Equal(0, plan.GetSellableQuantity(element, 1));
+        }
+
         private static EquipmentElement Equipment(string id)
         {
             return new EquipmentElement(Item(id), null, null!, false);

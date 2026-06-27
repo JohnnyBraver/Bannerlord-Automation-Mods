@@ -149,6 +149,17 @@ namespace TradeOptimizer.Tests
             Assert.False(TradeCandidatePolicy.IsCommodityCandidate(weapon));
         }
 
+        [Fact]
+        public void IsCommodityCandidate_RejectsNotMerchandiseItems()
+        {
+            var good = new ItemObject("wool");
+            SetPrivateField(good, "Type", ItemObject.ItemTypeEnum.Goods);
+            SetPrivateField(good, "_notMerchandise", true);
+            SetPrivateField(good, "<NotMerchandise>k__BackingField", true);
+
+            Assert.False(TradeCandidatePolicy.IsCommodityCandidate(good));
+        }
+
         private static void SetPrivateField(object obj, string fieldName, object value)
         {
             var field = obj.GetType().GetField(fieldName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);

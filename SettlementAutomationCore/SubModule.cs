@@ -1008,6 +1008,11 @@ namespace SettlementAutomationCore
                     {
                         AddRecruitmentLog(recruitedMap, candidate.Troop, recruited);
                         totalCount += recruited;
+                        if (Settings.Instance?.RecruitmentNotificationModeSetting == RecruitmentNotificationMode.OneByOne)
+                        {
+                            string notableName = candidate.Notable?.Name?.ToString() ?? "Notable";
+                            InformationManager.DisplayMessage(new InformationMessage($"Recruited {recruited}x {candidate.Troop.Name} from {notableName}."));
+                        }
                     }
                 }
                 else if (candidate.Source == SettlementRecruitmentSource.TavernMercenary && recruitmentBehavior != null && applyMercMethod != null)
@@ -1027,6 +1032,10 @@ namespace SettlementAutomationCore
                     {
                         AddRecruitmentLog(recruitedMap, candidate.Troop, recruited);
                         totalCount += recruited;
+                        if (Settings.Instance?.RecruitmentNotificationModeSetting == RecruitmentNotificationMode.OneByOne)
+                        {
+                            InformationManager.DisplayMessage(new InformationMessage($"Recruited {recruited}x {candidate.Troop.Name} from tavern."));
+                        }
                     }
                 }
             }
@@ -1035,7 +1044,10 @@ namespace SettlementAutomationCore
             {
                 var troopParts = recruitedMap.Select(kvp => $"{kvp.Value}x {kvp.Key.Name}");
                 string msg = $"Recruited in {settlement.Name}: {string.Join(", ", troopParts)} (Total: {totalCount})";
-                InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
+                if (Settings.Instance?.RecruitmentNotificationModeSetting == RecruitmentNotificationMode.Consolidated)
+                {
+                    InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
+                }
                 Helpers.Logger.WriteLog("SettlementAutomationCore", msg);
             }
         }

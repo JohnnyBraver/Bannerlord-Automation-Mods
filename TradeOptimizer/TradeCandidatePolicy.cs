@@ -10,7 +10,7 @@ namespace TradeOptimizer
 
         public static bool IsCommodityCandidate(ItemObject item)
         {
-            return item != null && !item.IsUniqueItem && (item.IsTradeGood || item.IsAnimal || item.IsMountable);
+            return item != null && !item.IsUniqueItem && !item.NotMerchandise && (item.IsTradeGood || item.IsAnimal || item.IsMountable);
         }
 
         public static bool IsCraftingMaterial(ItemObject item)

@@ -120,7 +120,7 @@ namespace EquipmentManager
             var item = equipmentElement.Item;
             if (item == null) return false;
 
-            if (item.IsUniqueItem)
+            if (item.IsUniqueItem || item.NotMerchandise)
             {
                 return true;
             }
