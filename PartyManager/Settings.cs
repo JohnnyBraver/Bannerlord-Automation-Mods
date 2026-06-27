@@ -500,34 +500,30 @@ namespace PartyManager
 
         // --- Mount & Herding settings ---
 
-        [SettingPropertyBool("Herding Penalty Protection", RequireRestart = false, HintText = "Automatically sell or slaughter excess animals to avoid herding speed penalty.", Order = 7)]
+        [SettingPropertyBool("Herding Penalty Protection", RequireRestart = false, HintText = "Automatically sell excess animals to avoid herding speed penalty.", Order = 7)]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 3)]
         public bool PreventHerdingPenalty { get; set; } = true;
 
-        [SettingPropertyBool("Slaughter Animals for Herding", RequireRestart = false, HintText = "Slaughter livestock and pack animals instead of selling them when herding limits are exceeded in settlements.", Order = 8)]
-        [SettingPropertyGroup("Mounts & Herding", GroupOrder = 3)]
-        public bool SlaughterAnimalsForHerding { get; set; } = true;
-
-        [SettingPropertyDropdown("Sell/Slaughter Riding Mounts", RequireRestart = false, HintText = "Control when the mod can sell or slaughter riding mounts.", Order = 9)]
+        [SettingPropertyDropdown("Sell Riding Mounts", RequireRestart = false, HintText = "Control when to sell excess riding mounts to reduce herding or cargo weight.", Order = 8)]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 3)]
         public Dropdown<SellRidingMountsOption> SellRidingMountsDropdown { get; set; } = new Dropdown<SellRidingMountsOption>(SellRidingMountsOptions, 1);
 
         [SettingPropertyBool("Preserve Riding Mounts for Foot Reserve", RequireRestart = false,
-            HintText = "Protect riding mounts up to current foot troops plus empty party slots before selling or slaughtering mounts.", Order = 10)]
+            HintText = "Protect riding mounts up to current foot troops plus empty party slots before selling mounts.", Order = 9)]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 3)]
         public bool PreserveRidingMountsForFootReserve { get; set; } = true;
 
-        [SettingPropertyDropdown("Post-Battle Auto-Slaughter", RequireRestart = false, HintText = "Automatically slaughter animals after a battle to instantly clear herding penalties.", Order = 11)]
+        [SettingPropertyDropdown("Post-Battle Auto-Slaughter", RequireRestart = false, HintText = "Automatically slaughter animals after a battle to instantly clear herding penalties.", Order = 10)]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 3)]
         public Dropdown<PostBattleSlaughterOption> PostBattleSlaughterDropdown { get; set; } = new Dropdown<PostBattleSlaughterOption>(PostBattleSlaughterOptions, 2);
 
         [SettingPropertyInteger("Herding Warning Threshold (%)", 0, 80, RequireRestart = false,
-            HintText = "Warn after post-battle cleanup if herding still slows the party by at least this much. Default: 5%.", Order = 12)]
+            HintText = "Warn after post-battle cleanup if herding still slows the party by at least this much. Default: 5%.", Order = 11)]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 3)]
         public int HerdingWarningThresholdPercent { get; set; } = 5;
 
         [SettingPropertyInteger("Cargo Warning Threshold (%)", 0, 100, RequireRestart = false,
-            HintText = "Warn after post-battle cleanup if overburdened cargo slows the party by at least this much. Default: 5%.", Order = 13)]
+            HintText = "Warn after post-battle cleanup if overburdened cargo slows the party by at least this much. Default: 5%.", Order = 12)]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 3)]
         public int CargoWarningThresholdPercent { get; set; } = 5;
 

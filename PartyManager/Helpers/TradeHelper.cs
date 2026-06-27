@@ -51,7 +51,6 @@ namespace PartyManager.Helpers
             int herdSize = pack + livestock + Math.Max(0, riding - infantry);
             int partySize = infantry + cavalry;
             int herdingExcess = Math.Max(0, herdSize - partySize);
-            bool slaughter = settings.SlaughterAnimalsForHerding;
 
             // 1. Process Riding Mounts that we explicitly want to sell under settings
             int soldRiding = 0;
@@ -84,7 +83,7 @@ namespace PartyManager.Helpers
                     int available = GetSellableQuantity(el, context);
                     int toProcess = Math.Min(remainingHerdingExcess, available);
                     if (toProcess <= 0) continue;
-                    actions.Add(new TradeAction(el.EquipmentElement, toProcess, slaughter ? TradeActionType.Slaughter : TradeActionType.Sell));
+                    actions.Add(new TradeAction(el.EquipmentElement, toProcess, TradeActionType.Sell));
                     remainingHerdingExcess -= toProcess;
                 }
             }
@@ -98,7 +97,7 @@ namespace PartyManager.Helpers
                     int available = GetSellableQuantity(el, context);
                     int toProcess = Math.Min(remainingHerdingExcess, available);
                     if (toProcess <= 0) continue;
-                    actions.Add(new TradeAction(el.EquipmentElement, toProcess, slaughter ? TradeActionType.Slaughter : TradeActionType.Sell));
+                    actions.Add(new TradeAction(el.EquipmentElement, toProcess, TradeActionType.Sell));
                     remainingHerdingExcess -= toProcess;
                 }
             }

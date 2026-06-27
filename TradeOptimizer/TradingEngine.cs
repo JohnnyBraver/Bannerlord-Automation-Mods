@@ -75,7 +75,7 @@ namespace TradeOptimizer
             float netWeightAdded = 0f;
 
             float startWeight = MobileParty.MainParty != null ? SettlementAutomationCore.Helpers.InventoryHelper.GetRosterWeight(MobileParty.MainParty.ItemRoster) : 0f;
-            float usableCapacity = startWeight + tradeContext.FreeCargoCapacity;
+            float usableCapacity = startWeight + tradeContext.CargoCapacityBalance;
 
             // The Core-owned context has already accounted for reserves and cargo policy.
             int currentBalance = tradeContext.AvailableGold;
@@ -361,7 +361,7 @@ namespace TradeOptimizer
                         {
                             if (tradeContext.EnforceCargoLimit)
                             {
-                                float freeCargo = tradeContext.FreeCargoCapacity - netWeightAdded;
+                                float freeCargo = tradeContext.FreeCargoHeadroom - netWeightAdded;
                                 if (freeCargo < itemWeight)
                                 {
                                     // Try margin replacement: sell lower-margin owned items to merchant to make room for bestItem
