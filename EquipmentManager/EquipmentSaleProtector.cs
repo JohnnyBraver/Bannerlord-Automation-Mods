@@ -120,6 +120,11 @@ namespace EquipmentManager
             var item = equipmentElement.Item;
             if (item == null) return false;
 
+            if (item.IsUniqueItem)
+            {
+                return true;
+            }
+
             if (item.StringId == "stealth_throwing_stone")
             {
                 return true;
