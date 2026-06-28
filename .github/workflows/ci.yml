@@ -1,0 +1,33 @@
+name: CI/CD Version Validation & Release Tagging
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate-and-tag:
+    name: Validate and Tag Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Version Check Script
+        shell: pwsh
+        run: |
+          ./scripts/check-version-bump.ps1 -BaseRef "${{ github.event.before }}"
+
+      - name: Configure Git Bot User
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run Tag Release Script
+        shell: pwsh
+        run: |
+          ./scripts/tag-release.ps1 -Push -CompareTo "${{ github.event.before }}"
