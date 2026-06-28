@@ -61,11 +61,6 @@ namespace SettlementAutomationCore
             new CoreReportingModeOption("Full", CoreReportingMode.Full)
         };
 
-        private static readonly IReadOnlyList<RecruitmentNotificationModeOption> RecruitmentNotificationModeOptions = new List<RecruitmentNotificationModeOption>
-        {
-            new RecruitmentNotificationModeOption("One-by-One", RecruitmentNotificationMode.OneByOne),
-            new RecruitmentNotificationModeOption("Consolidated", RecruitmentNotificationMode.Consolidated)
-        };
 
         [SettingPropertyBool("Disable Settlement Automation", RequireRestart = false,
             HintText = "Stops Core-driven automatic settlement-entry actions. Manual buttons can still be used.", Order = 1)]
@@ -130,13 +125,5 @@ namespace SettlementAutomationCore
             HintText = "If enabled, Core writes one detailed file-log entry for each item request it could not fulfill. Off by default to keep logs focused on completed work.", Order = 2)]
         [SettingPropertyGroup("Reporting", GroupOrder = 2)]
         public bool LogRejectedOrderDetails { get; set; } = false;
-
-        [SettingPropertyDropdown("Recruitment Notification", RequireRestart = false,
-            HintText = "One-by-One: Prints native game spent/recruited messages. Consolidated: Prints a single summary line for all recruits.", Order = 3)]
-        [SettingPropertyGroup("Reporting", GroupOrder = 2)]
-        public Dropdown<RecruitmentNotificationModeOption> RecruitmentNotificationModeDropdown { get; set; } =
-            new Dropdown<RecruitmentNotificationModeOption>(RecruitmentNotificationModeOptions, 0);
-
-        public RecruitmentNotificationMode RecruitmentNotificationModeSetting => RecruitmentNotificationModeDropdown.SelectedValue.Value;
     }
 }

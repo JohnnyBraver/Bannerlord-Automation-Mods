@@ -311,6 +311,7 @@ namespace SettlementAutomationCore
     {
         string ProviderName { get; }
         IReadOnlyList<SettlementRecruitmentOrder> GetRecruitmentOrders(SettlementRecruitmentContext context);
+        RecruitmentNotificationMode NotificationMode { get; }
     }
 
     public interface IGarrisonOrderProvider

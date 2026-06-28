@@ -956,6 +956,12 @@ namespace SettlementAutomationCore
             }
         }
 
+        private static RecruitmentNotificationMode GetRecruitmentNotificationMode()
+        {
+            var provider = AutomationRegistry.ActiveSettlementRecruitmentProviders.FirstOrDefault()?.Provider;
+            return provider?.NotificationMode ?? RecruitmentNotificationMode.OneByOne;
+        }
+
         private static void ExecuteRecruitmentOrders(Settlement settlement, IReadOnlyList<(SettlementRecruitmentOrder Order, string ProviderName)> orders)
         {
             if (MobileParty.MainParty == null || Hero.MainHero == null || orders.Count == 0)
@@ -1008,7 +1014,7 @@ namespace SettlementAutomationCore
                     {
                         AddRecruitmentLog(recruitedMap, candidate.Troop, recruited);
                         totalCount += recruited;
-                        if (Settings.Instance?.RecruitmentNotificationModeSetting == RecruitmentNotificationMode.OneByOne)
+                        if (GetRecruitmentNotificationMode() == RecruitmentNotificationMode.OneByOne)
                         {
                             string notableName = candidate.Notable?.Name?.ToString() ?? "Notable";
                             InformationManager.DisplayMessage(new InformationMessage($"Recruited {recruited}x {candidate.Troop.Name} from {notableName}."));
@@ -1032,7 +1038,7 @@ namespace SettlementAutomationCore
                     {
                         AddRecruitmentLog(recruitedMap, candidate.Troop, recruited);
                         totalCount += recruited;
-                        if (Settings.Instance?.RecruitmentNotificationModeSetting == RecruitmentNotificationMode.OneByOne)
+                        if (GetRecruitmentNotificationMode() == RecruitmentNotificationMode.OneByOne)
                         {
                             InformationManager.DisplayMessage(new InformationMessage($"Recruited {recruited}x {candidate.Troop.Name} from tavern."));
                         }
@@ -1044,7 +1050,7 @@ namespace SettlementAutomationCore
             {
                 var troopParts = recruitedMap.Select(kvp => $"{kvp.Value}x {kvp.Key.Name}");
                 string msg = $"Recruited in {settlement.Name}: {string.Join(", ", troopParts)} (Total: {totalCount})";
-                if (Settings.Instance?.RecruitmentNotificationModeSetting == RecruitmentNotificationMode.Consolidated)
+                if (GetRecruitmentNotificationMode() == RecruitmentNotificationMode.Consolidated)
                 {
                     InformationManager.DisplayMessage(new InformationMessage($"[Automation] {msg}"));
                 }

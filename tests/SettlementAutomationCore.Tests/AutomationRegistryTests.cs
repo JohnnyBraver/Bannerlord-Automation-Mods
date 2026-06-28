@@ -268,6 +268,7 @@ namespace SettlementAutomationCore.Tests
         private sealed class FakeSettlementRecruitmentProvider : ISettlementRecruitmentProvider
         {
             public string ProviderName => "Fake";
+            public RecruitmentNotificationMode NotificationMode => RecruitmentNotificationMode.OneByOne;
 
             public System.Collections.Generic.IReadOnlyList<SettlementRecruitmentOrder> GetRecruitmentOrders(SettlementRecruitmentContext context)
             {
@@ -303,6 +304,7 @@ namespace SettlementAutomationCore.Tests
             }
 
             public string ProviderName { get; }
+            public RecruitmentNotificationMode NotificationMode => RecruitmentNotificationMode.OneByOne;
 
             public System.Collections.Generic.IReadOnlyList<SettlementRecruitmentOrder> GetRecruitmentOrders(SettlementRecruitmentContext context)
             {

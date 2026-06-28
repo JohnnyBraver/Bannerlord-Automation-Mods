@@ -234,6 +234,12 @@ namespace PartyManager
             new EvalTimeOption("Purchase Time Tier", EvalTime.PurchaseTimeTier)
         };
 
+        private static readonly IReadOnlyList<SettlementAutomationCore.RecruitmentNotificationModeOption> RecruitmentNotificationModeOptions = new List<SettlementAutomationCore.RecruitmentNotificationModeOption>
+        {
+            new SettlementAutomationCore.RecruitmentNotificationModeOption("One-by-One", SettlementAutomationCore.RecruitmentNotificationMode.OneByOne),
+            new SettlementAutomationCore.RecruitmentNotificationModeOption("Consolidated", SettlementAutomationCore.RecruitmentNotificationMode.Consolidated)
+        };
+
         private static readonly IReadOnlyList<SellRidingMountsOption> SellRidingMountsOptions = new List<SellRidingMountsOption>
         {
             new SellRidingMountsOption("Never", SellRidingMountsMode.Never),
@@ -353,6 +359,13 @@ namespace PartyManager
         [SettingPropertyDropdown("Evaluation Target Tier", RequireRestart = false, HintText = "Evaluate filters against the troop's current purchase tier or their final upgrade tier.", Order = 9)]
         [SettingPropertyGroup("Recruitment", GroupOrder = 1)]
         public Dropdown<EvalTimeOption> EvalTimeDropdown { get; set; } = new Dropdown<EvalTimeOption>(EvalTimeOptions, 0);
+
+        [SettingPropertyDropdown("Recruitment Notification Mode", RequireRestart = false, HintText = "Configure the recruitment notification alert verbosity.", Order = 10)]
+        [SettingPropertyGroup("Recruitment", GroupOrder = 1)]
+        public Dropdown<SettlementAutomationCore.RecruitmentNotificationModeOption> RecruitmentNotificationModeDropdown { get; set; } =
+            new Dropdown<SettlementAutomationCore.RecruitmentNotificationModeOption>(RecruitmentNotificationModeOptions, 0);
+
+        public SettlementAutomationCore.RecruitmentNotificationMode RecruitmentNotificationModeSetting => RecruitmentNotificationModeDropdown.SelectedValue.Value;
 
         // --- Party Needs ---
         [SettingPropertyBool("Auto-Buy Food", RequireRestart = false, HintText = "Automatically buy food to maintain party supplies.", Order = 1)]

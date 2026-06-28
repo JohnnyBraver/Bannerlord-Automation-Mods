@@ -279,6 +279,9 @@ namespace PartyManager
         // ----------------------------------------------------
         // ISettlementRecruitmentProvider (Recruitment Filter System)
         // ----------------------------------------------------
+        public RecruitmentNotificationMode NotificationMode => 
+            Settings.Instance?.RecruitmentNotificationModeSetting ?? RecruitmentNotificationMode.OneByOne;
+
         public IReadOnlyList<SettlementRecruitmentOrder> GetRecruitmentOrders(SettlementRecruitmentContext context)
         {
             var orders = new List<SettlementRecruitmentOrder>();
