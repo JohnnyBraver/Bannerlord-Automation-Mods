@@ -59,7 +59,7 @@ foreach ($mod in $mods) {
         [xml]$xml = Get-Content $xmlPath
         $version = $xml.Module.Version.value
     } catch {
-        Write-Warning "Could not parse SubModule.xml for $mod: $_"
+        Write-Warning "Could not parse SubModule.xml for ${mod}: $_"
         continue
     }
     if (-not $version) {
