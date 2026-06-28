@@ -45,8 +45,8 @@ namespace PartyManager.Tests
 
         [Theory]
         [InlineData(1000f, 1000f, 0)]
-        [InlineData(1250f, 1000f, 50)]
-        [InlineData(1500f, 1000f, 60)]
+        [InlineData(1250f, 1000f, 10)]
+        [InlineData(1500f, 1000f, 20)]
         public void CalculateOverburdenPenaltyPercent_MatchesGameFormula(float weight, float capacity, int expected)
         {
             Assert.Equal(expected, PartyLogisticsPlanner.CalculateOverburdenPenaltyPercent(weight, capacity));

@@ -57,7 +57,7 @@ namespace PartyManager
                 return 0;
             }
 
-            float penalty = 0.4f * weightCarried / inventoryCapacity;
+            float penalty = 0.4f * (weightCarried - inventoryCapacity) / inventoryCapacity;
             return (int)Math.Round(penalty * 100f);
         }
     }
