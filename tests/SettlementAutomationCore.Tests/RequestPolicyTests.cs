@@ -34,15 +34,16 @@ namespace SettlementAutomationCore.Tests
 
         [Theory]
         [InlineData(RequestProfile.Critical, 250, true)]
-        [InlineData(RequestProfile.Essential, 250, true)]
+        [InlineData(RequestProfile.Essential, 150, true)]
+        [InlineData(RequestProfile.Essential, 151, false)]
         [InlineData(RequestProfile.Routine, 150, true)]
         [InlineData(RequestProfile.Routine, 151, false)]
         [InlineData(RequestProfile.Opportunistic, 110, true)]
         [InlineData(RequestProfile.Opportunistic, 111, false)]
         [InlineData(RequestProfile.Luxury, 500, true)]
-        public void IsPriceAllowedForProfile_AppliesCapsOnlyToRoutineAndOpportunistic(RequestProfile profile, int price, bool expected)
+        public void IsPriceAllowedForProfile_AppliesCapsToEssentialRoutineAndOpportunistic(RequestProfile profile, int price, bool expected)
         {
-            Assert.Equal(expected, RequestPolicy.IsPriceAllowedForProfile(profile, 100, price, 1.5f, 1.1f));
+            Assert.Equal(expected, RequestPolicy.IsPriceAllowedForProfile(profile, 100, price, 1.5f, 1.5f, 1.1f));
         }
 
         [Fact]

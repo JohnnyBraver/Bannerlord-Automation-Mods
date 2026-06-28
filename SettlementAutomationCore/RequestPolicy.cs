@@ -50,6 +50,7 @@ namespace SettlementAutomationCore
             AutomationRequest request,
             ItemObject item,
             int price,
+            float essentialPriceLimitMultiplier,
             float routinePriceLimitMultiplier,
             float opportunisticPriceLimitMultiplier)
         {
@@ -59,6 +60,7 @@ namespace SettlementAutomationCore
                 request.Profile,
                 item.Value,
                 price,
+                essentialPriceLimitMultiplier,
                 routinePriceLimitMultiplier,
                 opportunisticPriceLimitMultiplier);
         }
@@ -67,6 +69,7 @@ namespace SettlementAutomationCore
             AutomationRequest request,
             int referenceValue,
             int price,
+            float essentialPriceLimitMultiplier,
             float routinePriceLimitMultiplier,
             float opportunisticPriceLimitMultiplier)
         {
@@ -74,6 +77,7 @@ namespace SettlementAutomationCore
                 request.Profile,
                 referenceValue,
                 price,
+                essentialPriceLimitMultiplier,
                 routinePriceLimitMultiplier,
                 opportunisticPriceLimitMultiplier);
         }
@@ -82,11 +86,13 @@ namespace SettlementAutomationCore
             RequestProfile profile,
             int itemValue,
             int price,
+            float essentialPriceLimitMultiplier,
             float routinePriceLimitMultiplier,
             float opportunisticPriceLimitMultiplier)
         {
             float? maxMultiplier = profile switch
             {
+                RequestProfile.Essential => essentialPriceLimitMultiplier,
                 RequestProfile.Routine => routinePriceLimitMultiplier,
                 RequestProfile.Opportunistic => opportunisticPriceLimitMultiplier,
                 _ => null

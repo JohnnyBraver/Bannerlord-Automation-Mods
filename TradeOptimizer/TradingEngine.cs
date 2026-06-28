@@ -92,6 +92,53 @@ namespace TradeOptimizer
                 }
             }
 
+            var sellReferencePrices = new Dictionary<string, float>(StringComparer.Ordinal);
+            var buyReferencePrices = new Dictionary<string, float>(StringComparer.Ordinal);
+
+            if (vm.RightItemListVM != null)
+            {
+                foreach (var item in vm.RightItemListVM)
+                {
+                    if (item == null || item.ItemRosterElement.EquipmentElement.Item == null) continue;
+                    string key = GetTradeIdentityKey(item.ItemRosterElement.EquipmentElement);
+                    
+                    sellReferencePrices[key] = PricingService.GetReferencePrice(
+                        logic,
+                        item.ItemRosterElement.EquipmentElement,
+                        item.ItemRosterElement,
+                        item.ItemCost,
+                        isSelling: true
+                    );
+
+                    buyReferencePrices[key] = PricingService.GetReferencePrice(
+                        logic,
+                        item.ItemRosterElement.EquipmentElement,
+                        null,
+                        0f,
+                        isSelling: false
+                    );
+                }
+            }
+
+            if (vm.LeftItemListVM != null)
+            {
+                foreach (var item in vm.LeftItemListVM)
+                {
+                    if (item == null || item.ItemRosterElement.EquipmentElement.Item == null) continue;
+                    string key = GetTradeIdentityKey(item.ItemRosterElement.EquipmentElement);
+                    if (!buyReferencePrices.ContainsKey(key))
+                    {
+                        buyReferencePrices[key] = PricingService.GetReferencePrice(
+                            logic,
+                            item.ItemRosterElement.EquipmentElement,
+                            null,
+                            0f,
+                            isSelling: false
+                        );
+                    }
+                }
+            }
+
             // 1. Sell Phase: Sell profitable items from player inventory (RightItemListVM)
             if (isSellPhase && vm.RightItemListVM != null)
             {
@@ -118,6 +165,10 @@ namespace TradeOptimizer
                     int maxSellable = sellableEntry?.AvailableQuantity ?? 0;
                     if (maxSellable <= 0) continue;
 
+                    string itemKey = GetTradeIdentityKey(item.ItemRosterElement.EquipmentElement);
+                    sellReferencePrices.TryGetValue(itemKey, out float baseReferencePrice);
+                    buyReferencePrices.TryGetValue(itemKey, out float avgPriceForBuy);
+
                     int sold = 0;
                     int totalGoldGained = 0;
                     float itemWeight = itemObj.Weight;
@@ -128,7 +179,6 @@ namespace TradeOptimizer
                     {
                         int currentPrice = logic != null ? logic.GetItemPrice(item.ItemRosterElement.EquipmentElement, false) : 0;
                         bool loopSell = false;
-                        float baseReferencePrice = 0f;
 
                         if (isLoot && (settings.LootHandling == LootHandlingMode.Liquidate || settings.LootHandling == LootHandlingMode.XPFarm))
                         {
@@ -137,15 +187,6 @@ namespace TradeOptimizer
                         }
                         else
                         {
-                            float costBasis = item.ItemCost;
-                            baseReferencePrice = PricingService.GetReferencePrice(
-                                logic,
-                                item.ItemRosterElement.EquipmentElement,
-                                item.ItemRosterElement,
-                                costBasis,
-                                isSelling: true
-                            );
-
                             if (baseReferencePrice <= 0f)
                             {
                                 WriteLog($"[Sell Check] {itemObj.Name} skipped: Valuation reference could not be determined.");
@@ -169,14 +210,6 @@ namespace TradeOptimizer
                         if (!isLoot || settings.LootHandling == LootHandlingMode.Profit)
                         {
                             int buyPrice = logic != null ? logic.GetItemPrice(item.ItemRosterElement.EquipmentElement, true) : currentPrice;
-                            float avgPriceForBuy = PricingService.GetReferencePrice(
-                                logic,
-                                item.ItemRosterElement.EquipmentElement,
-                                null,
-                                0f,
-                                isSelling: false
-                            );
-
                             bool isBuyCandidate = avgPriceForBuy > 0f && buyPrice <= avgPriceForBuy * settings.BuyPriceThresholdFactor;
 
                             if (isBuyCandidate)
@@ -327,22 +360,16 @@ namespace TradeOptimizer
                         var playerItem = vm.RightItemListVM?.FirstOrDefault(r => r.ItemRosterElement.EquipmentElement.Item == itemObj);
                         
                         int currentPrice = logic != null ? logic.GetItemPrice(item.ItemRosterElement.EquipmentElement, true) : itemObj.Value;
-                        float avgPrice = PricingService.GetReferencePrice(
-                            logic,
-                            item.ItemRosterElement.EquipmentElement,
-                            null,
-                            0f,
-                            isSelling: false
-                        );
-
+                        string key = GetTradeIdentityKey(item.ItemRosterElement.EquipmentElement);
+                        buyReferencePrices.TryGetValue(key, out float avgPrice);
+ 
                         float unitProfit = avgPrice - currentPrice;
                         float itemWeightDivisor = itemWeight > 0.01f ? itemWeight : 0.01f;
                         float profitDensity = unitProfit / itemWeightDivisor;
-
-                        string key = GetTradeIdentityKey(item.ItemRosterElement.EquipmentElement);
+ 
                         int extraSoldForThis = extraSoldQuantities.TryGetValue(key, out int esVal) ? esVal : 0;
                         int currentlyOwned = (playerItem != null ? playerItem.ItemCount : 0) + boughtSoFar - extraSoldForThis;
-
+ 
                         string skipReason = "";
                         
                         // Herding Penalty Protection (limit animal purchases based on remaining herding slots)
@@ -393,13 +420,7 @@ namespace TradeOptimizer
                                             int maxSellable = (sellableEntry?.AvailableQuantity ?? 0) - extraSold;
                                             if (maxSellable <= 0) continue;
 
-                                            float ownAvgPrice = PricingService.GetReferencePrice(
-                                                logic,
-                                                ownItem.ItemRosterElement.EquipmentElement,
-                                                ownItem.ItemRosterElement,
-                                                ownItem.ItemCost,
-                                                isSelling: true
-                                            );
+                                            sellReferencePrices.TryGetValue(ownKey, out float ownAvgPrice);
                                             
                                             int ownSellPrice = logic != null ? logic.GetItemPrice(ownItem.ItemRosterElement.EquipmentElement, false) : 0;
                                             if (ownSellPrice <= 0) continue;
@@ -590,13 +611,7 @@ namespace TradeOptimizer
                     currentBalance -= price;
                     netWeightAdded += bestItemObj.Weight;
 
-                    float dbgAvg = PricingService.GetReferencePrice(
-                        logic,
-                        bestItem.ItemRosterElement.EquipmentElement,
-                        null,
-                        0f,
-                        isSelling: false
-                    );
+                    buyReferencePrices.TryGetValue(GetTradeIdentityKey(bestItem.ItemRosterElement.EquipmentElement), out float dbgAvg);
                 }
 
                 foreach (var pair in boughtQuantities)

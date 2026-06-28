@@ -22,7 +22,11 @@ namespace SettlementAutomationCore
         private static Settlement? _pendingBackgroundTradeSettlement = null;
         private static readonly object QueueLock = new object();
 
+        private static int _justLoadedTicks = 0;
+
         public static bool IsSettlementAutomationDisabled => Settings.Instance?.DisableSettlementAutomation ?? false;
+
+        public static float? LastSettlementEntrySpeed { get; set; } = null;
 
         protected override void OnSubModuleLoad()
         {
@@ -34,6 +38,8 @@ namespace SettlementAutomationCore
             base.OnGameStart(game, gameStarter);
             if (game.GameType is Campaign)
             {
+                _justLoadedTicks = 10;
+                LastSettlementEntrySpeed = null;
                 var campaignStarter = gameStarter as CampaignGameStarter;
                 if (campaignStarter != null)
                 {
@@ -43,9 +49,22 @@ namespace SettlementAutomationCore
             }
         }
 
+        public override void OnGameEnd(Game game)
+        {
+            base.OnGameEnd(game);
+            lock (QueueLock)
+            {
+                _pendingBackgroundTradeSettlement = null;
+            }
+            _justLoadedTicks = 0;
+            LastSettlementEntrySpeed = null;
+            AutomationRegistry.ClearRequests();
+            AutomationRegistry.ClearReservations();
+        }
+
         public static void QueueBackgroundTrade(Settlement settlement)
         {
-            if (IsSettlementAutomationDisabled)
+            if (IsSettlementAutomationDisabled || _justLoadedTicks > 0)
             {
                 return;
             }
@@ -59,6 +78,11 @@ namespace SettlementAutomationCore
         protected override void OnApplicationTick(float dt)
         {
             base.OnApplicationTick(dt);
+
+            if (_justLoadedTicks > 0)
+            {
+                _justLoadedTicks--;
+            }
 
             Settlement? sett = null;
             lock (QueueLock)
@@ -171,7 +195,7 @@ namespace SettlementAutomationCore
                                     continue;
                                 }
 
-                                int estimatedGold = logic1.GetItemPrice(order.EquipmentElement, false) * order.Amount;
+                                int initialDebt = logic1.TransactionDebt;
                                 var command = TransferCommand.Transfer(
                                     order.Amount,
                                     InventoryLogic.InventorySide.PlayerInventory,
@@ -182,9 +206,10 @@ namespace SettlementAutomationCore
                                     Hero.MainHero.CharacterObject
                                 );
                                 logic1.AddTransferCommand(command);
+                                int actualGoldGained = initialDebt - logic1.TransactionDebt;
                                 executedAny = true;
                                 preSoldList.Add($"{order.Amount}x {order.EquipmentElement.Item.Name}");
-                                marketReport.AddSold(order.EquipmentElement, order.Amount, estimatedGold, preSellOrder.ProviderName, AutomationTransactionStage.PreSell);
+                                marketReport.AddSold(order.EquipmentElement, order.Amount, actualGoldGained, preSellOrder.ProviderName, AutomationTransactionStage.PreSell);
                             }
                         }
                         if (executedAny && logic1.IsThereAnyChanges())
@@ -674,7 +699,7 @@ namespace SettlementAutomationCore
                             continue;
                         }
 
-                        int estimatedGold = logic.GetItemPrice(order.EquipmentElement, false) * order.Amount;
+                        int initialDebt = logic.TransactionDebt;
                         var command = TransferCommand.Transfer(
                             order.Amount,
                             InventoryLogic.InventorySide.PlayerInventory,
@@ -684,9 +709,10 @@ namespace SettlementAutomationCore
                             EquipmentIndex.None,
                             Hero.MainHero.CharacterObject);
                         logic.AddTransferCommand(command);
+                        int actualGoldGained = initialDebt - logic.TransactionDebt;
                         executedAny = true;
                         executedParts.Add($"{order.Amount}x {item.Name} sold");
-                        marketReport.AddSold(order.EquipmentElement, order.Amount, estimatedGold, entry.ProviderName, stage);
+                        marketReport.AddSold(order.EquipmentElement, order.Amount, actualGoldGained, entry.ProviderName, stage);
                     }
 
                     if (executedAny && logic.IsThereAnyChanges())
@@ -1346,7 +1372,7 @@ namespace SettlementAutomationCore
             try
             {
                 var provider = MCM.Abstractions.BaseSettingsProvider.Instance;
-                var settings = provider?.GetSettings("PartyManager_v0_4");
+                var settings = provider?.GetSettings("PartyManager_v0_5");
                 if (settings != null)
                 {
                     var detailProp = settings.GetType().GetProperty("PrisonerReportDetail");
@@ -2003,6 +2029,7 @@ namespace SettlementAutomationCore
                 return false;
             }
 
+            int initialDebt = state.Logic.TransactionDebt;
             var command = TransferCommand.Transfer(
                 toBuy,
                 InventoryLogic.InventorySide.OtherInventory,
@@ -2013,8 +2040,9 @@ namespace SettlementAutomationCore
                 Hero.MainHero.CharacterObject
             );
             state.Logic.AddTransferCommand(command);
+            int actualGoldSpent = state.Logic.TransactionDebt - initialDebt;
             state.ExecutedAnyItemTransfers = true;
-            state.ProjectedGold -= toBuy * price;
+            state.ProjectedGold -= actualGoldSpent;
             if (isCargo)
             {
                 state.ProjectedWeight += toBuy * item.Weight;
@@ -2077,6 +2105,7 @@ namespace SettlementAutomationCore
                 request,
                 referenceValue,
                 price,
+                settings?.EssentialPriceLimitMultiplier ?? 1.5f,
                 settings?.RoutinePriceLimitMultiplier ?? 1.5f,
                 settings?.OpportunisticPriceLimitMultiplier ?? 1.1f);
         }
@@ -2520,7 +2549,7 @@ namespace SettlementAutomationCore
                 int toSell = Math.Min(action.Quantity, sellable.AvailableQuantity);
                 if (toSell > 0)
                 {
-                    int price = logic.GetItemPrice(action.EquipmentElement, false); // false = sell price
+                    int initialDebt = logic.TransactionDebt;
                     var command = TransferCommand.Transfer(
                         toSell,
                         InventoryLogic.InventorySide.PlayerInventory,
@@ -2532,9 +2561,10 @@ namespace SettlementAutomationCore
                     );
                     logic.AddTransferCommand(command);
 
-                    availableGold += toSell * price;
+                    int actualGoldGained = initialDebt - logic.TransactionDebt;
+                    availableGold += actualGoldGained;
                     sellableItems = ConsumeSellableItems(sellableItems, action.EquipmentElement, toSell);
-                    marketReport.AddSold(action.EquipmentElement, toSell, toSell * price, providerName, stage);
+                    marketReport.AddSold(action.EquipmentElement, toSell, actualGoldGained, providerName, stage);
                     if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
                     {
                         cargoBalance += toSell * action.EquipmentElement.Item.Weight;
@@ -2598,6 +2628,7 @@ namespace SettlementAutomationCore
 
                 if (toBuy > 0)
                 {
+                    int initialDebt = logic.TransactionDebt;
                     var command = TransferCommand.Transfer(
                         toBuy,
                         InventoryLogic.InventorySide.OtherInventory,
@@ -2609,8 +2640,9 @@ namespace SettlementAutomationCore
                     );
                     logic.AddTransferCommand(command);
 
-                    availableGold -= toBuy * price;
-                    marketReport.AddBought(action.EquipmentElement, toBuy, toBuy * price, providerName, stage);
+                    int actualGoldSpent = logic.TransactionDebt - initialDebt;
+                    availableGold -= actualGoldSpent;
+                    marketReport.AddBought(action.EquipmentElement, toBuy, actualGoldSpent, providerName, stage);
                     if (isCargo)
                     {
                         cargoBalance -= toBuy * action.EquipmentElement.Item.Weight;
@@ -2646,6 +2678,7 @@ namespace SettlementAutomationCore
         {
             if (party == MobileParty.MainParty && settlement != null && (settlement.IsTown || settlement.IsVillage || settlement.IsCastle))
             {
+                SubModule.LastSettlementEntrySpeed = party.Speed > 0.1f ? party.Speed : (float?)null;
                 SubModule.QueueBackgroundTrade(settlement);
             }
         }

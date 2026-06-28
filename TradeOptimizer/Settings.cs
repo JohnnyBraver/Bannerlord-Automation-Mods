@@ -112,7 +112,7 @@ namespace TradeOptimizer
 
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "TradeOptimizer_v0_4_1";
+        public override string Id => "TradeOptimizer_v0_5";
         public override string DisplayName => "Trade Optimizer";
         public override string FolderName => "TradeOptimizer";
         public override string FormatType => "json";

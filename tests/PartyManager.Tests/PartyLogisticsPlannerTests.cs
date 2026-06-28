@@ -51,5 +51,15 @@ namespace PartyManager.Tests
         {
             Assert.Equal(expected, PartyLogisticsPlanner.CalculateOverburdenPenaltyPercent(weight, capacity));
         }
+
+        [Theory]
+        [InlineData(50, 5.0f, 9)]   // -0.5 speed with 5.0 effective speed -> 0.5/5.5 = 9.09% (approx 9%)
+        [InlineData(50, 2.0f, 20)]  // -0.5 speed with 2.0 effective speed -> 0.5/2.5 = 20%
+        [InlineData(50, 1.5f, 25)]  // -0.5 speed with 1.5 effective speed -> 0.5/2.0 = 25%
+        [InlineData(0, 5.0f, 0)]
+        public void CalculateActualPenaltyPercent_ComputesRelativeSlowdown(int flatPenaltyPercent, float effectiveSpeed, int expected)
+        {
+            Assert.Equal(expected, PartyLogisticsPlanner.CalculateActualPenaltyPercent(flatPenaltyPercent, effectiveSpeed));
+        }
     }
 }

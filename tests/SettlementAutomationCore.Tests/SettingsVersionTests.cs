@@ -8,11 +8,11 @@ namespace SettlementAutomationCore.Tests
     public class SettingsVersionTests
     {
         [Fact]
-        public void SettingsIds_UseV04ToAvoidLoadingV03SavedOptions()
+        public void SettingsIds_UseV05ToAvoidLoadingV04SavedOptions()
         {
-            Assert.Equal("SettlementAutomationCore_v0_4", new SettlementAutomationCore.Settings().Id);
-            Assert.Equal("TradeOptimizer_v0_4_1", new TradeOptimizer.Settings().Id);
-            Assert.Equal("PartyManager_v0_4_0_1", new PartyManager.Settings().Id);
+            Assert.Equal("SettlementAutomationCore_v0_5", new SettlementAutomationCore.Settings().Id);
+            Assert.Equal("TradeOptimizer_v0_5", new TradeOptimizer.Settings().Id);
+            Assert.Equal("PartyManager_v0_5", new PartyManager.Settings().Id);
             Assert.Equal("EquipmentManager_v0_4", new EquipmentManager.Settings().Id);
             Assert.Equal("FiefManager_v0_4", new FiefManager.Settings().Id);
             Assert.Equal("SmithingOptimizer_v0_4", new SmithingOptimizer.Settings().Id);

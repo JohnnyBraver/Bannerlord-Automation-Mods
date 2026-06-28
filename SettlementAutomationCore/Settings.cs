@@ -49,7 +49,7 @@ namespace SettlementAutomationCore
 
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "SettlementAutomationCore_v0_4";
+        public override string Id => "SettlementAutomationCore_v0_5";
         public override string DisplayName => "Settlement Automation Core";
         public override string FolderName => "SettlementAutomationCore";
         public override string FormatType => "json";
@@ -93,9 +93,19 @@ namespace SettlementAutomationCore
         [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public int ReserveCarryCapacityPercent { get; set; } = 10;
 
+        private float _essentialPriceLimitMultiplier = 1.50f;
+        [SettingPropertyFloatingInteger("Essential Request Price Limit", 0.5f, 4.0f, "#0.00", RequireRestart = false,
+            HintText = "Maximum price/value ratio for essential requests. Critical and luxury requests ignore this. Default: 1.50.", Order = 3)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
+        public float EssentialPriceLimitMultiplier
+        {
+            get => _essentialPriceLimitMultiplier;
+            set => _essentialPriceLimitMultiplier = (float)System.Math.Round(value / 0.05f) * 0.05f;
+        }
+
         private float _routinePriceLimitMultiplier = 1.25f;
         [SettingPropertyFloatingInteger("Routine Request Price Limit", 0.5f, 3.0f, "#0.00", RequireRestart = false,
-            HintText = "Maximum price/value ratio for routine requests. Critical, essential, and luxury requests ignore this. Default: 1.25.", Order = 3)]
+            HintText = "Maximum price/value ratio for routine requests. Critical and luxury requests ignore this. Default: 1.25.", Order = 4)]
         [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public float RoutinePriceLimitMultiplier
         {
@@ -105,7 +115,7 @@ namespace SettlementAutomationCore
 
         private float _opportunisticPriceLimitMultiplier = 0.75f;
         [SettingPropertyFloatingInteger("Opportunistic Request Price Limit", 0.25f, 1.5f, "#0.00", RequireRestart = false,
-            HintText = "Maximum price/value ratio for opportunistic requests. Default: 0.75.", Order = 4)]
+            HintText = "Maximum price/value ratio for opportunistic requests. Default: 0.75.", Order = 5)]
         [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
         public float OpportunisticPriceLimitMultiplier
         {

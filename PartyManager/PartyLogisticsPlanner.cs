@@ -60,5 +60,14 @@ namespace PartyManager
             float penalty = 0.4f * (weightCarried - inventoryCapacity) / inventoryCapacity;
             return (int)Math.Round(penalty * 100f);
         }
+
+        public static int CalculateActualPenaltyPercent(int flatPenaltyPercent, float effectiveSpeed)
+        {
+            if (flatPenaltyPercent <= 0) return 0;
+            float flatPenalty = flatPenaltyPercent / 100f;
+            float speed = effectiveSpeed > 0.1f ? effectiveSpeed : 5.0f;
+            float prePenaltySpeed = Math.Max(0.1f, speed + flatPenalty);
+            return (int)Math.Round((flatPenalty / prePenaltySpeed) * 100f);
+        }
     }
 }

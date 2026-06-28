@@ -105,22 +105,23 @@ namespace TradeOptimizer
                     return CraftingMaterialItems;
                 }
 
-                CraftingMaterialItems = new HashSet<ItemObject>();
                 var smithingModel = Campaign.Current?.Models?.SmithingModel;
                 if (smithingModel == null)
                 {
-                    return CraftingMaterialItems;
+                    return new HashSet<ItemObject>();
                 }
 
+                var items = new HashSet<ItemObject>();
                 foreach (CraftingMaterials material in Enum.GetValues(typeof(CraftingMaterials)))
                 {
                     var item = smithingModel.GetCraftingMaterialItem(material);
                     if (item != null)
                     {
-                        CraftingMaterialItems.Add(item);
+                        items.Add(item);
                     }
                 }
 
+                CraftingMaterialItems = items;
                 return CraftingMaterialItems;
             }
         }

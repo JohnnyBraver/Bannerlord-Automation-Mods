@@ -210,7 +210,7 @@ namespace PartyManager
 
     public class Settings : AttributeGlobalSettings<Settings>
     {
-        public override string Id => "PartyManager_v0_4_0_1";
+        public override string Id => "PartyManager_v0_5";
         public override string DisplayName => "Party Manager";
         public override string FolderName => "PartyManager";
         public override string FormatType => "json";

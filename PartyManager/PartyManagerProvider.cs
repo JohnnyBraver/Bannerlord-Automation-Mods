@@ -259,18 +259,23 @@ namespace PartyManager
                 out _, out _, out _);
             int partySize = infantry + cavalry;
             int herdSize = pack + livestock + Math.Max(0, riding - infantry);
+            
+            float effectiveSpeed = party.Speed;
+            
             int herdingPenalty = PartyLogisticsPlanner.CalculateHerdingPenaltyPercent(partySize, herdSize);
-            if (settings.HerdingWarningThresholdPercent > 0 && herdingPenalty >= settings.HerdingWarningThresholdPercent)
+            int actualHerdingPenalty = PartyLogisticsPlanner.CalculateActualPenaltyPercent(herdingPenalty, effectiveSpeed);
+            if (settings.HerdingWarningThresholdPercent > 0 && actualHerdingPenalty >= settings.HerdingWarningThresholdPercent)
             {
-                result.AddActivity($"warning: herding still slows the party by about {herdingPenalty}% after cleanup; settings or item locks may be protecting the remaining animals");
+                result.AddActivity($"warning: herding still slows the party by about {actualHerdingPenalty}% after cleanup; settings or item locks may be protecting the remaining animals");
             }
 
             int cargoPenalty = PartyLogisticsPlanner.CalculateOverburdenPenaltyPercent(
                 party.TotalWeightCarried,
                 party.InventoryCapacity);
-            if (settings.CargoWarningThresholdPercent > 0 && cargoPenalty >= settings.CargoWarningThresholdPercent)
+            int actualCargoPenalty = PartyLogisticsPlanner.CalculateActualPenaltyPercent(cargoPenalty, effectiveSpeed);
+            if (settings.CargoWarningThresholdPercent > 0 && actualCargoPenalty >= settings.CargoWarningThresholdPercent)
             {
-                result.AddActivity($"warning: cargo overburden still slows the party by about {cargoPenalty}% after cleanup");
+                result.AddActivity($"warning: cargo overburden still slows the party by about {actualCargoPenalty}% after cleanup");
             }
         }
 
