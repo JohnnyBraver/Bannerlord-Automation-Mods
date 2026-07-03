@@ -93,10 +93,6 @@ namespace TradeOptimizer
 
             if (useCostBasis)
             {
-                if (costBasis > 0f)
-                {
-                    return costBasis;
-                }
                 if (rosterElement.HasValue)
                 {
                     float trackedPrice = GetTrackedAveragePrice(rosterElement.Value);
@@ -104,6 +100,10 @@ namespace TradeOptimizer
                     {
                         return trackedPrice;
                     }
+                }
+                if (costBasis > 0f)
+                {
+                    return costBasis;
                 }
             }
 
@@ -128,8 +128,31 @@ namespace TradeOptimizer
             return GetLocalCategoryAveragePrice(logic, eqElement);
         }
 
+        private static readonly System.Collections.Generic.Dictionary<string, float> WorldAveragePriceCache =
+            new System.Collections.Generic.Dictionary<string, float>(StringComparer.Ordinal);
+        private static readonly object CacheLock = new object();
+
+        public static void ClearCache()
+        {
+            lock (CacheLock)
+            {
+                WorldAveragePriceCache.Clear();
+            }
+        }
+
         public static float GetWorldAveragePrice(EquipmentElement equipmentElement)
         {
+            if (equipmentElement.Item == null) return 0f;
+            string key = $"{equipmentElement.Item.StringId}::{equipmentElement.ItemModifier?.StringId ?? ""}";
+
+            lock (CacheLock)
+            {
+                if (WorldAveragePriceCache.TryGetValue(key, out float cached))
+                {
+                    return cached;
+                }
+            }
+
             var towns = Town.AllTowns;
             if (towns == null || towns.Count == 0)
             {
@@ -146,7 +169,13 @@ namespace TradeOptimizer
                     count++;
                 }
             }
-            return count > 0 ? (sumPrices / count) : equipmentElement.Item.Value;
+            float result = count > 0 ? (sumPrices / count) : equipmentElement.Item.Value;
+
+            lock (CacheLock)
+            {
+                WorldAveragePriceCache[key] = result;
+            }
+            return result;
         }
 
         public static float GetLocalCategoryAveragePrice(InventoryLogic? logic, EquipmentElement eqElement)

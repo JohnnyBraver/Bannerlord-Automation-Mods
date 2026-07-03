@@ -24,6 +24,7 @@ namespace SettlementAutomationCore.Tests
             var coreSettings = new SettlementAutomationCore.Settings();
 
             Assert.True(coreSettings.LimitToInventoryCapacity);
+            Assert.Equal(SettlementAutomationCore.IgnoreWeightLimitTier.AllRequests, coreSettings.IgnoreWeightLimitSetting);
         }
 
         [Fact]
