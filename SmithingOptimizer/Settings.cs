@@ -9,8 +9,10 @@ namespace SmithingOptimizer
 {
     public enum OptimizationGoal
     {
-        Profit,
-        Damage
+        XpEfficiency,
+        SellValue,
+        Damage,
+        Profit = SellValue
     }
 
     public class GoalOption
@@ -30,17 +32,18 @@ namespace SmithingOptimizer
 
         private static readonly IReadOnlyList<GoalOption> GoalOptions = new List<GoalOption>
         {
-            new GoalOption("Profit (XP + Sell Value)", OptimizationGoal.Profit),
+            new GoalOption("XP Efficiency (Raw XP/Stamina)", OptimizationGoal.XpEfficiency),
+            new GoalOption("Sell Value", OptimizationGoal.SellValue),
             new GoalOption("Damage (Max Swing/Thrust)", OptimizationGoal.Damage)
         };
 
-        [SettingPropertyBool("Auto-switch on New Piece Unlock", RequireRestart = false,
-            HintText = "Automatically re-optimize the design when a new crafting piece is unlocked.", Order = 1)]
+        [SettingPropertyBool("Auto-optimize in Forge", RequireRestart = false,
+            HintText = "Automatically re-optimize when opening the forge, switching designs, unlocking a new piece, or crafting.", Order = 1)]
         [SettingPropertyGroup("General", GroupOrder = 0)]
         public bool AutoSwitchEnabled { get; set; } = true;
 
         [SettingPropertyDropdown("Optimization Goal", RequireRestart = false,
-            HintText = "Whether to optimize for maximum sell value/XP, or maximum weapon damage.", Order = 2)]
+            HintText = "Choose raw Smithing XP per stamina, sell value, or maximum weapon damage.", Order = 2)]
         [SettingPropertyGroup("General", GroupOrder = 0)]
         public Dropdown<GoalOption> GoalDropdown { get; set; } =
             new Dropdown<GoalOption>(GoalOptions, 0);

@@ -30,9 +30,9 @@ namespace TradeOptimizer
                 ? SettlementAutomationCore.Helpers.InventoryHelper.GetRosterWeight(MobileParty.MainParty.ItemRoster)
                 : 0f;
             float usableCapacity = startWeight + request.TradeContext.CargoCapacityBalance;
-            var state = new TradeSimulationState(request.TradeContext.AvailableGold, startWeight, usableCapacity);
+            var state = new TradeSimulationState(request.TradeContext.AvailableGold, request.TradeContext.AvailableMerchantGold, startWeight, usableCapacity);
 
-            TradingEngine.WriteLog($"Initial Balance: {state.CurrentBalance} (Hero Gold: {Hero.MainHero?.Gold ?? 0}, Logic TotalAmount: {logic?.TotalAmount ?? 0})");
+            TradingEngine.WriteLog($"Initial Balance: {state.CurrentBalance} (Hero Gold: {Hero.MainHero?.Gold ?? 0}, Merchant Gold: {state.CurrentMerchantGold}, Logic TotalAmount: {logic?.TotalAmount ?? 0})");
             TradingEngine.WriteLog($"Trade Perks Status: hasTier1={PricingService.HasTier1Perks()}, hasTier2={PricingService.HasTier2Perks()}");
 
             var localExcludedItems = new HashSet<string>(request.ExcludedItemKeys, StringComparer.Ordinal);
@@ -87,13 +87,14 @@ namespace TradeOptimizer
                 int currentPrice = startPrice;
                 int sold = 0;
                 int totalGoldGained = 0;
+                bool useStableSellPrice = request.TradeContext.SellPricesAreStatic;
                 bool isLoot = PricingService.GetTrackedAveragePrice(stack.RosterElement) <= 0f;
                 TradeBlockReason stopReason = TradeBlockReason.None;
                 string stopDetails = string.Empty;
 
                 while (sold < maxSellable)
                 {
-                    currentPrice = GetSellPrice(logic, stack);
+                    currentPrice = useStableSellPrice ? startPrice : GetSellPrice(logic, stack);
                     bool shouldSell = false;
 
                     bool forceLootSale = isLoot && (settings.LootHandling == LootHandlingMode.Liquidate || settings.LootHandling == LootHandlingMode.XPFarm);
@@ -135,6 +136,21 @@ namespace TradeOptimizer
                         }
 
                         TradingEngine.WriteLog($"[Trace-Sell] {stack.Name}: SKIPPED | {TradeBlockReasonFormatter.Format(stopReason, stopDetails)}");
+                        plan.RecordBlock(new TradeDecisionTrace(
+                            TradePlanPhase.Sell,
+                            stack.IdentityKey,
+                            stack.Name,
+                            stopReason,
+                            stopDetails,
+                            currentPrice,
+                            baseReferencePrice));
+                        break;
+                    }
+
+                    if (state.CurrentMerchantGold < currentPrice)
+                    {
+                        stopReason = TradeBlockReason.MerchantGoldDepleted;
+                        stopDetails = $"merchantGold={state.CurrentMerchantGold}, price={currentPrice}";
                         plan.RecordBlock(new TradeDecisionTrace(
                             TradePlanPhase.Sell,
                             stack.IdentityKey,
@@ -198,6 +214,7 @@ namespace TradeOptimizer
                     sold++;
                     totalGoldGained += price;
                     state.CurrentBalance += price;
+                    state.CurrentMerchantGold -= price;
                     state.NetWeightAdded -= stack.Weight;
                     state.RecordSold(stack.IdentityKey, 1);
 
@@ -495,6 +512,7 @@ namespace TradeOptimizer
                 }
 
                 state.CurrentBalance -= cost;
+                state.CurrentMerchantGold += cost;
                 state.NetWeightAdded += weight;
                 if (IsAnimalOrMount(stack.Item))
                 {
@@ -543,6 +561,7 @@ namespace TradeOptimizer
             ApplyTransfer(request, logic, swapStack.ItemVm, swapStack.EquipmentElement, quantity: 1, isBuy: false);
 
             state.CurrentBalance += swapPrice;
+            state.CurrentMerchantGold -= swapPrice;
             state.NetWeightAdded -= swapStack.Weight;
             if (IsAnimalOrMount(swapStack.Item))
             {
@@ -581,6 +600,7 @@ namespace TradeOptimizer
         {
             ApplyTransfer(request, logic, stack.ItemVm, stack.EquipmentElement, quantity: 1, isBuy: true);
             state.CurrentBalance -= buyPrice;
+            state.CurrentMerchantGold += buyPrice;
             state.NetWeightAdded += stack.Weight;
             if (IsAnimalOrMount(stack.Item))
             {
@@ -674,7 +694,7 @@ namespace TradeOptimizer
                 }
 
                 int ownSellPrice = GetSellPrice(logic, ownStack);
-                if (ownSellPrice <= 0)
+                if (ownSellPrice <= 0 || state.CurrentMerchantGold < ownSellPrice)
                 {
                     continue;
                 }
@@ -800,7 +820,39 @@ namespace TradeOptimizer
                 TradingEngine.WriteLog("No trades executed.");
             }
 
+            WritePlanBlockSummary(plan);
             TradingEngine.WriteLog("=================================");
+        }
+
+        private static void WritePlanBlockSummary(TradePlan plan)
+        {
+            if (plan.BlockedCandidates.Count == 0)
+            {
+                return;
+            }
+
+            var reasonGroups = plan.BlockedCandidates
+                .GroupBy(trace => trace.Reason)
+                .OrderByDescending(group => group.Count())
+                .ThenBy(group => TradeBlockReasonFormatter.ToSummaryKey(group.Key))
+                .ToList();
+
+            string summary = string.Join(", ", reasonGroups
+                .Select(group => $"{TradeBlockReasonFormatter.ToSummaryKey(group.Key)}={group.Count()}"));
+            TradingEngine.WriteLog($"[Plan Blocks] Remaining candidate blocks: {summary}");
+
+            foreach (var group in reasonGroups.Take(MaxBuySkipDiagnostics))
+            {
+                string examples = string.Join("; ", group
+                    .Take(3)
+                    .Select(trace => $"{trace.Phase}:{trace.ItemName} ({TradeBlockReasonFormatter.Format(trace.Reason, trace.Details)})"));
+                TradingEngine.WriteLog($"[Plan Block Example] {examples}");
+            }
+
+            if (reasonGroups.Count > MaxBuySkipDiagnostics)
+            {
+                TradingEngine.WriteLog($"[Plan Block Example] Additional block reason examples suppressed after {MaxBuySkipDiagnostics} groups.");
+            }
         }
 
         private static void IncrementReason(Dictionary<TradeBlockReason, int> reasons, TradeBlockReason reason)

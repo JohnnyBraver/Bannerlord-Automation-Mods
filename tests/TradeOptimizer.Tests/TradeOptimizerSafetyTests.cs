@@ -135,6 +135,32 @@ namespace TradeOptimizer.Tests
             Assert.DoesNotContain("HerdingCalculator.GetRemainingAnimalSlots", source);
         }
 
+        [Fact]
+        public void TradePlanner_StopsSellPlanningWhenMerchantGoldIsDepleted()
+        {
+            string planner = ReadSource("TradeOptimizer", "TradePlanner.cs");
+            string models = ReadSource("TradeOptimizer", "TradePlanningModels.cs");
+            string provider = ReadSource("TradeOptimizer", "TradeOptimizerProvider.cs");
+
+            Assert.Contains("request.TradeContext.AvailableMerchantGold", planner);
+            Assert.Contains("state.CurrentMerchantGold < currentPrice", planner);
+            Assert.Contains("TradeBlockReason.MerchantGoldDepleted", planner);
+            Assert.Contains("state.CurrentMerchantGold -= price", planner);
+            Assert.Contains("context.AvailableMerchantGold", provider);
+            Assert.Contains("MerchantGoldDepleted", models);
+        }
+
+        [Fact]
+        public void TradePlanner_UsesStableSellPriceForVillages()
+        {
+            string planner = ReadSource("TradeOptimizer", "TradePlanner.cs");
+            string sellPhase = SliceMethod(planner, "private static void PlanSellPhase");
+
+            Assert.Contains("bool useStableSellPrice = request.TradeContext.SellPricesAreStatic;", sellPhase);
+            Assert.Contains("currentPrice = useStableSellPrice ? startPrice : GetSellPrice(logic, stack);", sellPhase);
+            Assert.DoesNotContain("Settlement.IsVillage", sellPhase);
+        }
+
         private static string ReadSource(params string[] parts)
         {
             string root = FindRepoRoot();

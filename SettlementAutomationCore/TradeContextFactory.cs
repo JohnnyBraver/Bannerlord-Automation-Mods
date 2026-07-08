@@ -28,6 +28,7 @@ namespace SettlementAutomationCore
             int expenseReserve = Math.Max(minimumGoldReserve, dailyWage * minDaysExpensesToKeep);
             int heroGold = hero?.Gold ?? 0;
             int availableGold = Math.Max(0, heroGold - expenseReserve);
+            int availableMerchantGold = Math.Max(0, Helpers.InventoryHelper.GetSettlementTradeGold(settlement, int.MaxValue));
 
             float currentWeight = Helpers.InventoryHelper.GetRosterWeight(party.ItemRoster);
             int reservePercent = settings?.ReserveCarryCapacityPercent ?? 0;
@@ -40,6 +41,8 @@ namespace SettlementAutomationCore
                 party,
                 logic,
                 availableGold,
+                availableMerchantGold,
+                settlement.IsVillage,
                 cargoCapacityBalance,
                 settings?.LimitToInventoryCapacity ?? true,
                 freeAnimalSlots,

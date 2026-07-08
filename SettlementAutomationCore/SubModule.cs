@@ -2536,6 +2536,7 @@ namespace SettlementAutomationCore
             var buys = proposal.Actions.Where(a => a.ActionType == TradeActionType.Buy).ToList();
 
             int availableGold = context.AvailableGold;
+            int availableMerchantGold = context.AvailableMerchantGold;
             float cargoBalance = context.CargoCapacityBalance;
             int freeAnimalSlots = context.FreeAnimalSlots;
             bool enforceCargo = context.EnforceCargoLimit;
@@ -2548,7 +2549,12 @@ namespace SettlementAutomationCore
                 var sellable = sellableItems.FirstOrDefault(s => s.Matches(action.EquipmentElement));
                 if (sellable == null || sellable.AvailableQuantity <= 0) continue;
 
-                int toSell = Math.Min(action.Quantity, sellable.AvailableQuantity);
+                int sellPrice = logic.GetItemPrice(action.EquipmentElement, false);
+                int toSell = ClampSellQuantityToMerchantGold(
+                    action.Quantity,
+                    sellable.AvailableQuantity,
+                    availableMerchantGold,
+                    sellPrice);
                 if (toSell > 0)
                 {
                     int initialDebt = logic.TransactionDebt;
@@ -2565,6 +2571,7 @@ namespace SettlementAutomationCore
 
                     int actualGoldGained = initialDebt - logic.TransactionDebt;
                     availableGold += actualGoldGained;
+                    availableMerchantGold = Math.Max(0, availableMerchantGold - actualGoldGained);
                     sellableItems = ConsumeSellableItems(sellableItems, action.EquipmentElement, toSell);
                     marketReport.AddSold(action.EquipmentElement, toSell, actualGoldGained, providerName, stage);
                     if (!action.EquipmentElement.Item.IsAnimal && !action.EquipmentElement.Item.IsMountable)
@@ -2644,6 +2651,7 @@ namespace SettlementAutomationCore
 
                     int actualGoldSpent = logic.TransactionDebt - initialDebt;
                     availableGold -= actualGoldSpent;
+                    availableMerchantGold += actualGoldSpent;
                     marketReport.AddBought(action.EquipmentElement, toBuy, actualGoldSpent, providerName, stage);
                     if (isCargo)
                     {
@@ -2661,11 +2669,29 @@ namespace SettlementAutomationCore
                 context.Party,
                 logic,
                 availableGold,
+                availableMerchantGold,
+                context.SellPricesAreStatic,
                 cargoBalance,
                 enforceCargo,
                 freeAnimalSlots,
                 context.MaxPackAnimalPurchases,
                 sellableItems);
+        }
+
+        internal static int ClampSellQuantityToMerchantGold(
+            int requestedQuantity,
+            int availableQuantity,
+            int availableMerchantGold,
+            int unitSellPrice)
+        {
+            if (requestedQuantity <= 0 || availableQuantity <= 0 || availableMerchantGold <= 0 || unitSellPrice <= 0)
+            {
+                return 0;
+            }
+
+            int requestedAndAvailable = Math.Min(requestedQuantity, availableQuantity);
+            int affordable = availableMerchantGold / unitSellPrice;
+            return Math.Min(requestedAndAvailable, affordable);
         }
 
         private static bool ShouldIgnoreWeight(RequestProfile profile, IgnoreWeightLimitTier setting)

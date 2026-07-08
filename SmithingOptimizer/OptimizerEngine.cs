@@ -26,6 +26,12 @@ namespace SmithingOptimizer
         public float Score { get; set; }
         public int Value { get; set; }
         public int MaxDamage { get; set; }
+        public int RawXp { get; set; }
+        public int PartResearchGain { get; set; }
+        public int StaminaCost { get; set; }
+        public float XpPerStamina { get; set; }
+        public int Difficulty { get; set; }
+        public string ItemModifierName { get; set; } = string.Empty;
         public int[] MaterialCosts { get; set; } = new int[9];
     }
 
@@ -110,7 +116,7 @@ namespace SmithingOptimizer
                             };
 
                             // Evaluate score at default scale
-                            EvaluateCandidate(candidate, craftingLogic, goal);
+                            EvaluateCandidate(candidate, craftingLogic, crafter, goal);
                             candidates.Add(candidate);
                         }
                     }
@@ -130,7 +136,7 @@ namespace SmithingOptimizer
             // 4. Phase 2: Slider Hill-Climbing on the top candidates
             foreach (var candidate in topCandidates)
             {
-                OptimizeSliders(candidate, craftingLogic, goal);
+                OptimizeSliders(candidate, craftingLogic, crafter, goal);
                 results.Add(candidate);
             }
 
@@ -145,7 +151,8 @@ namespace SmithingOptimizer
                 string message = $"Optimized template '{template?.TemplateName?.ToString() ?? "Unknown"}' (Goal: {goal}). Best design: " +
                     $"Blade={best.Blade?.Name?.ToString() ?? "None"}, Guard={best.Guard?.Name?.ToString() ?? "None"}, " +
                     $"Grip={best.Grip?.Name?.ToString() ?? "None"}, Pommel={best.Pommel?.Name?.ToString() ?? "None"}. " +
-                    $"Score={best.Score:F1}, Value={best.Value}, MaxDamage={best.MaxDamage}, Slider Scales: " +
+                    $"Score={best.Score:F1}, RawXP={best.RawXp}, XP/Stamina={best.XpPerStamina:F2}, " +
+                    $"Stamina={best.StaminaCost}, ExpectedValue={best.Value}, Modifier={best.ItemModifierName}, MaxDamage={best.MaxDamage}, Slider Scales: " +
                     $"[{best.BladeScale}%, {best.GuardScale}%, {best.GripScale}%, {best.PommelScale}%]";
                 WriteLog(message);
             }
@@ -174,7 +181,7 @@ namespace SmithingOptimizer
             return true;
         }
 
-        private static void EvaluateCandidate(CraftingDesignCandidate candidate, Crafting craftingLogic, OptimizationGoal goal)
+        private static void EvaluateCandidate(CraftingDesignCandidate candidate, Crafting craftingLogic, Hero crafter, OptimizationGoal goal)
         {
             var pieces = new WeaponDesignElement[4];
             pieces[0] = CreatePieceElement(candidate.Blade, candidate.BladeScale);
@@ -202,16 +209,34 @@ namespace SmithingOptimizer
                 maxDmg = Math.Max(w.SwingDamage, w.ThrustDamage);
             }
 
-            candidate.Value = value;
+            var craftingScore = SmithingScoreEstimator.ScoreCraftingItem(item, design, crafter);
+
+            candidate.Value = craftingScore?.Value ?? value;
             candidate.MaxDamage = maxDmg;
+            candidate.RawXp = craftingScore?.RawXp ?? 0;
+            candidate.PartResearchGain = craftingScore?.PartResearchGain ?? 0;
+            candidate.StaminaCost = craftingScore?.StaminaCost ?? 0;
+            candidate.XpPerStamina = craftingScore?.XpPerStamina ?? 0;
+            candidate.Difficulty = craftingScore?.Difficulty ?? 0;
+            candidate.ItemModifierName = craftingScore?.ItemModifierName ?? string.Empty;
 
             if (goal == OptimizationGoal.Damage)
             {
                 candidate.Score = maxDmg;
             }
-            else // Profit
+            else if (goal == OptimizationGoal.SellValue)
             {
-                candidate.Score = value;
+                candidate.Score = candidate.Value;
+            }
+            else
+            {
+                if (craftingScore == null || craftingScore.RawXp <= 0 || craftingScore.StaminaCost <= 0)
+                {
+                    candidate.Score = -1;
+                    return;
+                }
+
+                candidate.Score = craftingScore.XpPerStamina;
             }
         }
 
@@ -224,7 +249,7 @@ namespace SmithingOptimizer
             return WeaponDesignElement.CreateUsablePiece(piece, scale);
         }
 
-        private static void OptimizeSliders(CraftingDesignCandidate candidate, Crafting craftingLogic, OptimizationGoal goal)
+        private static void OptimizeSliders(CraftingDesignCandidate candidate, Crafting craftingLogic, Hero crafter, OptimizationGoal goal)
         {
             // Hill-climb sizes: starting at 100%, range is 90% to 110% (scale value 90 to 110)
             bool improved = true;
@@ -248,10 +273,11 @@ namespace SmithingOptimizer
                         {
                             candidate.BladeScale = next;
                             float oldScore = candidate.Score;
-                            EvaluateCandidate(candidate, craftingLogic, goal);
+                            var oldState = CandidateEvaluationState.Capture(candidate);
+                            EvaluateCandidate(candidate, craftingLogic, crafter, goal);
                             if (candidate.Score > oldScore) { improved = true; continue; }
                             candidate.BladeScale = prev; // Revert
-                            candidate.Score = oldScore;
+                            oldState.Restore(candidate);
                         }
                     }
 
@@ -264,10 +290,11 @@ namespace SmithingOptimizer
                         {
                             candidate.GuardScale = next;
                             float oldScore = candidate.Score;
-                            EvaluateCandidate(candidate, craftingLogic, goal);
+                            var oldState = CandidateEvaluationState.Capture(candidate);
+                            EvaluateCandidate(candidate, craftingLogic, crafter, goal);
                             if (candidate.Score > oldScore) { improved = true; continue; }
                             candidate.GuardScale = prev; // Revert
-                            candidate.Score = oldScore;
+                            oldState.Restore(candidate);
                         }
                     }
 
@@ -280,10 +307,11 @@ namespace SmithingOptimizer
                         {
                             candidate.GripScale = next;
                             float oldScore = candidate.Score;
-                            EvaluateCandidate(candidate, craftingLogic, goal);
+                            var oldState = CandidateEvaluationState.Capture(candidate);
+                            EvaluateCandidate(candidate, craftingLogic, crafter, goal);
                             if (candidate.Score > oldScore) { improved = true; continue; }
                             candidate.GripScale = prev; // Revert
-                            candidate.Score = oldScore;
+                            oldState.Restore(candidate);
                         }
                     }
 
@@ -296,13 +324,58 @@ namespace SmithingOptimizer
                         {
                             candidate.PommelScale = next;
                             float oldScore = candidate.Score;
-                            EvaluateCandidate(candidate, craftingLogic, goal);
+                            var oldState = CandidateEvaluationState.Capture(candidate);
+                            EvaluateCandidate(candidate, craftingLogic, crafter, goal);
                             if (candidate.Score > oldScore) { improved = true; continue; }
                             candidate.PommelScale = prev; // Revert
-                            candidate.Score = oldScore;
+                            oldState.Restore(candidate);
                         }
                     }
                 }
+            }
+        }
+
+        private struct CandidateEvaluationState
+        {
+            private readonly float _score;
+            private readonly int _value;
+            private readonly int _maxDamage;
+            private readonly int _rawXp;
+            private readonly int _partResearchGain;
+            private readonly int _staminaCost;
+            private readonly float _xpPerStamina;
+            private readonly int _difficulty;
+            private readonly string _itemModifierName;
+
+            private CandidateEvaluationState(CraftingDesignCandidate candidate)
+            {
+                _score = candidate.Score;
+                _value = candidate.Value;
+                _maxDamage = candidate.MaxDamage;
+                _rawXp = candidate.RawXp;
+                _partResearchGain = candidate.PartResearchGain;
+                _staminaCost = candidate.StaminaCost;
+                _xpPerStamina = candidate.XpPerStamina;
+                _difficulty = candidate.Difficulty;
+                _itemModifierName = candidate.ItemModifierName;
+            }
+
+            public static CandidateEvaluationState Capture(CraftingDesignCandidate candidate)
+            {
+                return new CandidateEvaluationState(candidate);
+            }
+
+            public void Restore(CraftingDesignCandidate candidate)
+            {
+                candidate.Score = _score;
+                candidate.Value = _value;
+                candidate.MaxDamage = _maxDamage;
+                candidate.RawXp = _rawXp;
+                candidate.PartResearchGain = _partResearchGain;
+                candidate.StaminaCost = _staminaCost;
+                candidate.XpPerStamina = _xpPerStamina;
+                candidate.Difficulty = _difficulty;
+                candidate.ItemModifierName = _itemModifierName;
             }
         }
 
@@ -323,7 +396,7 @@ namespace SmithingOptimizer
             }
         }
 
-        private static void WriteLog(string message)
+        internal static void WriteLog(string message)
         {
             try
             {

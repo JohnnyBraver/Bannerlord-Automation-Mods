@@ -42,6 +42,7 @@ namespace TradeOptimizer
         AveragePriceUndetermined,
         PriceThreshold,
         NoProfitExpected,
+        MerchantGoldDepleted,
         MarginSwapNotBetter
     }
 
@@ -230,14 +231,16 @@ namespace TradeOptimizer
         private readonly Dictionary<string, int> _soldQuantities = new Dictionary<string, int>(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _extraSoldQuantities = new Dictionary<string, int>(StringComparer.Ordinal);
 
-        public TradeSimulationState(int currentBalance, float startWeight, float usableCapacity)
+        public TradeSimulationState(int currentBalance, int currentMerchantGold, float startWeight, float usableCapacity)
         {
             CurrentBalance = currentBalance;
+            CurrentMerchantGold = currentMerchantGold;
             StartWeight = startWeight;
             UsableCapacity = usableCapacity;
         }
 
         public int CurrentBalance { get; set; }
+        public int CurrentMerchantGold { get; set; }
         public float StartWeight { get; }
         public float UsableCapacity { get; }
         public float NetWeightAdded { get; set; }
@@ -544,6 +547,8 @@ namespace TradeOptimizer
                     return "PriceCheckFailed";
                 case TradeBlockReason.NoProfitExpected:
                     return "NoProfitExpected";
+                case TradeBlockReason.MerchantGoldDepleted:
+                    return "MerchantGoldDepleted";
                 case TradeBlockReason.MarginSwapNotBetter:
                     return "MarginSwapNotBetter";
                 default:

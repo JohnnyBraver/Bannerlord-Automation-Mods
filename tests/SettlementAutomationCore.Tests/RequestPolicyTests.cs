@@ -430,6 +430,38 @@ namespace SettlementAutomationCore.Tests
             Assert.Equal(7, updated[1].AvailableQuantity);
         }
 
+        [Theory]
+        [InlineData(204, 204, 1000, 11, 90)]
+        [InlineData(5, 4, 1000, 10, 4)]
+        [InlineData(5, 5, 10, 11, 0)]
+        [InlineData(5, 5, 1000, 0, 0)]
+        [InlineData(5, 5, 0, 10, 0)]
+        public void ClampSellQuantityToMerchantGold_NeverSellsMoreThanSettlementCanPay(
+            int requestedQuantity,
+            int availableQuantity,
+            int availableMerchantGold,
+            int unitSellPrice,
+            int expected)
+        {
+            int actual = SubModule.ClampSellQuantityToMerchantGold(
+                requestedQuantity,
+                availableQuantity,
+                availableMerchantGold,
+                unitSellPrice);
+
+            Assert.Equal(expected, actual);
+        }
+
+        [Fact]
+        public void TradeContextFactory_ExposesStaticSellPriceRule()
+        {
+            string context = ReadSource("SettlementAutomationCore", "TradeContext.cs");
+            string factory = ReadSource("SettlementAutomationCore", "TradeContextFactory.cs");
+
+            Assert.Contains("public bool SellPricesAreStatic { get; }", context);
+            Assert.Contains("settlement.IsVillage", factory);
+        }
+
         private static AutomationRequest Request(string id, RequestProfile profile, int priority)
         {
             return AutomationRequest.ForInventoryTarget(id, RequestType.ItemCategory, "Food", 1, profile, priority);
