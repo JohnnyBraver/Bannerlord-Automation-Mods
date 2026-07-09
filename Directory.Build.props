@@ -2,8 +2,11 @@
   <PropertyGroup>
     <NuGetAudit>false</NuGetAudit>
     <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
-    <BannerlordGameBin>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client</BannerlordGameBin>
-    <UIExtenderExPath>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\Bannerlord.UIExtenderEx\bin\Win64_Shipping_Client\Bannerlord.UIExtenderEx.dll</UIExtenderExPath>
-    <MCMv5Path>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\Bannerlord.MBOptionScreen\bin\Win64_Shipping_Client\MCMv5.dll</MCMv5Path>
+    <BannerlordGameRoot Condition="'$(BannerlordGameRoot)' == ''">E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord</BannerlordGameRoot>
+    <BannerlordGameBin Condition="'$(BannerlordGameBin)' == ''">$(BannerlordGameRoot)\bin\Win64_Shipping_Client</BannerlordGameBin>
+    <BannerlordModulesRoot Condition="'$(BannerlordModulesRoot)' == ''">$(BannerlordGameRoot)\Modules</BannerlordModulesRoot>
+    <BannerlordWorkshopRoot Condition="'$(BannerlordWorkshopRoot)' == ''">E:\SteamLibrary\steamapps\workshop\content\261550</BannerlordWorkshopRoot>
+    <UIExtenderExPath Condition="'$(UIExtenderExPath)' == ''">$(BannerlordModulesRoot)\Bannerlord.UIExtenderEx\bin\Win64_Shipping_Client\Bannerlord.UIExtenderEx.dll</UIExtenderExPath>
+    <MCMv5Path Condition="'$(MCMv5Path)' == ''">$(BannerlordModulesRoot)\Bannerlord.MBOptionScreen\bin\Win64_Shipping_Client\MCMv5.dll</MCMv5Path>
   </PropertyGroup>
 </Project>

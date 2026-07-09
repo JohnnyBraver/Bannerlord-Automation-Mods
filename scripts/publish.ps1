@@ -1,6 +1,10 @@
 # Scripts/publish.ps1
 param(
-    [string[]]$Mods = @()
+    [string[]]$Mods = @(),
+    [string]$BannerlordGameRoot = "E:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord",
+    [string]$BannerlordModulesRoot = "",
+    [string]$UIExtenderExPath = "",
+    [string]$MCMv5Path = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,7 +12,16 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $publishDir = Join-Path $repoRoot "publish"
 $tempPublishDir = Join-Path $repoRoot ".tmp_publish"
-$gameModulesRoot = "E:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord\Modules"
+
+if ([string]::IsNullOrWhiteSpace($BannerlordModulesRoot)) {
+    $BannerlordModulesRoot = Join-Path $BannerlordGameRoot "Modules"
+}
+if ([string]::IsNullOrWhiteSpace($UIExtenderExPath)) {
+    $UIExtenderExPath = Join-Path $BannerlordModulesRoot "Bannerlord.UIExtenderEx\bin\Win64_Shipping_Client\Bannerlord.UIExtenderEx.dll"
+}
+if ([string]::IsNullOrWhiteSpace($MCMv5Path)) {
+    $MCMv5Path = Join-Path $BannerlordModulesRoot "Bannerlord.MBOptionScreen\bin\Win64_Shipping_Client\MCMv5.dll"
+}
 
 $allMods = @(
     "SettlementAutomationCore",
@@ -72,7 +85,11 @@ foreach ($mod in $selectedMods) {
     }
 
     Write-Host "Building $mod..." -ForegroundColor Green
-    & dotnet build $projectPath -c Release -m:1 -p:UIExtenderExPath="E:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord\Modules\Bannerlord.UIExtenderEx\bin\Win64_Shipping_Client\Bannerlord.UIExtenderEx.dll" -p:MCMv5Path="E:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord\Modules\Bannerlord.MBOptionScreen\bin\Win64_Shipping_Client\MCMv5.dll"
+    & dotnet build $projectPath -c Release -m:1 `
+        -p:BannerlordGameRoot="$BannerlordGameRoot" `
+        -p:BannerlordModulesRoot="$BannerlordModulesRoot" `
+        -p:UIExtenderExPath="$UIExtenderExPath" `
+        -p:MCMv5Path="$MCMv5Path"
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Build failed for $mod."
         exit $LASTEXITCODE
@@ -96,7 +113,7 @@ foreach ($mod in $selectedMods) {
     }
     New-Item -ItemType Directory -Path (Join-Path $tempPublishDir $mod) | Out-Null
     
-    $sourcePath = Join-Path $gameModulesRoot $mod
+    $sourcePath = Join-Path $BannerlordModulesRoot $mod
     if (-not (Test-Path $sourcePath)) {
         Write-Error "Could not find deployed mod files at $sourcePath"
         exit 1

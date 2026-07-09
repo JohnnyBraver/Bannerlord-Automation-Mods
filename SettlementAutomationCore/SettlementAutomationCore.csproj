@@ -65,7 +65,7 @@
   <!-- Post-Build Action: Copy built outputs to the Bannerlord Modules folder -->
   <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(SkipBannerlordModuleCopy)' != 'true'">
     <PropertyGroup>
-      <ModFolder>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\SettlementAutomationCore</ModFolder>
+      <ModFolder>$(BannerlordModulesRoot)\SettlementAutomationCore</ModFolder>
       <ModBinFolder>$(ModFolder)\bin\Win64_Shipping_Client</ModBinFolder>
     </PropertyGroup>
     <MakeDir Directories="$(ModBinFolder)" Condition="!Exists('$(ModBinFolder)')" />

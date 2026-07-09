@@ -70,7 +70,7 @@
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(SkipBannerlordModuleCopy)' != 'true'">
     <PropertyGroup>
-      <ModFolder>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\FiefManager</ModFolder>
+      <ModFolder>$(BannerlordModulesRoot)\FiefManager</ModFolder>
       <ModBinFolder>$(ModFolder)\bin\Win64_Shipping_Client</ModBinFolder>
     </PropertyGroup>
     <MakeDir Directories="$(ModBinFolder)" Condition="!Exists('$(ModBinFolder)')" />

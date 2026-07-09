@@ -17,7 +17,8 @@
           AfterTargets="PostBuild"
           Condition="Exists('$(MSBuildProjectDirectory)\SubModule.xml') and '$(SkipBannerlordModuleCopy)' != 'true'">
     <PropertyGroup>
-      <BannerlordModulesRoot>E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\Modules</BannerlordModulesRoot>
+      <BannerlordGameRoot Condition="'$(BannerlordGameRoot)' == ''">E:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord</BannerlordGameRoot>
+      <BannerlordModulesRoot Condition="'$(BannerlordModulesRoot)' == ''">$(BannerlordGameRoot)\Modules</BannerlordModulesRoot>
       <InstalledModuleBin>$(BannerlordModulesRoot)\$(MSBuildProjectName)\bin\Win64_Shipping_Client</InstalledModuleBin>
     </PropertyGroup>
     <ItemGroup>
