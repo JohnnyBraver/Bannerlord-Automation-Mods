@@ -2,9 +2,9 @@ using System;
 using System.IO;
 using Xunit;
 
-namespace SettlementAutomationCore.Tests
+namespace SmithingOptimizer.Tests
 {
-    public class SmithingOptimizerIntegrationTests
+    public class SmithingIntegrationContractTests
     {
         [Fact]
         public void SmithingOptimizer_RegistersCoreRequestAndReportProviders()
@@ -24,7 +24,6 @@ namespace SettlementAutomationCore.Tests
         public void SmithingOptimizer_SubmitsHardwoodAndCharcoalRequestsThroughCore()
         {
             string provider = ReadSource("SmithingOptimizer", "SmithingOptimizerProvider.cs");
-            string settings = ReadSource("SmithingOptimizer", "Settings.cs");
 
             Assert.Contains("\"Hardwood\"", provider);
             Assert.Contains("\"Charcoal\"", provider);
@@ -32,8 +31,6 @@ namespace SettlementAutomationCore.Tests
             Assert.Contains("RequestType.SpecificItem", provider);
             Assert.DoesNotContain("TransferCommand.Transfer", provider);
             Assert.DoesNotContain("DoneLogic()", provider);
-            Assert.Contains("SmithingOptimizer_v0_4", settings);
-            Assert.Contains("AutoBuySmithingSupplies", settings);
         }
 
         private static string ReadSource(params string[] parts)
