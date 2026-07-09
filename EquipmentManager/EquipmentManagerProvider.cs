@@ -332,15 +332,12 @@ namespace EquipmentManager
                         foreach (var slot in weaponSlots)
                         {
                             var currentWeapon = equipment[slot];
+                            var weaponContext = EquipmentComparison.CreateWeaponEvaluationContext(settings, hero, side);
                             InventoryItemView? bestCandidate = null;
                             float currentEquippedScore = currentWeapon.IsEmpty
                                 ? -9999f
-                                : EquipmentComparison.GetWeaponScore(
-                                    currentWeapon,
-                                    settings.AmmoUpgradePreferenceSetting,
-                                    settings.ThrowingWeaponUpgradePreferenceSetting,
-                                    settings.IgnoreThrowingWeaponMeleeStats);
-                            float currentInventoryScore = GetBestWeaponScoreInInventory(context.PlayerInventory, slot, side, settings);
+                                : EquipmentComparison.GetWeaponScore(currentWeapon, weaponContext);
+                            float currentInventoryScore = GetBestWeaponScoreInInventory(context.PlayerInventory, slot, side, settings, currentWeapon, weaponContext);
                             float bestScore = Math.Max(currentEquippedScore, currentInventoryScore);
                             bool foundUpgrade = false;
 
@@ -356,20 +353,10 @@ namespace EquipmentManager
                                 if (side == InventoryLogic.InventorySide.CivilianEquipment && !item.IsCivilian) continue;
                                 if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
 
-                                float score = EquipmentComparison.GetWeaponScore(
-                                    candidate,
-                                    settings.AmmoUpgradePreferenceSetting,
-                                    settings.ThrowingWeaponUpgradePreferenceSetting,
-                                    settings.IgnoreThrowingWeaponMeleeStats);
-                                bool strictUpgrade = !currentWeapon.IsEmpty && EquipmentComparison.StrictlyBeatsWeapon(
-                                    candidate,
-                                    currentWeapon,
-                                    settings.AmmoUpgradePreferenceSetting,
-                                    settings.ThrowingWeaponUpgradePreferenceSetting,
-                                    settings.IgnoreThrowingWeaponMeleeStats);
-                                if (strictUpgrade || score > bestScore)
+                                var evaluation = EquipmentComparison.EvaluateWeaponUpgrade(candidate, currentWeapon, weaponContext);
+                                if (evaluation.IsUpgrade && evaluation.CandidateScore > bestScore)
                                 {
-                                    bestScore = score;
+                                    bestScore = evaluation.CandidateScore;
                                     bestCandidate = marketItem;
                                     foundUpgrade = true;
                                 }
@@ -379,11 +366,7 @@ namespace EquipmentManager
                             {
                                 float currentScore = currentWeapon.IsEmpty
                                     ? 0f
-                                    : EquipmentComparison.GetWeaponScore(
-                                        currentWeapon,
-                                        settings.AmmoUpgradePreferenceSetting,
-                                        settings.ThrowingWeaponUpgradePreferenceSetting,
-                                        settings.IgnoreThrowingWeaponMeleeStats);
+                                    : EquipmentComparison.GetWeaponScore(currentWeapon, weaponContext);
                                 float scoreIncrease = Math.Max(1f, bestScore - currentScore);
 
                                 potentialOrders.Add(new PotentialBuyOrder
@@ -485,7 +468,13 @@ namespace EquipmentManager
             return bestScore;
         }
 
-        private static float GetBestWeaponScoreInInventory(CategorizedInventoryView playerInventory, EquipmentIndex slot, InventoryLogic.InventorySide side, Settings settings)
+        private static float GetBestWeaponScoreInInventory(
+            CategorizedInventoryView playerInventory,
+            EquipmentIndex slot,
+            InventoryLogic.InventorySide side,
+            Settings settings,
+            EquipmentElement currentWeapon,
+            WeaponEvaluationContext weaponContext)
         {
             float bestScore = -9999f;
             var playerElements = playerInventory.Weapons;
@@ -501,14 +490,20 @@ namespace EquipmentManager
                 if (side == InventoryLogic.InventorySide.CivilianEquipment && !item.IsCivilian) continue;
                 if (!Equipment.IsItemFitsToSlot(slot, item)) continue;
 
-                float score = EquipmentComparison.GetWeaponScore(
-                    eqEl,
-                    settings.AmmoUpgradePreferenceSetting,
-                    settings.ThrowingWeaponUpgradePreferenceSetting,
-                    settings.IgnoreThrowingWeaponMeleeStats);
-                if (score > bestScore)
+                if (currentWeapon.IsEmpty)
                 {
-                    bestScore = score;
+                    float score = EquipmentComparison.GetWeaponScore(eqEl, weaponContext);
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                    }
+                    continue;
+                }
+
+                var evaluation = EquipmentComparison.EvaluateWeaponUpgrade(eqEl, currentWeapon, weaponContext);
+                if (evaluation.IsUpgrade && evaluation.CandidateScore > bestScore)
+                {
+                    bestScore = evaluation.CandidateScore;
                 }
             }
             return bestScore;
@@ -643,22 +638,8 @@ namespace EquipmentManager
                             var currentWeapon = equipment[slot];
                             if (!EquipmentComparison.ShouldEvaluateWeaponSlot(currentWeapon, side)) continue;
 
-                            float candidateScore = EquipmentComparison.GetWeaponScore(
-                                eqEl,
-                                settings.AmmoUpgradePreferenceSetting,
-                                settings.ThrowingWeaponUpgradePreferenceSetting,
-                                settings.IgnoreThrowingWeaponMeleeStats);
-                            float currentScore = EquipmentComparison.GetWeaponScore(
-                                currentWeapon,
-                                settings.AmmoUpgradePreferenceSetting,
-                                settings.ThrowingWeaponUpgradePreferenceSetting,
-                                settings.IgnoreThrowingWeaponMeleeStats);
-                            if (EquipmentComparison.StrictlyBeatsWeapon(
-                                    eqEl,
-                                    currentWeapon,
-                                    settings.AmmoUpgradePreferenceSetting,
-                                    settings.ThrowingWeaponUpgradePreferenceSetting,
-                                    settings.IgnoreThrowingWeaponMeleeStats) || candidateScore > currentScore) return true;
+                            var weaponContext = EquipmentComparison.CreateWeaponEvaluationContext(settings, hero, side);
+                            if (EquipmentComparison.EvaluateWeaponUpgrade(eqEl, currentWeapon, weaponContext).IsUpgrade) return true;
                         }
                     }
 

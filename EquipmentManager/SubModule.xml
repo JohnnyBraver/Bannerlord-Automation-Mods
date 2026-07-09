@@ -2,7 +2,7 @@
 <Module>
   <Name value="Equipment Manager" />
   <Id value="EquipmentManager" />
-  <Version value="v0.4.5" />
+  <Version value="v0.5.0" />
   <SingleplayerModule value="true" />
   <DependedModules>
     <DependedModule Id="Native" DependentVersion="v1.4.6" />

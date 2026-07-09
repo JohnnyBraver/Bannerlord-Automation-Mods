@@ -30,7 +30,7 @@ namespace EquipmentManager.Tests
         }
 
         [Fact]
-        public void StrictlyBeatsWeapon_RejectsSideGradesEvenWhenScoreWouldIncrease()
+        public void StrictlyBeatsWeapon_AcceptsPreferredStatTradeoffsWhenScoreImproves()
         {
             var current = Weapon(
                 swingDamage: 70,
@@ -49,8 +49,76 @@ namespace EquipmentManager.Tests
                 weaponLength: 100);
 
             Assert.True(EquipmentDecisionMath.StrictlyBeatsWeapon(strictUpgrade, current));
-            Assert.False(EquipmentDecisionMath.StrictlyBeatsWeapon(sideGrade, current));
+            Assert.True(EquipmentDecisionMath.StrictlyBeatsWeapon(sideGrade, current));
             Assert.True(EquipmentDecisionMath.GetWeaponScore(sideGrade) > EquipmentDecisionMath.GetWeaponScore(current));
+        }
+
+        [Fact]
+        public void EvaluateWeaponUpgrade_BalancedAcceptsDamageAndReachTradeoffForSwords()
+        {
+            var falchion = Weapon(
+                swingSpeed: 98,
+                swingDamage: 63,
+                weaponLength: 71,
+                handling: 102,
+                role: WeaponRole.OneHandedSword,
+                itemTier: 2);
+            var spatha = Weapon(
+                swingSpeed: 89,
+                swingDamage: 69,
+                weaponLength: 108,
+                handling: 90,
+                role: WeaponRole.OneHandedSword,
+                itemTier: 4);
+
+            var result = EquipmentDecisionMath.EvaluateWeaponUpgrade(spatha, falchion, new WeaponEvaluationContext());
+
+            Assert.True(result.IsUpgrade);
+            Assert.True(result.CandidateScore > result.CurrentScore);
+        }
+
+        [Fact]
+        public void EvaluateWeaponUpgrade_SpeedHandlingPreferenceCanKeepFasterSword()
+        {
+            var falchion = Weapon(
+                swingSpeed: 98,
+                swingDamage: 63,
+                weaponLength: 71,
+                handling: 102,
+                role: WeaponRole.OneHandedSword,
+                itemTier: 2);
+            var spatha = Weapon(
+                swingSpeed: 89,
+                swingDamage: 69,
+                weaponLength: 108,
+                handling: 90,
+                role: WeaponRole.OneHandedSword,
+                itemTier: 4);
+            var context = new WeaponEvaluationContext(
+                oneHandedSwordPreference: MeleeWeaponUpgradePreference.SpeedAndHandling);
+
+            var result = EquipmentDecisionMath.EvaluateWeaponUpgrade(spatha, falchion, context);
+
+            Assert.False(result.IsUpgrade);
+            Assert.True(result.CandidateScore <= result.CurrentScore);
+        }
+
+        [Theory]
+        [InlineData((int)WeaponRole.OneHandedAxeMace)]
+        [InlineData((int)WeaponRole.TwoHanded)]
+        [InlineData((int)WeaponRole.ThrustPolearm)]
+        [InlineData((int)WeaponRole.SwingPolearm)]
+        public void EvaluateWeaponUpgrade_MeleeCategoryPreferencesApplyToEachRole(int roleValue)
+        {
+            var role = (WeaponRole)roleValue;
+            var current = MeleeRoleWeapon(role, damage: 60, speed: 95, reach: 80, handling: 100);
+            var candidate = MeleeRoleWeapon(role, damage: 72, speed: 84, reach: 115, handling: 82);
+
+            var damageReach = ContextForMeleeRole(role, MeleeWeaponUpgradePreference.DamageAndReach);
+            var speedHandling = ContextForMeleeRole(role, MeleeWeaponUpgradePreference.SpeedAndHandling);
+
+            Assert.True(EquipmentDecisionMath.EvaluateWeaponUpgrade(candidate, current, damageReach).IsUpgrade);
+            Assert.False(EquipmentDecisionMath.EvaluateWeaponUpgrade(candidate, current, speedHandling).IsUpgrade);
         }
 
         [Fact]
@@ -62,6 +130,114 @@ namespace EquipmentManager.Tests
 
             Assert.False(EquipmentDecisionMath.StrictlyBeatsWeapon(missingCapability, current));
             Assert.True(EquipmentDecisionMath.StrictlyBeatsWeapon(supersetCapability, current));
+        }
+
+        [Fact]
+        public void EvaluateWeaponUpgrade_IgnoreMinorPropertiesAllowsMissingMinorFlag()
+        {
+            var current = Weapon(swingDamage: 50, flags: 0b101);
+            var candidate = Weapon(swingDamage: 60, flags: 0b001);
+
+            var preserveAll = new WeaponEvaluationContext(
+                propertyMatching: WeaponPropertyMatching.PreserveAll,
+                minorPropertyFlags: 0b100);
+            var ignoreMinor = new WeaponEvaluationContext(
+                propertyMatching: WeaponPropertyMatching.IgnoreMinor,
+                minorPropertyFlags: 0b100);
+
+            Assert.False(EquipmentDecisionMath.EvaluateWeaponUpgrade(candidate, current, preserveAll).IsUpgrade);
+            Assert.True(EquipmentDecisionMath.EvaluateWeaponUpgrade(candidate, current, ignoreMinor).IsUpgrade);
+        }
+
+        [Fact]
+        public void EvaluateWeaponUpgrade_MountedBattleRejectsMountedUsageRestrictionsUnlessOverridden()
+        {
+            const long cantReloadOnHorseback = 0b1000;
+            var current = Weapon(swingDamage: 40, flags: cantReloadOnHorseback, role: WeaponRole.Ranged, isMelee: false, isRanged: true);
+            var candidate = Weapon(swingDamage: 50, missileDamage: 60, flags: cantReloadOnHorseback, role: WeaponRole.Ranged, isMelee: false, isRanged: true);
+            var bowCurrent = Weapon(swingDamage: 40, flags: 0, role: WeaponRole.Ranged, isMelee: false, isRanged: true);
+            var longBowCandidate = Weapon(swingDamage: 50, missileDamage: 60, role: WeaponRole.Ranged, isMelee: false, isRanged: true, itemUsage: "long_bow");
+
+            var mountedBlocked = new WeaponEvaluationContext(
+                isMountedBattle: true,
+                canReloadAllCrossbowsMounted: false,
+                cantReloadOnHorsebackFlag: cantReloadOnHorseback);
+            var mountedAllowed = new WeaponEvaluationContext(
+                isMountedBattle: true,
+                canReloadAllCrossbowsMounted: true,
+                cantReloadOnHorsebackFlag: cantReloadOnHorseback);
+
+            Assert.False(EquipmentDecisionMath.EvaluateWeaponUpgrade(candidate, current, mountedBlocked).IsUpgrade);
+            Assert.True(EquipmentDecisionMath.EvaluateWeaponUpgrade(candidate, current, mountedAllowed).IsUpgrade);
+
+            Assert.False(EquipmentDecisionMath.EvaluateWeaponUpgrade(longBowCandidate, bowCurrent, mountedBlocked).IsUpgrade);
+            Assert.True(EquipmentDecisionMath.EvaluateWeaponUpgrade(longBowCandidate, bowCurrent, new WeaponEvaluationContext(
+                isMountedBattle: true,
+                canUseAllBowsMounted: true,
+                cantReloadOnHorsebackFlag: cantReloadOnHorseback)).IsUpgrade);
+        }
+
+        [Fact]
+        public void EvaluateWeaponUpgrade_RangedPreferenceChoosesDamageOrAccuracy()
+        {
+            var current = Weapon(
+                missileDamage: 60,
+                missileSpeed: 80,
+                accuracy: 90,
+                isMelee: false,
+                isRanged: true,
+                role: WeaponRole.Ranged);
+            var damageCandidate = Weapon(
+                missileDamage: 70,
+                missileSpeed: 80,
+                accuracy: 80,
+                isMelee: false,
+                isRanged: true,
+                role: WeaponRole.Ranged);
+            var accuracyCandidate = Weapon(
+                missileDamage: 58,
+                missileSpeed: 80,
+                accuracy: 100,
+                isMelee: false,
+                isRanged: true,
+                role: WeaponRole.Ranged);
+
+            var damageContext = new WeaponEvaluationContext(rangedPreference: RangedWeaponUpgradePreference.Damage);
+            var accuracyContext = new WeaponEvaluationContext(rangedPreference: RangedWeaponUpgradePreference.Accuracy);
+
+            Assert.True(EquipmentDecisionMath.EvaluateWeaponUpgrade(damageCandidate, current, damageContext).IsUpgrade);
+            Assert.False(EquipmentDecisionMath.EvaluateWeaponUpgrade(accuracyCandidate, current, damageContext).IsUpgrade);
+            Assert.True(EquipmentDecisionMath.EvaluateWeaponUpgrade(accuracyCandidate, current, accuracyContext).IsUpgrade);
+        }
+
+        [Fact]
+        public void EvaluateWeaponUpgrade_ShieldPreferenceChoosesHitPointsOrSize()
+        {
+            var current = Weapon(
+                weaponLength: 80,
+                durability: 200,
+                isMelee: false,
+                isShieldOrAmmo: true,
+                role: WeaponRole.Shield);
+            var hitPointCandidate = Weapon(
+                weaponLength: 70,
+                durability: 260,
+                isMelee: false,
+                isShieldOrAmmo: true,
+                role: WeaponRole.Shield);
+            var sizeCandidate = Weapon(
+                weaponLength: 110,
+                durability: 180,
+                isMelee: false,
+                isShieldOrAmmo: true,
+                role: WeaponRole.Shield);
+
+            var hpContext = new WeaponEvaluationContext(shieldPreference: ShieldUpgradePreference.MaxHitPoints);
+            var sizeContext = new WeaponEvaluationContext(shieldPreference: ShieldUpgradePreference.MaxSize);
+
+            Assert.True(EquipmentDecisionMath.EvaluateWeaponUpgrade(hitPointCandidate, current, hpContext).IsUpgrade);
+            Assert.False(EquipmentDecisionMath.EvaluateWeaponUpgrade(sizeCandidate, current, hpContext).IsUpgrade);
+            Assert.True(EquipmentDecisionMath.EvaluateWeaponUpgrade(sizeCandidate, current, sizeContext).IsUpgrade);
         }
 
         [Fact]
@@ -148,7 +324,10 @@ namespace EquipmentManager.Tests
             bool isRanged = false,
             bool isShieldOrAmmo = false,
             bool isAmmo = false,
-            bool isThrown = false)
+            bool isThrown = false,
+            WeaponRole role = WeaponRole.Other,
+            int itemTier = 0,
+            string itemUsage = "")
         {
             return new WeaponStats(
                 true,
@@ -168,7 +347,10 @@ namespace EquipmentManager.Tests
                 isRanged,
                 isShieldOrAmmo,
                 isAmmo,
-                isThrown);
+                isThrown,
+                role,
+                itemTier,
+                itemUsage);
         }
 
         private static WeaponStats Ammo(int durability, int missileDamage)
@@ -192,6 +374,49 @@ namespace EquipmentManager.Tests
                 isMelee: true,
                 isRanged: true,
                 isThrown: true);
+        }
+
+        private static WeaponStats MeleeRoleWeapon(WeaponRole role, int damage, int speed, int reach, int handling)
+        {
+            if (role == WeaponRole.ThrustPolearm)
+            {
+                return Weapon(
+                    weaponClass: 4,
+                    thrustDamage: damage,
+                    thrustSpeed: speed,
+                    swingDamage: 0,
+                    swingSpeed: 0,
+                    weaponLength: reach,
+                    handling: handling,
+                    role: role);
+            }
+
+            return Weapon(
+                weaponClass: 4,
+                swingDamage: damage,
+                swingSpeed: speed,
+                thrustDamage: 0,
+                thrustSpeed: 0,
+                weaponLength: reach,
+                handling: handling,
+                role: role);
+        }
+
+        private static WeaponEvaluationContext ContextForMeleeRole(WeaponRole role, MeleeWeaponUpgradePreference preference)
+        {
+            switch (role)
+            {
+                case WeaponRole.OneHandedAxeMace:
+                    return new WeaponEvaluationContext(oneHandedAxeMacePreference: preference);
+                case WeaponRole.TwoHanded:
+                    return new WeaponEvaluationContext(twoHandedPreference: preference);
+                case WeaponRole.ThrustPolearm:
+                    return new WeaponEvaluationContext(thrustPolearmPreference: preference);
+                case WeaponRole.SwingPolearm:
+                    return new WeaponEvaluationContext(swingPolearmPreference: preference);
+                default:
+                    return new WeaponEvaluationContext(oneHandedSwordPreference: preference);
+            }
         }
     }
 }

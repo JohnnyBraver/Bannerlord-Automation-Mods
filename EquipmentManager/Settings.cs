@@ -131,6 +131,66 @@ namespace EquipmentManager
         public override string ToString() => _name;
     }
 
+    public enum MeleeWeaponUpgradePreference
+    {
+        Balanced,
+        DamageAndReach,
+        SpeedAndHandling
+    }
+
+    public class MeleeWeaponUpgradePreferenceOption
+    {
+        private readonly string _name;
+        public MeleeWeaponUpgradePreference Value { get; }
+        public MeleeWeaponUpgradePreferenceOption(string name, MeleeWeaponUpgradePreference value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
+    public enum RangedWeaponUpgradePreference
+    {
+        Balanced,
+        Damage,
+        Accuracy
+    }
+
+    public class RangedWeaponUpgradePreferenceOption
+    {
+        private readonly string _name;
+        public RangedWeaponUpgradePreference Value { get; }
+        public RangedWeaponUpgradePreferenceOption(string name, RangedWeaponUpgradePreference value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
+    public enum ShieldUpgradePreference
+    {
+        Balanced,
+        MaxHitPoints,
+        MaxSize
+    }
+
+    public class ShieldUpgradePreferenceOption
+    {
+        private readonly string _name;
+        public ShieldUpgradePreference Value { get; }
+        public ShieldUpgradePreferenceOption(string name, ShieldUpgradePreference value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
+    public enum WeaponPropertyMatching
+    {
+        PreserveAll,
+        IgnoreMinor,
+        StatsOnly
+    }
+
+    public class WeaponPropertyMatchingOption
+    {
+        private readonly string _name;
+        public WeaponPropertyMatching Value { get; }
+        public WeaponPropertyMatchingOption(string name, WeaponPropertyMatching value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
     public class Settings : AttributeGlobalSettings<Settings>
     {
         public override string Id => "EquipmentManager_v0_4";
@@ -198,6 +258,34 @@ namespace EquipmentManager
             new ProjectileUpgradePreferenceOption("Damage Only", ProjectileUpgradePreference.DamageOnly)
         };
 
+        private static readonly IReadOnlyList<MeleeWeaponUpgradePreferenceOption> MeleeWeaponUpgradePreferenceOptions = new List<MeleeWeaponUpgradePreferenceOption>
+        {
+            new MeleeWeaponUpgradePreferenceOption("Balanced", MeleeWeaponUpgradePreference.Balanced),
+            new MeleeWeaponUpgradePreferenceOption("Damage & Reach", MeleeWeaponUpgradePreference.DamageAndReach),
+            new MeleeWeaponUpgradePreferenceOption("Speed & Handling", MeleeWeaponUpgradePreference.SpeedAndHandling)
+        };
+
+        private static readonly IReadOnlyList<RangedWeaponUpgradePreferenceOption> RangedWeaponUpgradePreferenceOptions = new List<RangedWeaponUpgradePreferenceOption>
+        {
+            new RangedWeaponUpgradePreferenceOption("Balanced", RangedWeaponUpgradePreference.Balanced),
+            new RangedWeaponUpgradePreferenceOption("Damage", RangedWeaponUpgradePreference.Damage),
+            new RangedWeaponUpgradePreferenceOption("Accuracy", RangedWeaponUpgradePreference.Accuracy)
+        };
+
+        private static readonly IReadOnlyList<ShieldUpgradePreferenceOption> ShieldUpgradePreferenceOptions = new List<ShieldUpgradePreferenceOption>
+        {
+            new ShieldUpgradePreferenceOption("Balanced", ShieldUpgradePreference.Balanced),
+            new ShieldUpgradePreferenceOption("Max HP", ShieldUpgradePreference.MaxHitPoints),
+            new ShieldUpgradePreferenceOption("Max Size", ShieldUpgradePreference.MaxSize)
+        };
+
+        private static readonly IReadOnlyList<WeaponPropertyMatchingOption> WeaponPropertyMatchingOptions = new List<WeaponPropertyMatchingOption>
+        {
+            new WeaponPropertyMatchingOption("Preserve All", WeaponPropertyMatching.PreserveAll),
+            new WeaponPropertyMatchingOption("Ignore Minor", WeaponPropertyMatching.IgnoreMinor),
+            new WeaponPropertyMatchingOption("Stats Only", WeaponPropertyMatching.StatsOnly)
+        };
+
         // --- Group 0: General ---
         [SettingPropertyBool("Enable Equipment Manager", RequireRestart = false,
             HintText = "Master automation switch. When disabled, Equipment Manager will not react to settlement entry or post-battle loot. The manual inventory button still works.", Order = 0)]
@@ -252,6 +340,56 @@ namespace EquipmentManager
         [SettingPropertyGroup("General", GroupOrder = 0)]
         public Dropdown<LoadoutPriorityOption> LoadoutPriorityDropdown { get; set; } =
             new Dropdown<LoadoutPriorityOption>(LoadoutPriorityOptions, 0); // Default: Sneaking > Civilian > Combat (index 0)
+
+
+        // --- Group 1: Weapon Upgrade Preferences ---
+        [SettingPropertyDropdown("One-Handed Swords", RequireRestart = false,
+            HintText = "Controls how one-handed sword upgrades balance damage, reach, speed, and handling.", Order = 1)]
+        [SettingPropertyGroup("Weapon Upgrade Preferences", GroupOrder = 1)]
+        public Dropdown<MeleeWeaponUpgradePreferenceOption> OneHandedSwordPreferenceDropdown { get; set; } =
+            new Dropdown<MeleeWeaponUpgradePreferenceOption>(MeleeWeaponUpgradePreferenceOptions, 0);
+
+        [SettingPropertyDropdown("One-Handed Axes & Maces", RequireRestart = false,
+            HintText = "Controls how one-handed axe and mace upgrades balance damage, reach, speed, and handling.", Order = 2)]
+        [SettingPropertyGroup("Weapon Upgrade Preferences", GroupOrder = 1)]
+        public Dropdown<MeleeWeaponUpgradePreferenceOption> OneHandedAxeMacePreferenceDropdown { get; set; } =
+            new Dropdown<MeleeWeaponUpgradePreferenceOption>(MeleeWeaponUpgradePreferenceOptions, 0);
+
+        [SettingPropertyDropdown("Two-Handed Weapons", RequireRestart = false,
+            HintText = "Controls how two-handed weapon upgrades balance damage, reach, speed, and handling.", Order = 3)]
+        [SettingPropertyGroup("Weapon Upgrade Preferences", GroupOrder = 1)]
+        public Dropdown<MeleeWeaponUpgradePreferenceOption> TwoHandedPreferenceDropdown { get; set; } =
+            new Dropdown<MeleeWeaponUpgradePreferenceOption>(MeleeWeaponUpgradePreferenceOptions, 0);
+
+        [SettingPropertyDropdown("Thrust Polearms", RequireRestart = false,
+            HintText = "Controls how spear, lance, and pike upgrades balance thrust damage, reach, speed, and handling.", Order = 4)]
+        [SettingPropertyGroup("Weapon Upgrade Preferences", GroupOrder = 1)]
+        public Dropdown<MeleeWeaponUpgradePreferenceOption> ThrustPolearmPreferenceDropdown { get; set; } =
+            new Dropdown<MeleeWeaponUpgradePreferenceOption>(MeleeWeaponUpgradePreferenceOptions, 0);
+
+        [SettingPropertyDropdown("Swing Polearms", RequireRestart = false,
+            HintText = "Controls how glaive, menavlion, and other swing-polearm upgrades balance swing damage, reach, speed, and handling.", Order = 5)]
+        [SettingPropertyGroup("Weapon Upgrade Preferences", GroupOrder = 1)]
+        public Dropdown<MeleeWeaponUpgradePreferenceOption> SwingPolearmPreferenceDropdown { get; set; } =
+            new Dropdown<MeleeWeaponUpgradePreferenceOption>(MeleeWeaponUpgradePreferenceOptions, 0);
+
+        [SettingPropertyDropdown("Ranged Weapons", RequireRestart = false,
+            HintText = "Controls whether bow and crossbow upgrades prioritize damage, accuracy, or a balanced mix.", Order = 6)]
+        [SettingPropertyGroup("Weapon Upgrade Preferences", GroupOrder = 1)]
+        public Dropdown<RangedWeaponUpgradePreferenceOption> RangedWeaponPreferenceDropdown { get; set; } =
+            new Dropdown<RangedWeaponUpgradePreferenceOption>(RangedWeaponUpgradePreferenceOptions, 0);
+
+        [SettingPropertyDropdown("Shields", RequireRestart = false,
+            HintText = "Controls whether shield upgrades prioritize hit points, size, or a balanced mix.", Order = 7)]
+        [SettingPropertyGroup("Weapon Upgrade Preferences", GroupOrder = 1)]
+        public Dropdown<ShieldUpgradePreferenceOption> ShieldPreferenceDropdown { get; set; } =
+            new Dropdown<ShieldUpgradePreferenceOption>(ShieldUpgradePreferenceOptions, 0);
+
+        [SettingPropertyDropdown("Weapon Property Matching", RequireRestart = false,
+            HintText = "Controls how strictly weapon properties must be preserved when a candidate has better preferred stats.", Order = 8)]
+        [SettingPropertyGroup("Weapon Upgrade Preferences", GroupOrder = 1)]
+        public Dropdown<WeaponPropertyMatchingOption> WeaponPropertyMatchingDropdown { get; set; } =
+            new Dropdown<WeaponPropertyMatchingOption>(WeaponPropertyMatchingOptions, 1);
 
 
         // --- Group 1: Keep & Sale Protection ---
@@ -466,6 +604,14 @@ namespace EquipmentManager
         public AutoEquipCategory AutoEquipCategorySetting => AutoEquipCategoryDropdown.SelectedValue.Value;
         public ProjectileUpgradePreference AmmoUpgradePreferenceSetting => AmmoUpgradePreferenceDropdown.SelectedValue.Value;
         public ProjectileUpgradePreference ThrowingWeaponUpgradePreferenceSetting => ThrowingWeaponUpgradePreferenceDropdown.SelectedValue.Value;
+        public MeleeWeaponUpgradePreference OneHandedSwordPreferenceSetting => OneHandedSwordPreferenceDropdown.SelectedValue.Value;
+        public MeleeWeaponUpgradePreference OneHandedAxeMacePreferenceSetting => OneHandedAxeMacePreferenceDropdown.SelectedValue.Value;
+        public MeleeWeaponUpgradePreference TwoHandedPreferenceSetting => TwoHandedPreferenceDropdown.SelectedValue.Value;
+        public MeleeWeaponUpgradePreference ThrustPolearmPreferenceSetting => ThrustPolearmPreferenceDropdown.SelectedValue.Value;
+        public MeleeWeaponUpgradePreference SwingPolearmPreferenceSetting => SwingPolearmPreferenceDropdown.SelectedValue.Value;
+        public RangedWeaponUpgradePreference RangedWeaponPreferenceSetting => RangedWeaponPreferenceDropdown.SelectedValue.Value;
+        public ShieldUpgradePreference ShieldPreferenceSetting => ShieldPreferenceDropdown.SelectedValue.Value;
+        public WeaponPropertyMatching WeaponPropertyMatchingSetting => WeaponPropertyMatchingDropdown.SelectedValue.Value;
         public KeepDonationCategory KeepDonationCategorySetting => KeepDonationCategoryDropdown.SelectedValue.Value;
 
         public LoadoutPriority LoadoutPrioritySetting => LoadoutPriorityDropdown.SelectedValue.Value;
