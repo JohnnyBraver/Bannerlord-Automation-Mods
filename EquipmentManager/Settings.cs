@@ -401,6 +401,23 @@ namespace EquipmentManager
         public Dropdown<LoadoutPriorityOption> LoadoutPriorityDropdown { get; set; } =
             new Dropdown<LoadoutPriorityOption>(LoadoutPriorityOptions, 3); // Default: Combat > Civilian > Sneaking (index 3)
 
+        // --- Group 2: Auto-Sell ---
+        [SettingPropertyDropdown("Auto-Sell Equipment", RequireRestart = false,
+            HintText = "Choose which equipment types may be sold automatically. Manually locked items and all keep/protection rules remain protected.", Order = 1)]
+        [SettingPropertyGroup("Auto-Sell", GroupOrder = 2)]
+        public Dropdown<AutoSellCategoryOption> AutoSellCategoryDropdown { get; set; } =
+            new Dropdown<AutoSellCategoryOption>(AutoSellCategoryOptions, 3);
+
+        [SettingPropertyBool("Prevent Equipment Sale in Villages", RequireRestart = false,
+            HintText = "Block automatic equipment sales in villages. Manual sales are unaffected, so gear can be saved for richer towns.", Order = 3)]
+        [SettingPropertyGroup("Auto-Sell", GroupOrder = 2)]
+        public bool PreventEquipmentSaleInVillages { get; set; } = true;
+
+        [SettingPropertyBool("Prioritize Weight/Value Ratio", RequireRestart = false,
+            HintText = "If enabled, sort equipment by weight/value ratio descending before selling so that heavy, low-value items are sold first when town gold is low.", Order = 4)]
+        [SettingPropertyGroup("Auto-Sell", GroupOrder = 2)]
+        public bool PrioritizeHeavyTrash { get; set; } = true;
+
         // --- Group 3: Auto-Sell / Protection ---
         [SettingPropertyDropdown("Keep Positive Modifiers", RequireRestart = false,
             HintText = "Choose whether positive modifiers protect armor, weapons, or both from automatic sale. Banners are not included.", Order = 1)]
@@ -434,23 +451,18 @@ namespace EquipmentManager
             get => _maxCostPerXp;
             set => _maxCostPerXp = (float)System.Math.Round(value / 0.1f) * 0.1f;
         }
+        // --- Group 4: Auto-Buy ---
+        [SettingPropertyDropdown("Buy Upgrades For", RequireRestart = false,
+            HintText = "Choose who receives direct merchant purchases. Player-only purchases can still become companion hand-me-downs through auto-equip.", Order = 1)]
+        [SettingPropertyGroup("Auto-Buy", GroupOrder = 5)]
+        public Dropdown<BuyEquipmentTargetOption> BuyEquipmentTargetDropdown { get; set; } =
+            new Dropdown<BuyEquipmentTargetOption>(BuyEquipmentTargetOptions, 0);
 
-        // --- Group 2: Auto-Sell ---
-        [SettingPropertyDropdown("Auto-Sell Equipment", RequireRestart = false,
-            HintText = "Choose which equipment types may be sold automatically. Manually locked items and all keep/protection rules remain protected.", Order = 1)]
-        [SettingPropertyGroup("Auto-Sell", GroupOrder = 2)]
-        public Dropdown<AutoSellCategoryOption> AutoSellCategoryDropdown { get; set; } =
-            new Dropdown<AutoSellCategoryOption>(AutoSellCategoryOptions, 3);
-
-        [SettingPropertyBool("Prevent Equipment Sale in Villages", RequireRestart = false,
-            HintText = "Block automatic equipment sales in villages. Manual sales are unaffected, so gear can be saved for richer towns.", Order = 3)]
-        [SettingPropertyGroup("Auto-Sell", GroupOrder = 2)]
-        public bool PreventEquipmentSaleInVillages { get; set; } = true;
-
-        [SettingPropertyBool("Prioritize Weight/Value Ratio", RequireRestart = false,
-            HintText = "If enabled, sort equipment by weight/value ratio descending before selling so that heavy, low-value items are sold first when town gold is low.", Order = 4)]
-        [SettingPropertyGroup("Auto-Sell", GroupOrder = 2)]
-        public bool PrioritizeHeavyTrash { get; set; } = true;
+        [SettingPropertyDropdown("Combat Upgrade Check Order", RequireRestart = false,
+            HintText = "When battle armor and weapons can both buy upgrades, evaluate the selected combat track first. Civilian and stealth upgrades always follow combat gear.", Order = 2)]
+        [SettingPropertyGroup("Auto-Buy", GroupOrder = 5)]
+        public Dropdown<CombatUpgradeCheckOrderOption> CombatUpgradeCheckOrderDropdown { get; set; } =
+            new Dropdown<CombatUpgradeCheckOrderOption>(CombatUpgradeCheckOrderOptions, 0);
 
         // --- Group 5: Auto-Buy / Armor / Battle Armor ---
         [SettingPropertyBool("Buy Battle Armor Upgrades", RequireRestart = false,
@@ -639,19 +651,6 @@ namespace EquipmentManager
         [SettingPropertyGroup("Auto-Buy/Weapons/Weapon Evaluation", GroupOrder = 11)]
         public bool IgnoreThrowingWeaponMeleeStats { get; set; } = true;
 
-
-        // --- Group 4: Auto-Buy ---
-        [SettingPropertyDropdown("Buy Upgrades For", RequireRestart = false,
-            HintText = "Choose who receives direct merchant purchases. Player-only purchases can still become companion hand-me-downs through auto-equip.", Order = 1)]
-        [SettingPropertyGroup("Auto-Buy", GroupOrder = 5)]
-        public Dropdown<BuyEquipmentTargetOption> BuyEquipmentTargetDropdown { get; set; } =
-            new Dropdown<BuyEquipmentTargetOption>(BuyEquipmentTargetOptions, 0);
-
-        [SettingPropertyDropdown("Combat Upgrade Check Order", RequireRestart = false,
-            HintText = "When battle armor and weapons can both buy upgrades, evaluate the selected combat track first. Civilian and stealth upgrades always follow combat gear.", Order = 2)]
-        [SettingPropertyGroup("Auto-Buy", GroupOrder = 5)]
-        public Dropdown<CombatUpgradeCheckOrderOption> CombatUpgradeCheckOrderDropdown { get; set; } =
-            new Dropdown<CombatUpgradeCheckOrderOption>(CombatUpgradeCheckOrderOptions, 0);
 
         // --- Group 12: Reports ---
         [SettingPropertyDropdown("Sale Report Detail", RequireRestart = false,

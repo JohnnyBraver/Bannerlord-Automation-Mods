@@ -1,5 +1,11 @@
 # Changelog - Equipment Manager
 
+## [v0.5.2] - 2026-07-16
+
+### Fixed
+- **MCM Group Order**: Fixed the top-level settings order and ensured Auto-Sell and Auto-Buy parent pages are discovered before their nested pages.
+- **Auto-Buy Navigation**: Removed the redundant nested General page. Shared purchase controls now appear directly on the Auto-Buy page before Armor and Weapons.
+
 ## [v0.5.1] - 2026-07-16
 
 ### Added

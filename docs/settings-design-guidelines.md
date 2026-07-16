@@ -26,6 +26,20 @@ Use nested groups only when they reduce scanning:
 
 The intended result is that a player can configure the normal case quickly, while detail remains available where it is relevant.
 
+### MCM group ordering
+
+MCM discovers slash-delimited groups from the settings declarations. Declare at least one setting in a parent group before declaring any of its child paths. Otherwise MCM creates the inferred parent without its intended group order and does not update that order when it later encounters the parent.
+
+Use a distinct `GroupOrder` for every declared group path. This avoids ambiguous ordering when MCM sorts sibling groups. Keep the declaration order and the intended menu order aligned:
+
+```text
+Feature                 // parent settings first
+Feature/Category        // then child settings
+Feature/Category/Detail // then deeper settings
+```
+
+MCM groups are expanded by default; the attributes do not provide a per-group expanded or collapsed default.
+
 ### 3. State scope and overrides plainly
 
 Hints should explain a setting's scope whenever it could be misunderstood. Say whether it affects automatic actions, manual actions, a specific category, one loadout, or all applicable cases.
