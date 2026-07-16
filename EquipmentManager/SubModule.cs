@@ -125,7 +125,7 @@ namespace EquipmentManager
                 var party = MobileParty.MainParty;
                 if (party == null) return;
                 var settings = Settings.Instance;
-                if (settings == null || !settings.ModEnabled || !settings.AutoEquipAfterSettlementPurchases) return;
+                if (settings == null || !settings.ModEnabled) return;
 
                 string settlementName = settlement != null ? settlement.Name.ToString() : "Unknown";
                 SettlementAutomationCore.Helpers.Logger.WriteLog("EquipmentManager", $"[Post-Transaction] Distributing newly bought gear to player & companions in {settlementName}.");
@@ -153,7 +153,7 @@ namespace EquipmentManager
         {
             if (mapEvent == null) return;
             var settings = Settings.Instance;
-            if (settings == null || !settings.ModEnabled || !settings.AutoEquipAfterBattleLoot)
+            if (settings == null || !settings.ModEnabled)
             {
                 _postLootTrigger.ClearPending();
                 return;
@@ -175,7 +175,7 @@ namespace EquipmentManager
             try
             {
                 var settings = Settings.Instance;
-                if (settings == null || !settings.ModEnabled || !settings.AutoEquipAfterBattleLoot)
+                if (settings == null || !settings.ModEnabled)
                 {
                     _postLootTrigger.ClearPending();
                     return;
@@ -197,7 +197,7 @@ namespace EquipmentManager
             {
                 if (!_postLootTrigger.ShouldRunOnTick()) return;
                 var settings = Settings.Instance;
-                if (settings == null || !settings.ModEnabled || !settings.AutoEquipAfterBattleLoot)
+                if (settings == null || !settings.ModEnabled)
                 {
                     _postLootTrigger.ClearPending();
                     return;

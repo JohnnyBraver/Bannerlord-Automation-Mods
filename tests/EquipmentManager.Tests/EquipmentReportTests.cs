@@ -8,7 +8,7 @@ namespace EquipmentManager.Tests
     public class EquipmentReportTests
     {
         [Fact]
-        public void Settings_DefaultsToCategoryCountSalesAndPaidPriceSorting()
+        public void Settings_DefaultsToCategoryCountSalesAndCombatFocusedBuying()
         {
             var settings = new Settings();
 
@@ -16,23 +16,24 @@ namespace EquipmentManager.Tests
             Assert.Equal(4, settings.MaxReportItemsToPrint);
             Assert.Equal(EquipmentReportSortMode.PaidPrice, settings.EquipmentReportSort);
             Assert.True(settings.ModEnabled);
-            Assert.True(settings.AutoEquipBeforeSettlementTrade);
-            Assert.True(settings.AutoEquipAfterSettlementPurchases);
-            Assert.True(settings.AutoEquipAfterBattleLoot);
+            Assert.Equal(LoadoutPriority.Combat_Civilian_Sneaking, settings.LoadoutPrioritySetting);
             Assert.Equal(ProjectileUpgradePreference.CountAndDamage, settings.AmmoUpgradePreferenceSetting);
             Assert.Equal(ProjectileUpgradePreference.CountAndDamage, settings.ThrowingWeaponUpgradePreferenceSetting);
             Assert.True(settings.IgnoreThrowingWeaponMeleeStats);
-            Assert.False(settings.BuyHandSlotWeapons);
+            Assert.True(settings.BuyBattleArmorUpgrades);
+            Assert.True(settings.BuyHandSlotWeapons);
             Assert.True(settings.BuyOneHandedWeaponUpgrades);
             Assert.True(settings.BuyTwoHandedWeaponUpgrades);
             Assert.True(settings.BuyPolearmUpgrades);
             Assert.True(settings.BuyThrowingWeaponUpgrades);
-            Assert.True(settings.BuyBowUpgrades);
-            Assert.True(settings.BuyCrossbowUpgrades);
+            Assert.True(settings.BuyRangedWeaponUpgrades);
             Assert.True(settings.BuyShieldUpgrades);
-            Assert.Equal(1, settings.MaxArmorUpgradesPerVisit);
-            Assert.Equal(1, settings.MaxHandSlotWeaponUpgradesPerVisit);
-            Assert.Equal(RequestProfile.Luxury, settings.WeaponRequestProfile);
+            Assert.Equal(1, settings.MaxBattleArmorUpgradesPerVisit);
+            Assert.Equal(1, settings.MaxWeaponUpgradesPerVisit);
+            Assert.Equal(1, settings.MaxCivilianArmorUpgradesPerVisit);
+            Assert.Equal(1, settings.MaxStealthGearUpgradesPerVisit);
+            Assert.Equal(2, settings.MinimumCivilianArmorTier);
+            Assert.Equal(CombatUpgradeCheckOrder.BattleArmorFirst, settings.CombatUpgradeCheckOrderSetting);
         }
 
         [Fact]

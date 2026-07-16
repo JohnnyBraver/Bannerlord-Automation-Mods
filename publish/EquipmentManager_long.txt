@@ -1,5 +1,5 @@
 [size=4][b]Description[/b][/size]
-[size=3][color=#D4D4D8]Equipment Manager is an automated gear optimization and acquisition tool. It handles companion hand-me-downs, civilian loadout priorities, post-loot auto-equip, and optional exact armor, stealth gear, or hand-slot weapon upgrade requests through Settlement Automation Core's shared budget, cargo, and reporting pipeline.[/color][/size]
+[size=3][color=#D4D4D8]Equipment Manager automatically equips heroes, protects useful spare gear, controls automatic equipment sales, and requests upgrades through Settlement Automation Core's shared budget, cargo, and reporting pipeline.[/color][/size]
 
 [size=4][b]Installation instructions[/b][/size]
 [size=3][color=#D4D4D8]1. Extract the downloaded archive into your Mount & Blade II Bannerlord game directory (specifically inside the Modules folder).
@@ -8,14 +8,14 @@
 
 [size=4][b]Main features[/b][/size]
 [size=3][color=#D4D4D8]- Automation Toggle: Disable settlement-entry and post-battle automation without removing the manual inventory button.
-- Multi-Pass Headless Auto-Equip: Automatically optimizes gear for you and your companions after battle and before trading, with separate toggles for pre-trade, post-purchase, and post-loot triggers.
+- Auto-Equip: Automatically optimizes gear for you and optionally your companions after loot and during settlement automation.
 - Gear Cascades (Hand-Me-Downs): Unequipped upgrades are passed down to companions in party list order.
 - Priority Loadouts: Choose custom priority layouts between Sneaking, Civilian, and Combat gear.
-- Auto-Buy Upgrades: Requests exact armor, sneaking-item, or hand-slot weapon upgrades from merchants when your gold and reserve settings allow it.
-- Hand-Slot Controls: Hand-slot buying is off by default, has its own per-visit limit, and includes category toggles for melee weapons, polearms, throwing weapons, bows, crossbows, and shields.
+- Auto-Sell Categories: Sell armor, weapons, both, or neither automatically while preserving locked and protected gear.
+- Auto-Buy Upgrades: Independently control battle armor, civilian armor, stealth gear, and hand-slot weapon upgrades with separate reserves and visit limits.
+- Weapon Controls: Choose allowed weapon categories and how weapon, ammo, throwing, ranged, and shield upgrades are evaluated.
 - Projectile Preferences: Ammo and throwing weapons can prefer stack count, damage, or both; throwing weapons ignore melee-mode stats by default.
-- Spend Modes: Choose how armor, stealth gear, and hand-slot weapon upgrade requests compete with other automation needs.
-- Spare Gear Protection: Keeps useful upgrades and sidegrades out of automated sale flows without changing the player's item lock state.
+- Spare Gear Protection: Protect useful upgrades, positive modifiers, perk-based donation gear, and selected spare armor loadouts without changing the player's item lock state.
 - Clear Market Reports: Optional concise or detailed equipment reports, with configurable item limits and sorting.[/color][/size]
 
 [size=4][b]Save compatibility[/b][/size]
