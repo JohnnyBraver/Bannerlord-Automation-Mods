@@ -56,7 +56,8 @@ namespace EquipmentManager
         public static IReadOnlyList<EquipmentMarketRequestGroup> BuildRequestGroups(
             IEnumerable<EquipmentMarketCandidateOrder> candidateOrders,
             string requestorId,
-            int purchaseCount)
+            int purchaseCount,
+            int requestPriority = 5)
         {
             var orderedOrders = (candidateOrders ?? Enumerable.Empty<EquipmentMarketCandidateOrder>())
                 .Where(o => o.Candidate != null)
@@ -80,7 +81,7 @@ namespace EquipmentManager
                     groupOrders.Select(o => o.Candidate),
                     purchaseCount,
                     reserveGroup.Key.Profile,
-                    5,
+                    requestPriority,
                     reserveGroup.Key.ExplicitGoldReserve);
 
                 groups.Add(new EquipmentMarketRequestGroup(

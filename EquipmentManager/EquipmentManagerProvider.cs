@@ -12,6 +12,16 @@ namespace EquipmentManager
 {
     public class EquipmentManagerProvider : IAutomationPreparationProvider, IPreSellProvider, IAutomationRequestProvider, IAutomationReportProvider, IAutomationReportStyleProvider
     {
+        private const RequestProfile EquipmentRequestProfile = RequestProfile.Luxury;
+
+        private enum EquipmentPurchaseTrack
+        {
+            BattleArmor,
+            Weapons,
+            CivilianArmor,
+            StealthGear
+        }
+
         private struct PotentialBuyOrder
         {
             public InventoryItemView Candidate;
@@ -19,10 +29,35 @@ namespace EquipmentManager
             public int ExplicitGoldReserve;
             public RequestProfile Profile;
             public float ScoreIncrease;
-            public bool PrioritizeStealth;
-            public bool IsWeapon;
+            public EquipmentPurchaseTrack Track;
             public Hero Hero;
             public EquipmentIndex Slot;
+        }
+
+        private sealed class EquipmentPurchaseTrackPolicy
+        {
+            public EquipmentPurchaseTrack Track { get; }
+            public bool Enabled { get; }
+            public int GoldReserve { get; }
+            public int PurchaseLimit { get; }
+            public int RequestPriority { get; }
+            public string Label { get; }
+
+            public EquipmentPurchaseTrackPolicy(
+                EquipmentPurchaseTrack track,
+                bool enabled,
+                int goldReserve,
+                int purchaseLimit,
+                int requestPriority,
+                string label)
+            {
+                Track = track;
+                Enabled = enabled;
+                GoldReserve = goldReserve;
+                PurchaseLimit = purchaseLimit;
+                RequestPriority = requestPriority;
+                Label = label;
+            }
         }
 
         public string ProviderName => "EquipmentManager";
@@ -83,7 +118,7 @@ namespace EquipmentManager
         {
             if (party == null || settlement == null) return;
             var settings = Settings.Instance;
-            if (settings == null || !settings.ModEnabled || !settings.AutoEquipBeforeSettlementTrade) return;
+            if (settings == null || !settings.ModEnabled) return;
 
             try
             {
@@ -102,7 +137,7 @@ namespace EquipmentManager
             if (party == null || settlement == null) return orders;
 
             var settings = Settings.Instance;
-            if (settings == null || !settings.ModEnabled || !settings.SellUnlockedEquipment) return orders;
+            if (settings == null || !settings.ModEnabled || settings.AutoSellCategorySetting == AutoSellCategory.Disabled) return orders;
             if (settings.PreventEquipmentSaleInVillages && settlement.IsVillage) return orders;
 
             var currentLogic = SettlementAutomationCore.Helpers.InventoryHelper.CreateAndInitInventoryLogic(party, settlement, true);
@@ -115,21 +150,7 @@ namespace EquipmentManager
                 bool hasWeaponPerk = Hero.MainHero?.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Steward.PaidInPromise) ?? false;
                 bool hasArmorPerk = Hero.MainHero?.GetPerkValue(TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultPerks.Steward.GivingHands) ?? false;
 
-                var targets = new List<Hero>();
-                if (Hero.MainHero != null)
-                {
-                    targets.Add(Hero.MainHero);
-                }
-                if (settings.AutoEquipCompanions && party != null)
-                {
-                    foreach (var member in party.MemberRoster.GetTroopRoster())
-                    {
-                        if (member.Character.IsHero && member.Character.HeroObject != null && member.Character.HeroObject != Hero.MainHero)
-                        {
-                            targets.Add(member.Character.HeroObject);
-                        }
-                    }
-                }
+                var targets = GetEquipmentTargets(party, settings.AutoEquipCompanions);
 
                 var playerElements = currentLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
                 var protectionItems = new List<EquipmentProtectionItem>();
@@ -142,7 +163,7 @@ namespace EquipmentManager
                     var item = eqEl.Item;
                     if (item == null) continue;
 
-                    bool isEquipment = item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null;
+                    bool isEquipment = EquipmentSaleProtector.IsEquipment(item);
                     if (!isEquipment) continue;
 
                     float sellPrice = currentLogic.GetItemPrice(eqEl, false);
@@ -160,7 +181,9 @@ namespace EquipmentManager
                     var item = eqEl.Item;
                     if (item == null) continue;
 
-                    bool isEquipment = item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null;
+                    if (!EquipmentSaleProtector.IsSelectedForAutoSale(item, settings.AutoSellCategorySetting)) continue;
+
+                    bool isEquipment = EquipmentSaleProtector.IsEquipment(item);
                     if (!isEquipment) continue;
 
                     if (InventoryLockHelper.IsLocked(eqEl, locks)) continue;
@@ -196,30 +219,19 @@ namespace EquipmentManager
             var settings = Settings.Instance;
             if (settings == null || !settings.ModEnabled || context == null) return;
 
-            var party = context.Party;
-            var targets = new List<Hero>();
-            if (Hero.MainHero != null)
-            {
-                targets.Add(Hero.MainHero);
-            }
-            if (settings.BuyEquipmentTargetSetting == BuyEquipmentTarget.PlayerAndCompanions && party != null)
-            {
-                foreach (var member in party.MemberRoster.GetTroopRoster())
-                {
-                    if (member.Character.IsHero && member.Character.HeroObject != null && member.Character.HeroObject != Hero.MainHero)
-                    {
-                        targets.Add(member.Character.HeroObject);
-                    }
-                }
-            }
-
-            if (!settings.BuyStealthGear && !settings.BuyArmorUpgrades && !settings.BuyHandSlotWeapons) return;
-
             int playerGold = Hero.MainHero?.Gold ?? 0;
-            bool canBuyStealth = settings.BuyStealthGear;
-            bool canBuyArmorUpgrades = settings.BuyArmorUpgrades && playerGold >= settings.ArmorUpgradeGoldReserve;
-            bool canBuyWeapons = settings.BuyHandSlotWeapons && playerGold >= settings.BuyWeaponGoldReserve;
-            if (!canBuyStealth && !canBuyArmorUpgrades && !canBuyWeapons) return;
+            var purchasePolicies = BuildPurchaseTrackPolicies(settings, playerGold)
+                .Where(policy => policy.Enabled)
+                .ToList();
+            if (purchasePolicies.Count == 0) return;
+
+            var party = context.Party;
+            var targets = GetEquipmentTargets(party, settings.BuyEquipmentTargetSetting == BuyEquipmentTarget.PlayerAndCompanions);
+            var battleArmorPolicy = purchasePolicies.SingleOrDefault(policy => policy.Track == EquipmentPurchaseTrack.BattleArmor);
+            var civilianArmorPolicy = purchasePolicies.SingleOrDefault(policy => policy.Track == EquipmentPurchaseTrack.CivilianArmor);
+            var stealthGearPolicy = purchasePolicies.SingleOrDefault(policy => policy.Track == EquipmentPurchaseTrack.StealthGear);
+            var weaponPolicy = purchasePolicies.SingleOrDefault(policy => policy.Track == EquipmentPurchaseTrack.Weapons);
+            int weaponGoldReserve = weaponPolicy?.GoldReserve ?? 0;
 
             var armorSlots = new EquipmentIndex[] { EquipmentIndex.Head, EquipmentIndex.Body, EquipmentIndex.Leg, EquipmentIndex.Gloves, EquipmentIndex.Cape };
             var weaponSlots = new EquipmentIndex[] { EquipmentIndex.Weapon0, EquipmentIndex.Weapon1, EquipmentIndex.Weapon2, EquipmentIndex.Weapon3 };
@@ -234,31 +246,50 @@ namespace EquipmentManager
                     Equipment equipment;
                     bool prioritizeStealth = false;
                     InventoryLogic.InventorySide side;
+                    bool canBuyArmorForLoadout;
+                    int armorGoldReserve;
+                    int minimumArmorTier;
+                    EquipmentPurchaseTrack armorTrack;
 
                     if (setIndex == 0)
                     {
                         equipment = hero.BattleEquipment;
                         side = InventoryLogic.InventorySide.BattleEquipment;
+                        canBuyArmorForLoadout = battleArmorPolicy != null;
+                        armorGoldReserve = battleArmorPolicy?.GoldReserve ?? 0;
+                        minimumArmorTier = settings.MinimumBattleArmorTier;
+                        armorTrack = EquipmentPurchaseTrack.BattleArmor;
                     }
                     else if (setIndex == 1)
                     {
                         equipment = hero.CivilianEquipment;
                         side = InventoryLogic.InventorySide.CivilianEquipment;
+                        canBuyArmorForLoadout = civilianArmorPolicy != null;
+                        armorGoldReserve = civilianArmorPolicy?.GoldReserve ?? 0;
+                        minimumArmorTier = settings.MinimumCivilianArmorTier;
+                        armorTrack = EquipmentPurchaseTrack.CivilianArmor;
                     }
                     else
                     {
                         equipment = hero.StealthEquipment;
                         prioritizeStealth = true;
                         side = InventoryLogic.InventorySide.StealthEquipment;
+                        canBuyArmorForLoadout = stealthGearPolicy != null;
+                        armorGoldReserve = stealthGearPolicy?.GoldReserve ?? 0;
+                        minimumArmorTier = 1;
+                        armorTrack = EquipmentPurchaseTrack.StealthGear;
                     }
 
-                    if (prioritizeStealth && !canBuyStealth)
+                    bool canBuyWeaponsForLoadout = weaponPolicy != null && setIndex != 2;
+                    if (!canBuyArmorForLoadout && !canBuyWeaponsForLoadout)
                     {
                         continue;
                     }
 
                     foreach (var slot in armorSlots)
                     {
+                        if (!canBuyArmorForLoadout) continue;
+
                         var currentArmor = equipment[slot];
                         InventoryItemView? bestCandidate = null;
                         float currentEquippedScore = prioritizeStealth ? GetStealthScore(currentArmor) : GetArmorScore(currentArmor);
@@ -293,8 +324,7 @@ namespace EquipmentManager
                             }
                             else
                             {
-                                if (!canBuyArmorUpgrades) continue;
-                                if ((int)item.Tier < settings.MinTierToBuyArmorUpgrades) continue;
+                                if ((int)item.Tier < minimumArmorTier) continue;
 
                                 float score = GetArmorScore(candidate);
                                 if (score > bestScore)
@@ -308,7 +338,7 @@ namespace EquipmentManager
 
                         if (foundUpgrade && bestCandidate != null)
                         {
-                            int requiredReserve = prioritizeStealth ? settings.MinimumGoldReserve : settings.ArmorUpgradeGoldReserve;
+                            int requiredReserve = armorGoldReserve;
                             float currentScore = prioritizeStealth ? GetStealthScore(currentArmor) : GetArmorScore(currentArmor);
                             float scoreIncrease = bestScore - currentScore;
 
@@ -317,17 +347,16 @@ namespace EquipmentManager
                                 Candidate = bestCandidate,
                                 Price = bestCandidate.UnitPrice,
                                 ExplicitGoldReserve = requiredReserve,
-                                Profile = prioritizeStealth ? settings.StealthGearRequestProfile : settings.ArmorUpgradeRequestProfile,
+                                Profile = EquipmentRequestProfile,
                                 ScoreIncrease = scoreIncrease,
-                                PrioritizeStealth = prioritizeStealth,
-                                IsWeapon = false,
+                                Track = armorTrack,
                                 Hero = hero,
                                 Slot = slot
                             });
                         }
                     }
 
-                    if (canBuyWeapons && setIndex != 2)
+                    if (canBuyWeaponsForLoadout)
                     {
                         foreach (var slot in weaponSlots)
                         {
@@ -373,11 +402,10 @@ namespace EquipmentManager
                                 {
                                     Candidate = bestCandidate,
                                     Price = bestCandidate.UnitPrice,
-                                    ExplicitGoldReserve = settings.BuyWeaponGoldReserve,
-                                    Profile = settings.WeaponRequestProfile,
+                                ExplicitGoldReserve = weaponGoldReserve,
+                                    Profile = EquipmentRequestProfile,
                                     ScoreIncrease = scoreIncrease,
-                                    PrioritizeStealth = false,
-                                    IsWeapon = true,
+                                    Track = EquipmentPurchaseTrack.Weapons,
                                     Hero = hero,
                                     Slot = slot
                                 });
@@ -387,24 +415,53 @@ namespace EquipmentManager
                 }
             }
 
-            // Submit candidates in preference order; Core buys the best affordable one.
-            if (potentialOrders.Count > 0)
+            // Core sorts by request profile, then by the priority assigned to each track policy.
+            foreach (var policy in purchasePolicies)
             {
                 SubmitPotentialBuyOrders(
-                    potentialOrders.Where(o => !o.IsWeapon),
-                    Math.Max(1, settings.MaxArmorUpgradesPerVisit),
-                    "armor");
-                SubmitPotentialBuyOrders(
-                    potentialOrders.Where(o => o.IsWeapon),
-                    Math.Max(1, settings.MaxHandSlotWeaponUpgradesPerVisit),
-                    "weapon");
+                    potentialOrders.Where(order => order.Track == policy.Track),
+                    policy.PurchaseLimit,
+                    policy.Label,
+                    policy.RequestPriority);
             }
+        }
+
+        private static List<EquipmentPurchaseTrackPolicy> BuildPurchaseTrackPolicies(Settings settings, int playerGold)
+        {
+            bool battleArmorFirst = settings.CombatUpgradeCheckOrderSetting == CombatUpgradeCheckOrder.BattleArmorFirst;
+            return new List<EquipmentPurchaseTrackPolicy>
+            {
+                new EquipmentPurchaseTrackPolicy(EquipmentPurchaseTrack.BattleArmor, settings.BuyBattleArmorUpgrades && playerGold >= settings.BattleArmorGoldReserve, settings.BattleArmorGoldReserve, Math.Max(1, settings.MaxBattleArmorUpgradesPerVisit), battleArmorFirst ? 9 : 8, "battle armor"),
+                new EquipmentPurchaseTrackPolicy(EquipmentPurchaseTrack.Weapons, settings.BuyHandSlotWeapons && playerGold >= settings.WeaponGoldReserve, settings.WeaponGoldReserve, Math.Max(1, settings.MaxWeaponUpgradesPerVisit), battleArmorFirst ? 8 : 9, "weapon"),
+                new EquipmentPurchaseTrackPolicy(EquipmentPurchaseTrack.CivilianArmor, settings.BuyCivilianArmorUpgrades && playerGold >= settings.CivilianArmorGoldReserve, settings.CivilianArmorGoldReserve, Math.Max(1, settings.MaxCivilianArmorUpgradesPerVisit), 7, "civilian armor"),
+                new EquipmentPurchaseTrackPolicy(EquipmentPurchaseTrack.StealthGear, settings.BuyStealthGear && playerGold >= settings.StealthGearGoldReserve, settings.StealthGearGoldReserve, Math.Max(1, settings.MaxStealthGearUpgradesPerVisit), 6, "stealth gear")
+            };
+        }
+
+        private static List<Hero> GetEquipmentTargets(MobileParty party, bool includeCompanions)
+        {
+            var targets = new List<Hero>();
+            if (Hero.MainHero != null)
+            {
+                targets.Add(Hero.MainHero);
+            }
+            if (!includeCompanions || party == null) return targets;
+
+            foreach (var member in party.MemberRoster.GetTroopRoster())
+            {
+                if (member.Character.IsHero && member.Character.HeroObject != null && member.Character.HeroObject != Hero.MainHero)
+                {
+                    targets.Add(member.Character.HeroObject);
+                }
+            }
+            return targets;
         }
 
         private static void SubmitPotentialBuyOrders(
             IEnumerable<PotentialBuyOrder> orders,
             int purchaseCount,
-            string label)
+            string label,
+            int requestPriority)
         {
             var potentialOrders = orders.ToList();
             if (potentialOrders.Count == 0) return;
@@ -416,7 +473,8 @@ namespace EquipmentManager
                     o.Profile,
                     o.ScoreIncrease)),
                 "EquipmentManager",
-                purchaseCount);
+                purchaseCount,
+                requestPriority);
 
             foreach (var requestGroup in requestGroups)
             {
@@ -533,9 +591,8 @@ namespace EquipmentManager
                 case ItemObject.ItemTypeEnum.Thrown:
                     return settings.BuyThrowingWeaponUpgrades;
                 case ItemObject.ItemTypeEnum.Bow:
-                    return settings.BuyBowUpgrades;
                 case ItemObject.ItemTypeEnum.Crossbow:
-                    return settings.BuyCrossbowUpgrades;
+                    return settings.BuyRangedWeaponUpgrades;
                 default:
                     return false;
             }

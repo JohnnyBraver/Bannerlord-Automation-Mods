@@ -58,6 +58,20 @@ namespace EquipmentManager.Tests
             Assert.Equal(new[] { "armor_a", "armor_b" }, group.Request.MarketCandidates.Select(c => c.Item.StringId).ToArray());
         }
 
+        [Fact]
+        public void BuildRequestGroups_ForwardsTrackPriorityToCore()
+        {
+            var armor = MarketItem("armor_a");
+
+            var group = EquipmentMarketRequestPlanner.BuildRequestGroups(
+                new[] { new EquipmentMarketCandidateOrder(armor, 1000, RequestProfile.Luxury, 20) },
+                "EquipmentManager",
+                1,
+                requestPriority: 9).Single();
+
+            Assert.Equal(9, group.Request.Priority);
+        }
+
         [Theory]
         [InlineData(TaleWorlds.Core.EquipmentIndex.Weapon0, "Weapon 1")]
         [InlineData(TaleWorlds.Core.EquipmentIndex.Weapon1, "Weapon 2")]

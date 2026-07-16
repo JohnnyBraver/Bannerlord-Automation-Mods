@@ -109,6 +109,36 @@ namespace EquipmentManager
             return item.StringId + "::" + modifierId;
         }
 
+        public static bool IsSelectedForAutoSale(ItemObject item, AutoSellCategory category)
+        {
+            return category switch
+            {
+                AutoSellCategory.ArmorOnly => IsArmorOrWeapon(item, includeArmor: true, includeWeapons: false),
+                AutoSellCategory.WeaponsOnly => IsArmorOrWeapon(item, includeArmor: false, includeWeapons: true),
+                AutoSellCategory.WeaponsAndArmor => IsArmorOrWeapon(item, includeArmor: true, includeWeapons: true),
+                _ => false
+            };
+        }
+
+        public static bool IsSelectedForPositiveModifierProtection(ItemObject item, PositiveModifierProtectionCategory category)
+        {
+            return category switch
+            {
+                PositiveModifierProtectionCategory.ArmorOnly => IsArmorOrWeapon(item, includeArmor: true, includeWeapons: false),
+                PositiveModifierProtectionCategory.WeaponsOnly => IsArmorOrWeapon(item, includeArmor: false, includeWeapons: true),
+                PositiveModifierProtectionCategory.WeaponsAndArmor => IsArmorOrWeapon(item, includeArmor: true, includeWeapons: true),
+                _ => false
+            };
+        }
+
+        private static bool IsArmorOrWeapon(ItemObject item, bool includeArmor, bool includeWeapons)
+        {
+            if (item == null || item.ItemComponent is BannerComponent) return false;
+
+            bool isWeapon = item.WeaponComponent != null || item.PrimaryWeapon != null;
+            return (includeArmor && item.HasArmorComponent) || (includeWeapons && isWeapon);
+        }
+
         private static bool ShouldProtectWholeStack(
             EquipmentProtectionItem inventoryItem,
             List<Hero> targets,
@@ -131,7 +161,8 @@ namespace EquipmentManager
             }
 
             var modifier = equipmentElement.ItemModifier;
-            if (settings.KeepPositiveModifiers && modifier != null && modifier.PriceMultiplier > 1.0f)
+            if (modifier != null && modifier.PriceMultiplier > 1.0f &&
+                IsSelectedForPositiveModifierProtection(item, settings.PositiveModifierProtectionCategorySetting))
             {
                 return true;
             }
@@ -183,20 +214,18 @@ namespace EquipmentManager
             List<EquipmentProtectionItem> items,
             Settings settings)
         {
-            int setsToKeep = settings.AdditionalArmorSetsToKeep;
+            int setsToKeep = Math.Min(5, settings.AdditionalArmorSetsToKeep);
             if (setsToKeep <= 0) return;
 
-            if (settings.KeepSpareCombatArmorSets)
+            if (settings.SpareArmorLoadoutsSetting == SpareArmorLoadouts.Battle ||
+                settings.SpareArmorLoadoutsSetting == SpareArmorLoadouts.BattleAndCivilian)
             {
                 AddSpareArmorSetProtectionForLoadout(plan, items, setsToKeep, InventoryLogic.InventorySide.BattleEquipment);
             }
-            if (settings.KeepSpareCivilianArmorSets)
+            if (settings.SpareArmorLoadoutsSetting == SpareArmorLoadouts.Civilian ||
+                settings.SpareArmorLoadoutsSetting == SpareArmorLoadouts.BattleAndCivilian)
             {
                 AddSpareArmorSetProtectionForLoadout(plan, items, setsToKeep, InventoryLogic.InventorySide.CivilianEquipment);
-            }
-            if (settings.KeepSpareSneakingArmorSets)
-            {
-                AddSpareArmorSetProtectionForLoadout(plan, items, setsToKeep, InventoryLogic.InventorySide.StealthEquipment);
             }
         }
 
@@ -236,7 +265,7 @@ namespace EquipmentManager
             return true;
         }
 
-        private static bool IsEquipment(ItemObject item)
+        public static bool IsEquipment(ItemObject item)
         {
             return item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null || item.StringId == "stealth_throwing_stone" || item.ItemComponent is BannerComponent;
         }

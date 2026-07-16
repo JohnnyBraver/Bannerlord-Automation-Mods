@@ -1,5 +1,31 @@
 # Changelog - Equipment Manager
 
+## [v0.5.2] - 2026-07-16
+
+### Fixed
+- **MCM Group Order**: Fixed the top-level settings order and ensured Auto-Sell and Auto-Buy parent pages are discovered before their nested pages.
+- **Auto-Buy Navigation**: Removed the redundant nested General page. Shared purchase controls now appear directly on the Auto-Buy page before Armor and Weapons.
+
+## [v0.5.1] - 2026-07-16
+
+### Added
+- **Weapon and Armor Auto-Sell Choices**: Choose Disabled, Armor Only, Weapons Only, or Weapons & Armor. Selecting Armor Only preserves all weapons for later loadout changes.
+- **Category-Based Protection**: Positive modifiers and donation candidates can now be protected for armor, weapons, or both independently.
+- **Loadout-Specific Purchase Controls**: Battle armor, civilian armor, stealth gear, and weapons now have separate enablement, reserves, limits, and relevant purchase rules.
+
+### Changed
+- **Reworked MCM Layout**: Settings are organized around Auto-Equip, Auto-Sell, and a nested Auto-Buy hierarchy for armor and weapons. Weapon evaluation now sits beside allowed weapon types.
+- **Combat-Focused Defaults**: Battle armor and hand-slot weapon upgrades are enabled by default; civilian armor and stealth gear remain opt-in with their own budgets.
+- **Simpler Auto-Equip**: Removed timing controls from MCM. Auto-equip now runs at its normal automation lifecycle points whenever Equipment Manager is enabled.
+- **Centralized Purchase Policies**: Auto-buy settings are applied through shared track policies so reserves, limits, and ordering are handled consistently.
+
+### Fixed
+- **Unwanted Weapon Sales**: Armor-only auto-sell excludes weapons before sale eligibility is evaluated in both automatic sale paths.
+- **Stealth Spare Armor Reserves**: Spare armor reserves now apply only to battle and/or civilian loadouts, never stealth gear.
+
+### Settings Profile
+- Equipment Manager now uses the `EquipmentManager_v0_5_1` MCM profile. Configure the refreshed settings once after updating; the v0.5.0 profile is retained separately by MCM and is not reused.
+
 ## [v0.5.0] - 2026-07-09
 
 ### Added

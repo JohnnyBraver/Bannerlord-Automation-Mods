@@ -175,7 +175,7 @@ namespace EquipmentManager
                     var item = eqEl.Item;
                     if (item == null) continue;
 
-                    bool isEquipment = item.ItemComponent is BannerComponent || item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null;
+                    bool isEquipment = EquipmentSaleProtector.IsEquipment(item);
                     if (!isEquipment) continue;
 
                     protectionItems.Add(new EquipmentProtectionItem(eqEl, itemVM.ItemCount, itemVM.ItemCost));
@@ -188,7 +188,7 @@ namespace EquipmentManager
             var settlement = inventoryLogic.CurrentSettlementComponent?.Settlement;
             bool skipSell = settlement != null && settings.PreventEquipmentSaleInVillages && settlement.IsVillage;
 
-            if (settings.SellUnlockedEquipment && vm.RightItemListVM != null && !skipSell && vm.IsOtherInventoryGoldRelevant)
+            if (settings.AutoSellCategorySetting != AutoSellCategory.Disabled && vm.RightItemListVM != null && !skipSell && vm.IsOtherInventoryGoldRelevant)
             {
                 var itemsToSell = new List<SellCandidate>();
                 foreach (var itemVM in vm.RightItemListVM)
@@ -199,7 +199,9 @@ namespace EquipmentManager
                     var item = itemVM.ItemRosterElement.EquipmentElement.Item;
                     if (item == null) continue;
 
-                    bool isEquipment = item.ItemComponent is BannerComponent || item.HasArmorComponent || item.WeaponComponent != null || item.PrimaryWeapon != null;
+                    if (!EquipmentSaleProtector.IsSelectedForAutoSale(item, settings.AutoSellCategorySetting)) continue;
+
+                    bool isEquipment = EquipmentSaleProtector.IsEquipment(item);
                     if (isEquipment)
                     {
                         int sellQuantity = protectionPlan?.GetSellableQuantity(itemVM.ItemRosterElement.EquipmentElement, itemVM.ItemCount) ?? itemVM.ItemCount;
@@ -360,7 +362,7 @@ namespace EquipmentManager
             {
                 var settings = Settings.Instance;
                 if (settings == null) return;
-                if (!settings.ModEnabled || settings.AutoEquipCategorySetting == AutoEquipCategory.None) return;
+                if (!settings.ModEnabled || settings.AutoEquipCategorySetting == AutoEquipCategory.Disabled) return;
 
                 var heroesToProcess = new List<Hero>();
                 heroesToProcess.Add(Hero.MainHero);

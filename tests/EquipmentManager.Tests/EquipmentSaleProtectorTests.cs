@@ -2,6 +2,8 @@ using EquipmentManager;
 using TaleWorlds.Core;
 using Xunit;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.Serialization;
 
 namespace EquipmentManager.Tests
 {
@@ -37,15 +39,54 @@ namespace EquipmentManager.Tests
         }
 
         [Fact]
-        public void Settings_DefaultQualityReserveProtectionIsOff()
+        public void Settings_DefaultProtectionCategoriesAndArmorReservesAreOff()
         {
             var settings = new Settings();
 
-            Assert.False(settings.KeepPositiveModifiers);
+            Assert.Equal(PositiveModifierProtectionCategory.Disabled, settings.PositiveModifierProtectionCategorySetting);
             Assert.Equal(0, settings.AdditionalArmorSetsToKeep);
-            Assert.False(settings.KeepSpareCombatArmorSets);
-            Assert.False(settings.KeepSpareCivilianArmorSets);
-            Assert.False(settings.KeepSpareSneakingArmorSets);
+            Assert.Equal(SpareArmorLoadouts.Disabled, settings.SpareArmorLoadoutsSetting);
+        }
+
+        [Fact]
+        public void AutoSellCategory_DefaultsToWeaponsAndArmor()
+        {
+            var settings = new Settings();
+
+            Assert.Equal(AutoSellCategory.WeaponsAndArmor, settings.AutoSellCategorySetting);
+        }
+
+        [Fact]
+        public void PositiveModifierProtectionCategory_DefaultsToDisabled()
+        {
+            var settings = new Settings();
+
+            Assert.Equal(PositiveModifierProtectionCategory.Disabled, settings.PositiveModifierProtectionCategorySetting);
+        }
+
+        [Fact]
+        public void AutoSellCategory_SelectsOnlyTheRequestedEquipmentTypes()
+        {
+            var armor = ArmorItem("helmet");
+            var weapon = WeaponItem("sword");
+            var banner = BannerItem("banner");
+
+            Assert.False(EquipmentSaleProtector.IsSelectedForAutoSale(armor, AutoSellCategory.Disabled));
+            Assert.True(EquipmentSaleProtector.IsSelectedForAutoSale(armor, AutoSellCategory.ArmorOnly));
+            Assert.False(EquipmentSaleProtector.IsSelectedForAutoSale(weapon, AutoSellCategory.ArmorOnly));
+            Assert.False(EquipmentSaleProtector.IsSelectedForAutoSale(armor, AutoSellCategory.WeaponsOnly));
+            Assert.True(EquipmentSaleProtector.IsSelectedForAutoSale(weapon, AutoSellCategory.WeaponsOnly));
+            Assert.True(EquipmentSaleProtector.IsSelectedForAutoSale(armor, AutoSellCategory.WeaponsAndArmor));
+            Assert.True(EquipmentSaleProtector.IsSelectedForAutoSale(weapon, AutoSellCategory.WeaponsAndArmor));
+            Assert.False(EquipmentSaleProtector.IsSelectedForAutoSale(banner, AutoSellCategory.WeaponsAndArmor));
+
+            Assert.True(EquipmentSaleProtector.IsSelectedForPositiveModifierProtection(armor, PositiveModifierProtectionCategory.ArmorOnly));
+            Assert.False(EquipmentSaleProtector.IsSelectedForPositiveModifierProtection(weapon, PositiveModifierProtectionCategory.ArmorOnly));
+            Assert.False(EquipmentSaleProtector.IsSelectedForPositiveModifierProtection(armor, PositiveModifierProtectionCategory.WeaponsOnly));
+            Assert.True(EquipmentSaleProtector.IsSelectedForPositiveModifierProtection(weapon, PositiveModifierProtectionCategory.WeaponsOnly));
+            Assert.True(EquipmentSaleProtector.IsSelectedForPositiveModifierProtection(armor, PositiveModifierProtectionCategory.WeaponsAndArmor));
+            Assert.True(EquipmentSaleProtector.IsSelectedForPositiveModifierProtection(weapon, PositiveModifierProtectionCategory.WeaponsAndArmor));
+            Assert.False(EquipmentSaleProtector.IsSelectedForPositiveModifierProtection(banner, PositiveModifierProtectionCategory.WeaponsAndArmor));
         }
 
         [Fact]
@@ -147,6 +188,34 @@ namespace EquipmentManager.Tests
         private static ItemObject Item(string id)
         {
             return new ItemObject(id);
+        }
+
+        private static ItemObject ArmorItem(string id)
+        {
+            var item = Item(id);
+            SetPrivateField(item, "<ItemComponent>k__BackingField", FormatterServices.GetUninitializedObject(typeof(ArmorComponent)));
+            return item;
+        }
+
+        private static ItemObject WeaponItem(string id)
+        {
+            var item = Item(id);
+            SetPrivateField(item, "<ItemComponent>k__BackingField", FormatterServices.GetUninitializedObject(typeof(WeaponComponent)));
+            return item;
+        }
+
+        private static ItemObject BannerItem(string id)
+        {
+            var item = Item(id);
+            SetPrivateField(item, "<ItemComponent>k__BackingField", FormatterServices.GetUninitializedObject(typeof(BannerComponent)));
+            return item;
+        }
+
+        private static void SetPrivateField(object target, string name, object value)
+        {
+            var field = target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(field);
+            field!.SetValue(target, value);
         }
     }
 }
