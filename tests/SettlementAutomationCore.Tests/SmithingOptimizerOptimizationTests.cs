@@ -27,7 +27,60 @@ namespace SettlementAutomationCore.Tests
             Assert.Contains("RequestOptimization(OptimizationTrigger.Manual)", source);
             Assert.Contains("RunOptimization(context)", source);
             Assert.Contains("Interlocked.Exchange(ref _isOptimizing, 1)", source);
-            Assert.Contains("ShowMessages => Trigger == OptimizationTrigger.Manual", source);
+            Assert.Contains("ShowMessages => Trigger == OptimizationTrigger.Manual || Trigger == OptimizationTrigger.AutoOrderSelected", source);
+        }
+
+        [Fact]
+        public void SelectedOrders_UseTheSharedPipelineAndGameResultCheck()
+        {
+            string patches = ReadSource("SmithingOptimizer", "CraftingPatches.cs");
+            string engine = ReadSource("SmithingOptimizer", "OptimizerEngine.cs");
+            string settings = ReadSource("SmithingOptimizer", "Settings.cs");
+
+            Assert.Contains("OnCraftingOrderSelected", patches);
+            Assert.Contains("RequestOptimization(OptimizationTrigger.AutoOrderSelected)", patches);
+            Assert.Contains("OptimizeOrder(", patches);
+            Assert.Contains("HasAvailableHeroes", patches);
+            Assert.Contains("OrderMinimumCompletionChance", settings);
+            Assert.Contains("AutoOptimizeCraftingOrders", settings);
+            Assert.Contains("GetOrderResult", engine);
+            Assert.Contains("_currentItemModifier", engine);
+            Assert.Contains("IsOrderCandidateBetter", engine);
+        }
+
+        [Fact]
+        public void SmithingXpPerStamina_RetainsTrainingRecommendations()
+        {
+            string patches = ReadSource("SmithingOptimizer", "CraftingPatches.cs");
+            string advisor = ReadSource("SmithingOptimizer", "SmithingTrainingAdvisor.cs");
+
+            Assert.Contains("MaybeRecommendTrainingAlternative", patches);
+            Assert.Contains("OptimizationGoal.SmithingXp", patches);
+            Assert.Contains("OptimizationEfficiency.PerStamina", patches);
+            Assert.Contains("FindBetterAlternative", patches);
+            Assert.Contains("GetSkillXpForSmelting", advisor);
+            Assert.Contains("GetRefiningFormulas", advisor);
+            Assert.Contains("GetEnergyCostForRefining", advisor);
+            Assert.Contains("return candidate", advisor);
+            Assert.Contains("OptimizationEfficiency.PerMaterialValue", advisor);
+            Assert.Contains("GetCraftingXpScore", patches);
+            Assert.Contains("GetXpBasisText", patches);
+        }
+
+        [Fact]
+        public void SellValue_ConsidersOtherTemplatesAndCachesUnchangedPartSets()
+        {
+            string patches = ReadSource("SmithingOptimizer", "CraftingPatches.cs");
+            Assert.Contains("_primaryUsages", patches);
+            Assert.Contains("SellValueCache", patches);
+            Assert.Contains("GetUnlockedPartFingerprint", patches);
+            Assert.Contains("GetMaterialFingerprint", patches);
+            Assert.Contains("GetSmithingCapabilityFingerprint", patches);
+            Assert.DoesNotContain("context.Crafter.StringId", patches);
+            Assert.Contains("PresentBetterTemplateAlternative", patches);
+            Assert.Contains("Kept the current weapon type", patches);
+            Assert.Contains("OptimizationGoal.SmithingXp", patches);
+            Assert.Contains("UpdateCraftingHero", patches);
         }
 
         [Fact]

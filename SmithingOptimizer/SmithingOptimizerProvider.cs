@@ -11,7 +11,8 @@ namespace SmithingOptimizer
     public class SmithingOptimizerProvider : IAutomationRequestProvider, IAutomationReportProvider, IAutomationReportStyleProvider
     {
         private const string HardwoodFallbackId = "hardwood";
-        private const string CharcoalFallbackId = "charcoal";
+        // Supply requests are deliberately neutral within their selected Core spend mode.
+        private const int HardwoodRequestPriority = 5;
 
         public string ProviderName => "SmithingOptimizer";
         public uint? ReportHeaderColor => 0xB0A89CFF;
@@ -32,7 +33,6 @@ namespace SmithingOptimizer
             }
 
             SubmitSupplyRequest(context, "Hardwood", HardwoodFallbackId, settings.DesiredHardwood, settings);
-            SubmitSupplyRequest(context, "Charcoal", CharcoalFallbackId, settings.DesiredCharcoal, settings);
         }
 
         public IReadOnlyList<string> BuildAutomationReportLines(AutomationReportContext context)
@@ -70,7 +70,7 @@ namespace SmithingOptimizer
                 targetId,
                 desiredCount,
                 settings.SupplyRequestProfile,
-                settings.SupplyRequestPriority,
+                HardwoodRequestPriority,
                 BudgetPolicyKind.ExplicitReserve,
                 settings.SupplyGoldReserve));
         }

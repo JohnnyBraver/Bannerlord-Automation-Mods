@@ -18,6 +18,7 @@ namespace SmithingOptimizer
         public CraftingPiece Guard { get; set; } = null!;
         public CraftingPiece Grip { get; set; } = null!;
         public CraftingPiece Pommel { get; set; } = null!;
+        public CraftingTemplate? Template { get; set; }
 
         public int BladeScale { get; set; } = 100;
         public int GuardScale { get; set; } = 100;
@@ -32,6 +33,7 @@ namespace SmithingOptimizer
         public int StaminaCost { get; set; }
         public int MaterialReferenceValue { get; set; }
         public float QualityChance { get; set; }
+        public float OrderCompletionChance { get; set; }
         public bool UsesExpectedQualityScore { get; set; }
         public int[] MaterialCosts { get; set; } = new int[9];
     }
@@ -41,12 +43,14 @@ namespace SmithingOptimizer
         public CraftingDesignCandidate? Current { get; }
         public CraftingDesignCandidate? Best { get; }
         public bool ExpectedQualityScoringDisabled { get; }
+        public bool OrderEvaluationUnavailable { get; }
 
-        public OptimizationRunResult(CraftingDesignCandidate? current, CraftingDesignCandidate? best, bool expectedQualityScoringDisabled = false)
+        public OptimizationRunResult(CraftingDesignCandidate? current, CraftingDesignCandidate? best, bool expectedQualityScoringDisabled = false, bool orderEvaluationUnavailable = false)
         {
             Current = current;
             Best = best;
             ExpectedQualityScoringDisabled = expectedQualityScoringDisabled;
+            OrderEvaluationUnavailable = orderEvaluationUnavailable;
         }
     }
 
@@ -64,6 +68,10 @@ namespace SmithingOptimizer
             null, new[] { typeof(WeaponDesign), typeof(Hero) }, null);
         private static readonly PropertyInfo? EquipmentElementItemValueProperty = typeof(EquipmentElement).GetProperty(
             "ItemValue", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        private static readonly FieldInfo? CurrentItemModifierField = typeof(CraftingCampaignBehavior).GetField(
+            "_currentItemModifier", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly MethodInfo? GetOrderResultMethod = typeof(CraftingCampaignBehavior).GetMethod(
+            "GetOrderResult", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         private static readonly bool ExpectedQualityScoringAvailable = IsExpectedQualityScoringAvailable();
         private static bool _expectedQualityCompatibilityLogged;
 
@@ -188,6 +196,194 @@ namespace SmithingOptimizer
             }
         }
 
+        public static OptimizationRunResult OptimizeOrder(
+            Crafting craftingLogic,
+            Hero crafter,
+            CraftingTemplate template,
+            object order,
+            bool limitToInventory,
+            int minimumCompletionChance)
+        {
+            minimumCompletionChance = Math.Max(0, Math.Min(100, minimumCompletionChance));
+            var behavior = Campaign.Current.GetCampaignBehavior<CraftingCampaignBehavior>();
+            if (behavior == null || craftingLogic == null || crafter == null || template == null || order == null)
+                return new OptimizationRunResult(null, null, false, true);
+            if (!IsOrderEvaluationAvailable())
+                return new OptimizationRunResult(null, null, false, true);
+
+            int[] availableMaterials = GetAvailableMaterials(limitToInventory);
+            var emptyPiece = WeaponDesignElement.GetInvalidPieceForType(CraftingPiece.PieceTypes.Blade).CraftingPiece;
+            List<CraftingPiece> blades = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Blade) ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Blade, behavior) : new List<CraftingPiece> { emptyPiece };
+            List<CraftingPiece> guards = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Guard) ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Guard, behavior) : new List<CraftingPiece> { emptyPiece };
+            List<CraftingPiece> grips = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Handle) ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Handle, behavior) : new List<CraftingPiece> { emptyPiece };
+            List<CraftingPiece> pommels = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Pommel) ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Pommel, behavior) : new List<CraftingPiece> { emptyPiece };
+            var originalDesign = craftingLogic.CurrentWeaponDesign;
+            try
+            {
+                var current = CreateCandidateFromDesign(originalDesign, emptyPiece);
+                CraftingDesignCandidate? scoredCurrent = null;
+                if (current != null && IsValid(current, limitToInventory, availableMaterials) &&
+                    EvaluateOrderCandidate(current, craftingLogic, crafter, template, behavior, order))
+                    scoredCurrent = current;
+
+                if (blades.Count == 0 || guards.Count == 0 || grips.Count == 0 || pommels.Count == 0)
+                    return new OptimizationRunResult(scoredCurrent, null);
+
+                CraftingDesignCandidate? best = scoredCurrent != null ? Clone(scoredCurrent) : null;
+                if (best == null)
+                {
+                    var seed = CreateLowestCostSeed(blades, guards, grips, pommels);
+                    if (IsValid(seed, limitToInventory, availableMaterials) &&
+                        EvaluateOrderCandidate(seed, craftingLogic, crafter, template, behavior, order))
+                        best = seed;
+                }
+                if (best == null) return new OptimizationRunResult(scoredCurrent, null);
+
+                var slots = new[] { blades, guards, grips, pommels };
+                for (int pass = 0; pass < MaximumPartPasses; pass++)
+                {
+                    bool improved = false;
+                    for (int slot = 0; slot < slots.Length; slot++)
+                    {
+                        foreach (var piece in slots[slot])
+                        {
+                            var trial = Clone(best);
+                            SetPiece(trial, slot, piece);
+                            if (!IsValid(trial, limitToInventory, availableMaterials) ||
+                                !EvaluateOrderCandidate(trial, craftingLogic, crafter, template, behavior, order) ||
+                                !IsOrderCandidateBetter(trial, best, minimumCompletionChance))
+                                continue;
+                            best = trial;
+                            improved = true;
+                        }
+                    }
+                    if (!improved) break;
+                }
+
+                OptimizeOrderSliders(ref best, craftingLogic, crafter, template, behavior, order, minimumCompletionChance, limitToInventory, availableMaterials);
+                WriteLog($"Optimized crafting order for {crafter.Name}: completion chance={best.OrderCompletionChance:P0}, material value={best.MaterialReferenceValue}.");
+                return new OptimizationRunResult(scoredCurrent, best);
+            }
+            finally
+            {
+                SetCurrentWeaponDesign(craftingLogic, originalDesign);
+            }
+        }
+
+        // Orders are evaluated against the game's result method for every possible modifier.
+        // The order's requirements are final weapon stats, so a quality label alone is insufficient.
+        private static bool EvaluateOrderCandidate(CraftingDesignCandidate candidate, Crafting craftingLogic, Hero crafter, CraftingTemplate template, CraftingCampaignBehavior behavior, object order)
+        {
+            var design = CreateDesign(candidate, template);
+            candidate.MaterialCosts = Campaign.Current.Models.SmithingModel.GetSmithingCostsForWeaponDesign(design);
+            candidate.Difficulty = Campaign.Current.Models.SmithingModel.CalculateWeaponDesignDifficulty(design);
+            SetCurrentWeaponDesign(craftingLogic, design);
+            ItemObject item = craftingLogic.GetCurrentCraftedItemObject(true, "optimizer-order");
+            if (item == null || !TryGetModifierQualityProbabilities(design, crafter, out var probabilities)) return false;
+
+            candidate.OrderCompletionChance = 0f;
+            foreach (var probability in probabilities)
+            {
+                var modifiers = design.Template.ItemModifierGroup.GetModifiersBasedOnQuality(probability.Item1);
+                if (modifiers == null || modifiers.Count == 0)
+                {
+                    if (IsOrderSuccessful(behavior, order, item, null)) candidate.OrderCompletionChance += probability.Item2;
+                    continue;
+                }
+                float modifierProbability = probability.Item2 / modifiers.Count;
+                foreach (var modifier in modifiers)
+                {
+                    if (IsOrderSuccessful(behavior, order, item, modifier)) candidate.OrderCompletionChance += modifierProbability;
+                }
+            }
+            candidate.MaterialReferenceValue = GetMaterialReferenceValue(candidate.MaterialCosts);
+            candidate.Score = -candidate.MaterialReferenceValue;
+            return true;
+        }
+
+        private static bool IsOrderSuccessful(CraftingCampaignBehavior behavior, object order, ItemObject item, ItemModifier? modifier)
+        {
+            if (CurrentItemModifierField == null || GetOrderResultMethod == null) return false;
+            object? previousModifier = CurrentItemModifierField.GetValue(behavior);
+            try
+            {
+                CurrentItemModifierField.SetValue(behavior, modifier);
+                object?[] args = { order, item, false, null, null, 0 };
+                GetOrderResultMethod.Invoke(behavior, args);
+                return args[2] is bool success && success;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+            finally
+            {
+                CurrentItemModifierField.SetValue(behavior, previousModifier);
+            }
+        }
+
+        public static bool IsOrderCandidateBetter(CraftingDesignCandidate candidate, CraftingDesignCandidate baseline, int minimumCompletionChance)
+        {
+            float required = Math.Max(0, Math.Min(100, minimumCompletionChance)) / 100f;
+            bool candidateEligible = required == 0f || candidate.OrderCompletionChance >= required;
+            bool baselineEligible = required == 0f || baseline.OrderCompletionChance >= required;
+            if (candidateEligible != baselineEligible) return candidateEligible;
+            if (!candidateEligible && Math.Abs(candidate.OrderCompletionChance - baseline.OrderCompletionChance) > 0.0001f)
+                return candidate.OrderCompletionChance > baseline.OrderCompletionChance;
+            if (candidate.MaterialReferenceValue != baseline.MaterialReferenceValue)
+                return candidate.MaterialReferenceValue < baseline.MaterialReferenceValue;
+            return GetTotalMaterialCount(candidate.MaterialCosts) < GetTotalMaterialCount(baseline.MaterialCosts);
+        }
+
+        private static void OptimizeOrderSliders(ref CraftingDesignCandidate candidate, Crafting craftingLogic, Hero crafter, CraftingTemplate template, CraftingCampaignBehavior behavior, object order, int minimumCompletionChance, bool limitToInventory, int[] availableMaterials)
+        {
+            int[] deltas = { 5, -5, 1, -1 };
+            for (int pass = 0; pass < MaximumSliderPasses; pass++)
+            {
+                bool improved = false;
+                for (int slot = 0; slot < 4; slot++)
+                {
+                    foreach (int delta in deltas)
+                    {
+                        var trial = Clone(candidate);
+                        int previous = GetScale(trial, slot);
+                        if (GetPiece(trial, slot).IsEmptyPiece) continue;
+                        int next = Math.Max(90, Math.Min(110, previous + delta));
+                        if (next == previous) continue;
+                        SetScale(trial, slot, next);
+                        if (!IsValid(trial, limitToInventory, availableMaterials) ||
+                            !EvaluateOrderCandidate(trial, craftingLogic, crafter, template, behavior, order) ||
+                            !IsOrderCandidateBetter(trial, candidate, minimumCompletionChance))
+                            continue;
+                        candidate = trial;
+                        improved = true;
+                    }
+                }
+                if (!improved) break;
+            }
+        }
+
+        private static int[] GetAvailableMaterials(bool limitToInventory)
+        {
+            int[] availableMaterials = new int[9];
+            if (!limitToInventory) return availableMaterials;
+            var roster = MobileParty.MainParty.ItemRoster;
+            var smithingModel = Campaign.Current.Models.SmithingModel;
+            for (int i = 0; i < 9; i++)
+            {
+                var material = smithingModel.GetCraftingMaterialItem((CraftingMaterials)i);
+                availableMaterials[i] = material != null ? roster.GetItemNumber(material) : 0;
+            }
+            return availableMaterials;
+        }
+
+        private static int GetTotalMaterialCount(int[] costs)
+        {
+            int total = 0;
+            foreach (int cost in costs) total += cost;
+            return total;
+        }
+
         private static List<CraftingPiece> GetOpenedPieces(CraftingTemplate template, CraftingPiece.PieceTypes type, CraftingCampaignBehavior behavior)
         {
             var pieces = new List<CraftingPiece>();
@@ -230,6 +426,7 @@ namespace SmithingOptimizer
             MinimumCraftQuality damageMinimumQuality,
             int damageMinimumQualityChance)
         {
+            candidate.Template = template;
             var design = CreateDesign(candidate, template);
             candidate.MaterialCosts = Campaign.Current.Models.SmithingModel.GetSmithingCostsForWeaponDesign(design);
             candidate.Difficulty = Campaign.Current.Models.SmithingModel.CalculateWeaponDesignDifficulty(design);
@@ -384,12 +581,14 @@ namespace SmithingOptimizer
             return new CraftingDesignCandidate
             {
                 Blade = source.Blade, Guard = source.Guard, Grip = source.Grip, Pommel = source.Pommel,
+                Template = source.Template,
                 BladeScale = source.BladeScale, GuardScale = source.GuardScale,
                 GripScale = source.GripScale, PommelScale = source.PommelScale,
                 Score = source.Score, Value = source.Value, SmithingXp = source.SmithingXp,
                 MaxDamage = source.MaxDamage, Difficulty = source.Difficulty,
                 StaminaCost = source.StaminaCost, MaterialReferenceValue = source.MaterialReferenceValue,
                 QualityChance = source.QualityChance,
+                OrderCompletionChance = source.OrderCompletionChance,
                 UsesExpectedQualityScore = source.UsesExpectedQualityScore,
                 MaterialCosts = (int[])source.MaterialCosts.Clone()
             };
@@ -399,6 +598,13 @@ namespace SmithingOptimizer
         {
             return ModifierQualityProbabilitiesMethod != null && EquipmentElementItemValueProperty != null &&
                    typeof(DefaultSmithingModel).Assembly.ManifestModule.ModuleVersionId == SupportedCampaignSystemMvid;
+        }
+
+        private static bool IsOrderEvaluationAvailable()
+        {
+            return CurrentItemModifierField != null && GetOrderResultMethod != null &&
+                   typeof(DefaultSmithingModel).Assembly.ManifestModule.ModuleVersionId == SupportedCampaignSystemMvid &&
+                   ExpectedQualityScoringAvailable;
         }
 
         private static bool TryGetExpectedValue(WeaponDesign design, Hero crafter, ItemObject item, out int expectedValue)

@@ -21,21 +21,23 @@ namespace SettlementAutomationCore.Tests
         }
 
         [Fact]
-        public void SmithingOptimizer_SubmitsHardwoodAndCharcoalRequestsThroughCore()
+        public void SmithingOptimizer_SubmitsOnlyHardwoodRequestsThroughCore()
         {
             string provider = ReadSource("SmithingOptimizer", "SmithingOptimizerProvider.cs");
             string settings = ReadSource("SmithingOptimizer", "Settings.cs");
 
             Assert.Contains("\"Hardwood\"", provider);
-            Assert.Contains("\"Charcoal\"", provider);
+            Assert.DoesNotContain("\"Charcoal\"", provider);
             Assert.Contains("AutomationRequest.ForInventoryTarget", provider);
             Assert.Contains("RequestType.SpecificItem", provider);
             Assert.Contains("Hero.MainHero?.Gold ?? 0) <= settings.SupplyGoldReserve", provider);
             Assert.Contains("BudgetPolicyKind.ExplicitReserve", provider);
             Assert.DoesNotContain("TransferCommand.Transfer", provider);
             Assert.DoesNotContain("DoneLogic()", provider);
-            Assert.Contains("SmithingOptimizer_v0_4", settings);
+            Assert.Contains("SmithingOptimizer_v0_6_0", settings);
             Assert.Contains("AutoBuySmithingSupplies", settings);
+            Assert.DoesNotContain("DesiredCharcoal", settings);
+            Assert.DoesNotContain("SupplyRequestPriority", settings);
         }
 
         private static string ReadSource(params string[] parts)
