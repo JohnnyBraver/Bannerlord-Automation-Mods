@@ -181,17 +181,10 @@ namespace SmithingOptimizer
 
                 OptimizeSliders(ref best, craftingLogic, crafter, template, goal, efficiency, damageMinimumQuality, damageMinimumQualityChance, limitToInventory, availableMaterials);
 
-                string scoreDetail = efficiency == OptimizationEfficiency.Raw || goal == OptimizationGoal.Damage ? string.Empty : $", Score={best.Score:F2}";
-                string qualityDetail = goal == OptimizationGoal.Damage
-                    ? $", {damageMinimumQuality}+Chance={best.QualityChance:P0}"
-                    : string.Empty;
                 string message = $"Optimized template '{template?.TemplateName?.ToString() ?? "Unknown"}' (Goal: {goal}). Best design: " +
                     $"Blade={best.Blade?.Name?.ToString() ?? "None"}, Guard={best.Guard?.Name?.ToString() ?? "None"}, " +
                     $"Grip={best.Grip?.Name?.ToString() ?? "None"}, Pommel={best.Pommel?.Name?.ToString() ?? "None"}. " +
-                    $"Value={best.Value}, XP={best.SmithingXp}, Damage={best.MaxDamage}{scoreDetail}{qualityDetail}, " +
-                    $"Stamina={best.StaminaCost}, MaterialValue={best.MaterialReferenceValue}, " +
-                    $"Difficulty={best.Difficulty}, Smithing={crafter.GetSkillValue(DefaultSkills.Crafting)}, Slider Scales: " +
-                    $"[{best.BladeScale}%, {best.GuardScale}%, {best.GripScale}%, {best.PommelScale}%]";
+                    $"Metric: {FormatCandidateMetric(best, goal, efficiency, damageMinimumQuality)}.";
                 WriteLog(message);
                 return new OptimizationRunResult(scoredCurrent, best, expectedQualityScoringDisabled);
             }
@@ -743,6 +736,22 @@ namespace SmithingOptimizer
                 OptimizationEfficiency.PerStamina => rawScore / Math.Max(1, candidate.StaminaCost),
                 OptimizationEfficiency.PerMaterialValue => rawScore / Math.Max(1, candidate.MaterialReferenceValue),
                 _ => rawScore
+            };
+        }
+
+        internal static string FormatCandidateMetric(CraftingDesignCandidate candidate, OptimizationGoal goal, OptimizationEfficiency efficiency, MinimumCraftQuality damageMinimumQuality)
+        {
+            if (goal == OptimizationGoal.Damage)
+                return $"Damage={candidate.MaxDamage}; {damageMinimumQuality}+Chance={candidate.QualityChance:P0}";
+
+            string label = goal == OptimizationGoal.SmithingXp ? "XP" : "Value";
+            string unit = goal == OptimizationGoal.SmithingXp ? string.Empty : "d";
+            int rawValue = goal == OptimizationGoal.SmithingXp ? candidate.SmithingXp : candidate.Value;
+            return efficiency switch
+            {
+                OptimizationEfficiency.PerStamina => $"{label}/stamina={candidate.Score:F2}",
+                OptimizationEfficiency.PerMaterialValue => $"{label}/material-value={candidate.Score:F2}",
+                _ => $"{label}={rawValue}{unit}"
             };
         }
 

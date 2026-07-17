@@ -93,6 +93,8 @@ namespace SettlementAutomationCore.Tests
             Assert.DoesNotContain("CreateCraftedWeaponInFreeBuildMode", engine);
             Assert.Contains("hasEligibleCacheEntry", patches);
             Assert.Contains("OptimizerEngine.IsCandidateEligible(cached.Best, template, behavior)", patches);
+            Assert.Contains("Weapon-type recommendation", patches);
+            Assert.Contains("FormatCandidateMetric", engine);
         }
 
         [Fact]
@@ -115,7 +117,7 @@ namespace SettlementAutomationCore.Tests
             Assert.Contains("damageMinimumQualityChance > 0", engine);
             Assert.Contains("goal == OptimizationGoal.Damage", engine);
             Assert.Contains("? rawScore", engine);
-            Assert.Contains("Chance={best.QualityChance:P0}", engine);
+            Assert.Contains("{damageMinimumQuality}+Chance={candidate.QualityChance:P0}", engine);
         }
 
         [Fact]

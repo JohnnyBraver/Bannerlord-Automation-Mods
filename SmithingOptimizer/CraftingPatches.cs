@@ -309,9 +309,7 @@ namespace SmithingOptimizer
                 context.Settings.Efficiency,
                 context.Settings.DamageMinimumQuality,
                 context.Settings.DamageMinimumQualityChance);
-            string outcome = result.Best == null
-                ? "no eligible design"
-                : $"best score {result.Best.Score:F2}";
+            string outcome = result.Best == null ? "no eligible design" : "eligible design found";
             OptimizerEngine.WriteLog(
                 $"{context.Trigger} optimization completed for {context.Template.TemplateName}: {outcome}; " +
                 $"quality evaluation {(result.ExpectedQualityScoringDisabled ? "unavailable" : "available")}.");
@@ -386,9 +384,13 @@ namespace SmithingOptimizer
             if (bestAlternative != null && bestAlternative.Score > currentTemplateBest.Score)
             {
                 string name = bestAlternative.Template?.TemplateName?.ToString() ?? "another weapon type";
-                string target = context.Settings.Goal == OptimizationGoal.SmithingXp ? "Smithing XP" : "Sell Value";
+                string alternativeMetric = OptimizerEngine.FormatCandidateMetric(bestAlternative, context.Settings.Goal, context.Settings.Efficiency, context.Settings.DamageMinimumQuality);
+                string currentMetric = OptimizerEngine.FormatCandidateMetric(currentTemplateBest, context.Settings.Goal, context.Settings.Efficiency, context.Settings.DamageMinimumQuality);
+                OptimizerEngine.WriteLog(
+                    $"Weapon-type recommendation: {name} ({alternativeMetric}) over " +
+                    $"{context.Template.TemplateName} ({currentMetric}).");
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"Smithing Optimizer: {name} has a better {target} design ({bestAlternative.Score:F2} score). Kept the current weapon type."));
+                    $"Smithing Optimizer: {name} has better {FormatGoal(bestAlternative, context.Settings.Goal, context.Settings.Efficiency, context.Settings.DamageMinimumQuality)}. Kept the current weapon type."));
             }
         }
 
@@ -455,14 +457,12 @@ namespace SmithingOptimizer
             string research = alternative.PartResearchGain > 0 ? $", {alternative.PartResearchGain} part research" : string.Empty;
             string logVersus = bestCraft == null
                 ? string.Empty
-                : $"; current craft: {bestCraft.SmithingXp} XP / {bestCraft.StaminaCost} stamina " +
-                  $"= {bestCraft.SmithingXp / (float)Math.Max(1, bestCraft.StaminaCost):F2} XP/stamina";
+                : $"; current craft XP/stamina={bestCraft.SmithingXp / (float)Math.Max(1, bestCraft.StaminaCost):F2}";
             string displayVersus = bestCraft == null
                 ? string.Empty
                 : $"; current craft: {bestCraft.SmithingXp / (float)Math.Max(1, bestCraft.StaminaCost):F2} XP/stamina";
             OptimizerEngine.WriteLog(
-                $"Training recommendation: {alternative.Description}; XP={alternative.RawXp}, " +
-                $"Stamina={alternative.StaminaCost}, XP/Stamina={alternative.XpPerStamina:F2}{logVersus}.");
+                $"Training recommendation: {alternative.Description}; XP/stamina={alternative.XpPerStamina:F2}{logVersus}.");
             InformationManager.DisplayMessage(new InformationMessage(
                 $"Smithing Optimizer: Better training: {alternative.Description}{count} " +
                 $"({alternative.XpPerStamina:F2} XP/stamina{research}){displayVersus}."));
@@ -526,19 +526,24 @@ namespace SmithingOptimizer
 
         private static string FormatGoal(CraftingDesignCandidate candidate, OptimizationGoal goal, OptimizationEfficiency efficiency, MinimumCraftQuality damageMinimumQuality)
         {
-            string efficiencySuffix = efficiency switch
+            string efficiencyResult = efficiency switch
             {
-                OptimizationEfficiency.PerStamina => $" ({candidate.Score:F2} per stamina)",
-                OptimizationEfficiency.PerMaterialValue => $" ({candidate.Score:F2} per material value)",
+                OptimizationEfficiency.PerStamina => $"{candidate.Score:F2} per stamina",
+                OptimizationEfficiency.PerMaterialValue => $"{candidate.Score:F2} per material value",
                 _ => string.Empty
             };
             return goal switch
             {
                 OptimizationGoal.Damage => $"Damage: {candidate.MaxDamage} ({damageMinimumQuality}+ chance: {candidate.QualityChance:P0})",
-                OptimizationGoal.SmithingXp => $"Smithing XP: {candidate.SmithingXp}{efficiencySuffix}",
-                _ => candidate.UsesExpectedQualityScore ? $"Expected value: {candidate.Value}d{efficiencySuffix}" : $"Value: {candidate.Value}d{efficiencySuffix}"
+                OptimizationGoal.SmithingXp when efficiency != OptimizationEfficiency.Raw => $"Smithing XP per {GetEfficiencyUnit(efficiency)}: {efficiencyResult}",
+                OptimizationGoal.SmithingXp => $"Smithing XP: {candidate.SmithingXp}",
+                _ when efficiency != OptimizationEfficiency.Raw => $"Sell Value per {GetEfficiencyUnit(efficiency)}: {efficiencyResult}",
+                _ => candidate.UsesExpectedQualityScore ? $"Expected value: {candidate.Value}d" : $"Value: {candidate.Value}d"
             };
         }
+
+        private static string GetEfficiencyUnit(OptimizationEfficiency efficiency) =>
+            efficiency == OptimizationEfficiency.PerMaterialValue ? "material value" : "stamina";
 
         private static void ApplyDesign(WeaponDesignVM vm, Crafting craftingLogic, CraftingTemplate template, CraftingDesignCandidate candidate)
         {

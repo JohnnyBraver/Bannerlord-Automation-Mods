@@ -1,5 +1,17 @@
 # Changelog - Smithing Optimizer
 
+## [v0.6.1] - 2026-07-17
+
+### Fixed
+
+- **Working Forge Button**: The OPT button correctly invokes the shared optimizer from the forge screen.
+- **Cross-Weapon Alternatives**: Weapon-type comparisons use each type's own unlocked parts and report a valid alternative without changing the selected weapon type.
+
+### Changed
+
+- **Clearer Results**: In-game optimization messages show the selected result only. The file log keeps the full calculation, including ratios, raw values, stamina, materials, and weapon-type comparisons.
+- **Training Recommendations**: Smelting and refining recommendations now compare the best available action against the current craft using the selected Smithing XP basis.
+
 ## [v0.6.0] - 2026-07-17
 
 ### Added
