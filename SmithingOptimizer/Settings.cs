@@ -9,8 +9,25 @@ namespace SmithingOptimizer
 {
     public enum OptimizationGoal
     {
-        Profit,
-        Damage
+        // Keep these values stable: MCM persists the selected dropdown index.
+        SellValue = 0,
+        Damage = 1,
+        SmithingXp = 2
+    }
+
+    public enum OptimizationEfficiency
+    {
+        Raw = 0,
+        PerStamina = 1,
+        PerMaterialValue = 2
+    }
+
+    public enum MinimumCraftQuality
+    {
+        Normal = 2,
+        Fine = 3,
+        Masterwork = 4,
+        Legendary = 5
     }
 
     public class GoalOption
@@ -18,6 +35,22 @@ namespace SmithingOptimizer
         private readonly string _name;
         public OptimizationGoal Value { get; }
         public GoalOption(string name, OptimizationGoal value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
+    public class EfficiencyOption
+    {
+        private readonly string _name;
+        public OptimizationEfficiency Value { get; }
+        public EfficiencyOption(string name, OptimizationEfficiency value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
+    public class QualityOption
+    {
+        private readonly string _name;
+        public MinimumCraftQuality Value { get; }
+        public QualityOption(string name, MinimumCraftQuality value) { _name = name; Value = value; }
         public override string ToString() => _name;
     }
 
@@ -30,8 +63,24 @@ namespace SmithingOptimizer
 
         private static readonly IReadOnlyList<GoalOption> GoalOptions = new List<GoalOption>
         {
-            new GoalOption("Profit (XP + Sell Value)", OptimizationGoal.Profit),
-            new GoalOption("Damage (Max Swing/Thrust)", OptimizationGoal.Damage)
+            new GoalOption("Sell Value", OptimizationGoal.SellValue),
+            new GoalOption("Damage (Max Swing/Thrust)", OptimizationGoal.Damage),
+            new GoalOption("Smithing XP", OptimizationGoal.SmithingXp)
+        };
+
+        private static readonly IReadOnlyList<EfficiencyOption> EfficiencyOptions = new List<EfficiencyOption>
+        {
+            new EfficiencyOption("Raw Result", OptimizationEfficiency.Raw),
+            new EfficiencyOption("Per Stamina", OptimizationEfficiency.PerStamina),
+            new EfficiencyOption("Per Material Value", OptimizationEfficiency.PerMaterialValue)
+        };
+
+        private static readonly IReadOnlyList<QualityOption> QualityOptions = new List<QualityOption>
+        {
+            new QualityOption("Normal", MinimumCraftQuality.Normal),
+            new QualityOption("Fine", MinimumCraftQuality.Fine),
+            new QualityOption("Masterwork", MinimumCraftQuality.Masterwork),
+            new QualityOption("Legendary", MinimumCraftQuality.Legendary)
         };
 
         [SettingPropertyBool("Auto-switch on New Piece Unlock", RequireRestart = false,
@@ -40,13 +89,30 @@ namespace SmithingOptimizer
         public bool AutoSwitchEnabled { get; set; } = true;
 
         [SettingPropertyDropdown("Optimization Goal", RequireRestart = false,
-            HintText = "Whether to optimize for maximum sell value/XP, or maximum weapon damage.", Order = 2)]
+            HintText = "Whether to optimize for sell value, Smithing XP, or maximum weapon damage.", Order = 2)]
         [SettingPropertyGroup("General", GroupOrder = 0)]
         public Dropdown<GoalOption> GoalDropdown { get; set; } =
             new Dropdown<GoalOption>(GoalOptions, 0);
 
+        [SettingPropertyDropdown("Efficiency Basis", RequireRestart = false,
+            HintText = "Optimize the selected target directly, per stamina spent, or per base-value of materials consumed.", Order = 3)]
+        [SettingPropertyGroup("General", GroupOrder = 0)]
+        public Dropdown<EfficiencyOption> EfficiencyDropdown { get; set; } =
+            new Dropdown<EfficiencyOption>(EfficiencyOptions, 0);
+
+        [SettingPropertyDropdown("Damage Minimum Quality", RequireRestart = false,
+            HintText = "For Damage, the quality tier used by the reliability gate. The chance slider at 0% disables the gate.", Order = 4)]
+        [SettingPropertyGroup("General", GroupOrder = 0)]
+        public Dropdown<QualityOption> DamageMinimumQualityDropdown { get; set; } =
+            new Dropdown<QualityOption>(QualityOptions, 1);
+
+        [SettingPropertyInteger("Damage Quality Chance", 0, 100, RequireRestart = false,
+            HintText = "For Damage, require at least this chance to craft the selected quality or better. Set 0% to disable the gate.", Order = 5)]
+        [SettingPropertyGroup("General", GroupOrder = 0)]
+        public int DamageMinimumQualityChance { get; set; } = 0;
+
         [SettingPropertyBool("Limit to Owned Materials", RequireRestart = false,
-            HintText = "Only suggest designs that can be crafted with your current material stock.", Order = 3)]
+            HintText = "Only suggest designs that can be crafted with your current material stock.", Order = 6)]
         [SettingPropertyGroup("General", GroupOrder = 0)]
         public bool LimitToInventory { get; set; } = true;
 
@@ -99,6 +165,8 @@ namespace SmithingOptimizer
         }
 
         public OptimizationGoal Goal => GoalDropdown.SelectedValue.Value;
+        public OptimizationEfficiency Efficiency => EfficiencyDropdown.SelectedValue.Value;
+        public MinimumCraftQuality DamageMinimumQuality => DamageMinimumQualityDropdown.SelectedValue.Value;
         public RequestProfile SupplyRequestProfile => SupplySpendModeDropdown.SelectedValue.Value;
     }
 }

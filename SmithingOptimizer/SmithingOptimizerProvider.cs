@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using SettlementAutomationCore;
+using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
 using TaleWorlds.ObjectSystem;
 
@@ -19,6 +20,13 @@ namespace SmithingOptimizer
         {
             var settings = Settings.Instance;
             if (settings == null || context == null || !settings.AutoBuySmithingSupplies)
+            {
+                return;
+            }
+
+            // This request cannot be honored if the party starts at or below its own reserve.
+            // Core remains authoritative for projected-gold validation after request ordering.
+            if ((Hero.MainHero?.Gold ?? 0) <= settings.SupplyGoldReserve)
             {
                 return;
             }

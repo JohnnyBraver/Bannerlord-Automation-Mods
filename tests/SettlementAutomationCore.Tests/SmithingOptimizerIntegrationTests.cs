@@ -30,6 +30,8 @@ namespace SettlementAutomationCore.Tests
             Assert.Contains("\"Charcoal\"", provider);
             Assert.Contains("AutomationRequest.ForInventoryTarget", provider);
             Assert.Contains("RequestType.SpecificItem", provider);
+            Assert.Contains("Hero.MainHero?.Gold ?? 0) <= settings.SupplyGoldReserve", provider);
+            Assert.Contains("BudgetPolicyKind.ExplicitReserve", provider);
             Assert.DoesNotContain("TransferCommand.Transfer", provider);
             Assert.DoesNotContain("DoneLogic()", provider);
             Assert.Contains("SmithingOptimizer_v0_4", settings);

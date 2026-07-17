@@ -1,7 +1,9 @@
 using System;
 using System.Reflection;
+using System.Threading;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.ViewModelCollection.WeaponCrafting.WeaponDesign;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
@@ -10,6 +12,50 @@ namespace SmithingOptimizer
 {
     public static class CraftingPatches
     {
+        private enum OptimizationTrigger { Manual, AutoUnlock }
+
+        private sealed class OptimizationSettingsSnapshot
+        {
+            public bool LimitToInventory { get; }
+            public OptimizationGoal Goal { get; }
+            public OptimizationEfficiency Efficiency { get; }
+            public MinimumCraftQuality DamageMinimumQuality { get; }
+            public int DamageMinimumQualityChance { get; }
+
+            public OptimizationSettingsSnapshot(Settings settings)
+            {
+                LimitToInventory = settings.LimitToInventory;
+                Goal = settings.Goal;
+                Efficiency = settings.Efficiency;
+                DamageMinimumQuality = settings.DamageMinimumQuality;
+                DamageMinimumQualityChance = settings.DamageMinimumQualityChance;
+            }
+        }
+
+        private sealed class OptimizationContext
+        {
+            public WeaponDesignVM ViewModel { get; }
+            public Crafting Crafting { get; }
+            public CraftingTemplate Template { get; }
+            public Hero Crafter { get; }
+            public OptimizationSettingsSnapshot Settings { get; }
+            public OptimizationTrigger Trigger { get; }
+            public bool ShowMessages => Trigger == OptimizationTrigger.Manual;
+
+            public OptimizationContext(WeaponDesignVM viewModel, Crafting crafting, Hero crafter, OptimizationSettingsSnapshot settings, OptimizationTrigger trigger)
+            {
+                ViewModel = viewModel;
+                Crafting = crafting;
+                Template = crafting.CurrentCraftingTemplate;
+                Crafter = crafter;
+                Settings = settings;
+                Trigger = trigger;
+            }
+        }
+
+        private static readonly FieldInfo? CraftingField = typeof(WeaponDesignVM).GetField("_crafting", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly MethodInfo? SetDesignManuallyMethod = typeof(WeaponDesignVM).GetMethod("SetDesignManually", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static int _isOptimizing;
         public static WeaponDesignVM? ActiveWeaponDesignVM { get; private set; }
 
         public static void OnWeaponDesignVMConstructed(WeaponDesignVM __instance)
@@ -39,109 +85,94 @@ namespace SmithingOptimizer
             var settings = Settings.Instance;
             if (settings != null && settings.AutoSwitchEnabled)
             {
-                TriggerOptimization(silentOnNoImprovement: true);
+                RequestOptimization(OptimizationTrigger.AutoUnlock);
             }
         }
 
         public static void ManualTrigger()
         {
-            TriggerOptimization(silentOnNoImprovement: false);
+            RequestOptimization(OptimizationTrigger.Manual);
         }
 
-        private static void TriggerOptimization(bool silentOnNoImprovement)
+        private static void RequestOptimization(OptimizationTrigger trigger)
         {
+            bool showMessages = trigger == OptimizationTrigger.Manual;
             var settings = Settings.Instance;
-            if (settings == null)
-            {
-                return;
-            }
+            if (settings == null) return;
 
             if (ActiveWeaponDesignVM == null)
             {
-                if (!silentOnNoImprovement)
+                if (showMessages)
                 {
                     InformationManager.DisplayMessage(new InformationMessage("Smithing Optimizer: Open the Forge screen first."));
                 }
                 return;
             }
 
+            if (Interlocked.Exchange(ref _isOptimizing, 1) != 0) return;
             try
             {
-                // 1. Get active Crafting logic via reflection
-                var craftingField = typeof(WeaponDesignVM).GetField("_crafting", BindingFlags.Instance | BindingFlags.NonPublic);
-                if (craftingField == null) return;
-                var craftingLogic = craftingField.GetValue(ActiveWeaponDesignVM) as Crafting;
-                if (craftingLogic == null) return;
-
-                // 2. Run Optimizer
-                var results = OptimizerEngine.Optimize(
-                    craftingLogic,
-                    Hero.MainHero,
-                    craftingLogic.CurrentCraftingTemplate,
-                    settings.LimitToInventory,
-                    settings.Goal
-                );
-
-                if (results == null || results.Count == 0)
-                {
-                    if (!silentOnNoImprovement)
-                    {
-                        InformationManager.DisplayMessage(new InformationMessage("Smithing Optimizer: No valid designs fit your budget."));
-                    }
-                    return;
-                }
-
-                var best = results[0];
-
-                // 3. Compare with current design to see if we improved
-                if (IsBetterThanCurrent(craftingLogic, best, settings.Goal))
-                {
-                    ApplyDesign(ActiveWeaponDesignVM, craftingLogic, best);
-
-                    string goalText = settings.Goal == OptimizationGoal.Damage ? $"Damage: {best.MaxDamage}" : $"Value: {best.Value}d";
-                    InformationManager.DisplayMessage(new InformationMessage(
-                        $"Smithing Optimizer: Applied new optimal design! ({goalText})",
-                        Color.FromUint(0x40FF40FF) // Green
-                    ));
-                }
-                else
-                {
-                    if (!silentOnNoImprovement)
-                    {
-                        InformationManager.DisplayMessage(new InformationMessage("Smithing Optimizer: Current design is already optimal."));
-                    }
-                }
+                var context = CaptureContext(ActiveWeaponDesignVM, settings, trigger);
+                if (context == null) return;
+                RunOptimization(context);
             }
             catch (Exception ex)
             {
                 InformationManager.DisplayMessage(new InformationMessage($"Smithing Optimizer Error: {ex.Message}"));
             }
+            finally { Volatile.Write(ref _isOptimizing, 0); }
         }
 
-        private static bool IsBetterThanCurrent(Crafting craftingLogic, CraftingDesignCandidate best, OptimizationGoal goal)
+        private static OptimizationContext? CaptureContext(WeaponDesignVM viewModel, Settings settings, OptimizationTrigger trigger)
         {
-            var currentDesign = craftingLogic.CurrentWeaponDesign;
-            if (currentDesign == null) return true;
+            var crafting = CraftingField?.GetValue(viewModel) as Crafting;
+            var behavior = Campaign.Current?.GetCampaignBehavior<CraftingCampaignBehavior>();
+            var crafter = behavior?.GetActiveCraftingHero();
+            if (crafting == null || crafter == null || crafting.CurrentCraftingTemplate == null) return null;
+            return new OptimizationContext(viewModel, crafting, crafter, new OptimizationSettingsSnapshot(settings), trigger);
+        }
 
-            // Compute current stats
-            ItemObject currentItem = craftingLogic.GetCurrentCraftedItemObject(false, "optimizer_check");
-            if (currentItem == null) return true;
+        private static void RunOptimization(OptimizationContext context)
+        {
+            var result = OptimizerEngine.Optimize(
+                context.Crafting,
+                context.Crafter,
+                context.Template,
+                context.Settings.LimitToInventory,
+                context.Settings.Goal,
+                context.Settings.Efficiency,
+                context.Settings.DamageMinimumQuality,
+                context.Settings.DamageMinimumQualityChance);
+            if (result.ExpectedQualityScoringDisabled && context.ShowMessages)
+            {
+                InformationManager.DisplayMessage(new InformationMessage("Smithing Optimizer: Expected quality scoring and Damage reliability gating are unavailable for this game build; Sell Value is using base item value."));
+            }
+            if (result.Best == null)
+            {
+                if (context.ShowMessages) InformationManager.DisplayMessage(new InformationMessage("Smithing Optimizer: No material-affordable complete design was found."));
+                return;
+            }
 
-            if (goal == OptimizationGoal.Damage)
+            if (result.Current != null && result.Best.Score <= result.Current.Score)
             {
-                int currentDmg = 0;
-                if (currentItem.WeaponComponent != null && currentItem.WeaponComponent.PrimaryWeapon != null)
-                {
-                    var w = currentItem.WeaponComponent.PrimaryWeapon;
-                    currentDmg = Math.Max(w.SwingDamage, w.ThrustDamage);
-                }
-                return best.MaxDamage > currentDmg;
+                if (context.ShowMessages) InformationManager.DisplayMessage(new InformationMessage("Smithing Optimizer: Current design is already optimal."));
+                return;
             }
-            else // Profit
+
+            ApplyDesign(context.ViewModel, context.Crafting, result.Best);
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"Smithing Optimizer: Applied new local optimum! ({FormatGoal(result.Best, context.Settings.Goal)})",
+                Color.FromUint(0x40FF40FF)));
+        }
+
+        private static string FormatGoal(CraftingDesignCandidate candidate, OptimizationGoal goal)
+        {
+            return goal switch
             {
-                int currentValue = currentItem.Value;
-                return best.Value > currentValue;
-            }
+                OptimizationGoal.Damage => $"Damage: {candidate.MaxDamage} ({candidate.Score:F2} score)",
+                OptimizationGoal.SmithingXp => $"Smithing XP: {candidate.SmithingXp} ({candidate.Score:F2} score)",
+                _ => candidate.UsesExpectedQualityScore ? $"Expected value: {candidate.Value}d ({candidate.Score:F2} score)" : $"Value: {candidate.Value}d ({candidate.Score:F2} score)"
+            };
         }
 
         private static void ApplyDesign(WeaponDesignVM vm, Crafting craftingLogic, CraftingDesignCandidate candidate)
@@ -150,8 +181,7 @@ namespace SmithingOptimizer
 
             // SetDesignManually signature:
             // SetDesignManually(CraftingTemplate craftingTemplate, ValueTuple<CraftingPiece, int>[] pieces, bool forceChangeTemplate)
-            var method = typeof(WeaponDesignVM).GetMethod("SetDesignManually", BindingFlags.Instance | BindingFlags.NonPublic);
-            if (method == null) return;
+            if (SetDesignManuallyMethod == null) return;
 
             var emptyPiece = WeaponDesignElement.GetInvalidPieceForType(CraftingPiece.PieceTypes.Blade).CraftingPiece;
 
@@ -162,7 +192,7 @@ namespace SmithingOptimizer
             pieces[2] = new ValueTuple<CraftingPiece, int>(candidate.Grip ?? emptyPiece, candidate.GripScale);
             pieces[3] = new ValueTuple<CraftingPiece, int>(candidate.Pommel ?? emptyPiece, candidate.PommelScale);
 
-            method.Invoke(vm, new object[] { template, pieces, false });
+            SetDesignManuallyMethod.Invoke(vm, new object[] { template, pieces, false });
         }
     }
 }
