@@ -62,7 +62,7 @@ namespace SettlementAutomationCore.Tests
             Assert.DoesNotContain("ModEnabled", ExtractMethod(equipmentEngine, "OptimizeEquipment"));
             Assert.DoesNotContain("ModEnabled", ExtractMethod(tradePatches, "ManualTrigger"));
             Assert.DoesNotContain("ModEnabled", ExtractMethod(tradingEngine, "RunOptimization"));
-            Assert.Contains("TriggerOptimization(silentOnNoImprovement: false)", craftingPatches);
+            Assert.Contains("RequestOptimization(OptimizationTrigger.Manual)", craftingPatches);
         }
 
         [Fact]

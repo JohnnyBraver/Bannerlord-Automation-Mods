@@ -15,7 +15,7 @@ namespace SettlementAutomationCore.Tests
             Assert.Equal("PartyManager_v0_5", new PartyManager.Settings().Id);
             Assert.Equal("EquipmentManager_v0_5_1", new EquipmentManager.Settings().Id);
             Assert.Equal("FiefManager_v0_4", new FiefManager.Settings().Id);
-            Assert.Equal("SmithingOptimizer_v0_4", new SmithingOptimizer.Settings().Id);
+            Assert.Equal("SmithingOptimizer_v0_6_0", new SmithingOptimizer.Settings().Id);
         }
 
         [Fact]
@@ -24,7 +24,7 @@ namespace SettlementAutomationCore.Tests
             var coreSettings = new SettlementAutomationCore.Settings();
 
             Assert.True(coreSettings.LimitToInventoryCapacity);
-            Assert.Equal(SettlementAutomationCore.IgnoreWeightLimitTier.AllRequests, coreSettings.IgnoreWeightLimitSetting);
+            Assert.Equal(10, coreSettings.ReserveCarryCapacityPercent);
         }
 
         [Fact]

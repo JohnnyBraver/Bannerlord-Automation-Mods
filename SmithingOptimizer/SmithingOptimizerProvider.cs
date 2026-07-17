@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using SettlementAutomationCore;
+using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
 using TaleWorlds.ObjectSystem;
 
@@ -10,7 +11,8 @@ namespace SmithingOptimizer
     public class SmithingOptimizerProvider : IAutomationRequestProvider, IAutomationReportProvider, IAutomationReportStyleProvider
     {
         private const string HardwoodFallbackId = "hardwood";
-        private const string CharcoalFallbackId = "charcoal";
+        // Supply requests are deliberately neutral within their selected Core spend mode.
+        private const int HardwoodRequestPriority = 5;
 
         public string ProviderName => "SmithingOptimizer";
         public uint? ReportHeaderColor => 0xB0A89CFF;
@@ -23,8 +25,14 @@ namespace SmithingOptimizer
                 return;
             }
 
+            // This request cannot be honored if the party starts at or below its own reserve.
+            // Core remains authoritative for projected-gold validation after request ordering.
+            if ((Hero.MainHero?.Gold ?? 0) <= settings.SupplyGoldReserve)
+            {
+                return;
+            }
+
             SubmitSupplyRequest(context, "Hardwood", HardwoodFallbackId, settings.DesiredHardwood, settings);
-            SubmitSupplyRequest(context, "Charcoal", CharcoalFallbackId, settings.DesiredCharcoal, settings);
         }
 
         public IReadOnlyList<string> BuildAutomationReportLines(AutomationReportContext context)
@@ -62,7 +70,7 @@ namespace SmithingOptimizer
                 targetId,
                 desiredCount,
                 settings.SupplyRequestProfile,
-                settings.SupplyRequestPriority,
+                HardwoodRequestPriority,
                 BudgetPolicyKind.ExplicitReserve,
                 settings.SupplyGoldReserve));
         }
