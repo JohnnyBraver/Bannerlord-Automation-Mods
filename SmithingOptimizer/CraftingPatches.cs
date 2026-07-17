@@ -16,7 +16,7 @@ namespace SmithingOptimizer
 {
     public static class CraftingPatches
     {
-        private enum OptimizationTrigger { Manual, AutoUnlock, AutoHeroChanged, AutoOrderSelected }
+        private enum OptimizationTrigger { Manual, AutoUnlock, AutoHeroChanged, AutoWeaponCategoryChanged, AutoOrderModeEntered, AutoOrderSelected }
 
         private sealed class OptimizationSettingsSnapshot
         {
@@ -50,6 +50,9 @@ namespace SmithingOptimizer
             public bool HasAvailableOrderHero { get; }
             public bool IsOrderMode => Order != null;
             public bool ShowMessages => Trigger == OptimizationTrigger.Manual || Trigger == OptimizationTrigger.AutoOrderSelected;
+            public bool ShowCheckMessage => Trigger == OptimizationTrigger.AutoHeroChanged ||
+                                            Trigger == OptimizationTrigger.AutoWeaponCategoryChanged ||
+                                            Trigger == OptimizationTrigger.AutoOrderModeEntered;
             public bool ShowAlternativeMessages => Trigger != OptimizationTrigger.AutoOrderSelected;
 
             public OptimizationContext(WeaponDesignVM viewModel, Crafting crafting, CraftingTemplate template, Hero crafter, OptimizationSettingsSnapshot settings, OptimizationTrigger trigger, object? order, bool hasAvailableOrderHero)
@@ -69,6 +72,7 @@ namespace SmithingOptimizer
         private static readonly MethodInfo? SetDesignManuallyMethod = typeof(WeaponDesignVM).GetMethod("SetDesignManually", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo? PrimaryUsagesField = typeof(WeaponDesignVM).GetField("_primaryUsages", BindingFlags.Instance | BindingFlags.NonPublic);
         private static int _isOptimizing;
+        private static string? _lastForgeState;
         private static readonly Dictionary<string, SellValueCacheEntry> SellValueCache = new Dictionary<string, SellValueCacheEntry>();
         public static WeaponDesignVM? ActiveWeaponDesignVM { get; private set; }
 
@@ -96,6 +100,7 @@ namespace SmithingOptimizer
         public static void OnCraftingLogicRefreshedPostfix(WeaponDesignVM __instance)
         {
             ActiveWeaponDesignVM = __instance;
+            ObserveForgeState(__instance);
         }
 
         [HarmonyPatch(typeof(WeaponDesignVM), "OnFinalize")]
@@ -103,7 +108,47 @@ namespace SmithingOptimizer
         public static void OnFinalizePostfix()
         {
             ActiveWeaponDesignVM = null;
+            _lastForgeState = null;
             SellValueCache.Clear();
+        }
+
+        private static void ObserveForgeState(WeaponDesignVM viewModel)
+        {
+            var crafting = CraftingField?.GetValue(viewModel) as Crafting;
+            var behavior = Campaign.Current?.GetCampaignBehavior<CraftingCampaignBehavior>();
+            var crafter = behavior?.GetActiveCraftingHero();
+            if (crafting?.CurrentCraftingTemplate == null || crafter == null) return;
+
+            string template = crafting.CurrentCraftingTemplate.TemplateName?.ToString() ?? "unknown";
+            string order = viewModel.IsInOrderMode
+                ? viewModel.ActiveCraftingOrder?.CraftingOrder?.GetHashCode().ToString() ?? "orders-without-selection"
+                : "free-build";
+            string state = $"{crafter.StringId}|{template}|{order}";
+            string? previous = _lastForgeState;
+            _lastForgeState = state;
+            if (previous == null || previous == state) return;
+
+            var settings = Settings.Instance;
+            if (settings == null) return;
+            string[] before = previous.Split('|');
+            if (before.Length == 3 && before[0] != crafter.StringId)
+            {
+                OptimizerEngine.WriteLog("Forge state changed: selected hero.");
+                if (settings.AutoSwitchEnabled) RequestOptimization(OptimizationTrigger.AutoHeroChanged);
+            }
+            else if (before.Length == 3 && before[2] != order)
+            {
+                OptimizerEngine.WriteLog("Forge state changed: crafting order.");
+                if (settings.AutoOptimizeCraftingOrders)
+                    RequestOptimization(viewModel.ActiveCraftingOrder == null
+                        ? OptimizationTrigger.AutoOrderModeEntered
+                        : OptimizationTrigger.AutoOrderSelected);
+            }
+            else if (before.Length == 3 && before[1] != template)
+            {
+                OptimizerEngine.WriteLog("Forge state changed: weapon category.");
+                if (settings.AutoSwitchEnabled) RequestOptimization(OptimizationTrigger.AutoWeaponCategoryChanged);
+            }
         }
 
         [HarmonyPatch(typeof(WeaponDesignVM), "OnNewPieceUnlocked")]
@@ -120,6 +165,7 @@ namespace SmithingOptimizer
 
         public static void ManualTrigger()
         {
+            OptimizerEngine.WriteLog("Manual Optimize button pressed.");
             RequestOptimization(OptimizationTrigger.Manual);
         }
 
@@ -128,8 +174,29 @@ namespace SmithingOptimizer
         public static void UpdateCraftingHeroPostfix()
         {
             var settings = Settings.Instance;
+            OptimizerEngine.WriteLog($"Forge hero changed; automatic optimization is {(settings?.AutoSwitchEnabled == true ? "enabled" : "disabled")}.");
             if (settings != null && settings.AutoSwitchEnabled)
                 RequestOptimization(OptimizationTrigger.AutoHeroChanged);
+        }
+
+        [HarmonyPatch(typeof(CraftingVM), "ExecuteSelectWeaponClass")]
+        [HarmonyPostfix]
+        public static void ExecuteSelectWeaponClassPostfix()
+        {
+            var settings = Settings.Instance;
+            OptimizerEngine.WriteLog($"Weapon category changed; automatic optimization is {(settings?.AutoSwitchEnabled == true ? "enabled" : "disabled")}.");
+            if (settings != null && settings.AutoSwitchEnabled)
+                RequestOptimization(OptimizationTrigger.AutoWeaponCategoryChanged);
+        }
+
+        [HarmonyPatch(typeof(CraftingVM), "ExecuteOpenOrdersTab")]
+        [HarmonyPostfix]
+        public static void ExecuteOpenOrdersTabPostfix()
+        {
+            var settings = Settings.Instance;
+            OptimizerEngine.WriteLog($"Crafting orders opened; automatic order optimization is {(settings?.AutoOptimizeCraftingOrders == true ? "enabled" : "disabled")}.");
+            if (settings != null && settings.AutoOptimizeCraftingOrders)
+                RequestOptimization(OptimizationTrigger.AutoOrderModeEntered);
         }
 
         [HarmonyPatch(typeof(WeaponDesignVM), "OnCraftingOrderSelected")]
@@ -159,15 +226,45 @@ namespace SmithingOptimizer
                 return;
             }
 
+            if (trigger == OptimizationTrigger.AutoOrderModeEntered &&
+                (!ActiveWeaponDesignVM.IsInOrderMode || ActiveWeaponDesignVM.ActiveCraftingOrder == null))
+            {
+                OptimizerEngine.WriteLog("Entered crafting orders without a selected order.");
+                InformationManager.DisplayMessage(new InformationMessage(
+                    "Smithing Optimizer: Select an order to check its design."));
+                return;
+            }
+
             if (Interlocked.Exchange(ref _isOptimizing, 1) != 0) return;
             try
             {
                 var context = CaptureContext(ActiveWeaponDesignVM, settings, trigger);
-                if (context == null) return;
+                if (context == null)
+                {
+                    OptimizerEngine.WriteLog($"{trigger} optimization could not capture the forge context.");
+                    if (showMessages)
+                    {
+                        InformationManager.DisplayMessage(new InformationMessage(
+                            "Smithing Optimizer: Could not read the current forge design or selected smith."));
+                    }
+                    return;
+                }
+                if (context.ShowCheckMessage)
+                {
+                    string reason = context.Trigger switch
+                    {
+                        OptimizationTrigger.AutoHeroChanged => "the forge hero changed",
+                        OptimizationTrigger.AutoWeaponCategoryChanged => "the weapon category changed",
+                        _ => "crafting orders opened"
+                    };
+                    OptimizerEngine.WriteLog($"Checking design because {reason}.");
+                    InformationManager.DisplayMessage(new InformationMessage($"Smithing Optimizer: Checking the design because {reason}."));
+                }
                 RunOptimization(context);
             }
             catch (Exception ex)
             {
+                OptimizerEngine.WriteLog($"{trigger} optimization failed: {ex}");
                 InformationManager.DisplayMessage(new InformationMessage($"Smithing Optimizer Error: {ex.Message}"));
             }
             finally { Volatile.Write(ref _isOptimizing, 0); }
@@ -212,6 +309,12 @@ namespace SmithingOptimizer
                 context.Settings.Efficiency,
                 context.Settings.DamageMinimumQuality,
                 context.Settings.DamageMinimumQualityChance);
+            string outcome = result.Best == null
+                ? "no eligible design"
+                : $"best score {result.Best.Score:F2}";
+            OptimizerEngine.WriteLog(
+                $"{context.Trigger} optimization completed for {context.Template.TemplateName}: {outcome}; " +
+                $"quality evaluation {(result.ExpectedQualityScoringDisabled ? "unavailable" : "available")}.");
             if (context.IsOrderMode)
             {
                 PresentOrderResult(context, result);
@@ -221,7 +324,7 @@ namespace SmithingOptimizer
                 PresentBetterTemplateAlternative(context, result.Best);
             if (result.ExpectedQualityScoringDisabled && context.ShowMessages)
             {
-                InformationManager.DisplayMessage(new InformationMessage("Smithing Optimizer: Expected quality scoring and Damage reliability gating are unavailable for this game build; Sell Value is using base item value."));
+                InformationManager.DisplayMessage(new InformationMessage("Smithing Optimizer: Deterministic quality evaluation is unavailable in this game build; Sell Value is using base item value."));
             }
             if (result.Best == null)
             {
@@ -239,7 +342,7 @@ namespace SmithingOptimizer
 
             ApplyDesign(context.ViewModel, context.Crafting, result.Best.Template ?? context.Template, result.Best);
             InformationManager.DisplayMessage(new InformationMessage(
-                $"Smithing Optimizer: Updated the design. ({FormatGoal(result.Best, context.Settings.Goal)})",
+                $"Smithing Optimizer: Updated the design. ({FormatGoal(result.Best, context.Settings.Goal, context.Settings.Efficiency, context.Settings.DamageMinimumQuality)})",
                 Color.FromUint(0x40FF40FF)));
             MaybeRecommendTrainingAlternative(context, result.Best);
         }
@@ -258,13 +361,17 @@ namespace SmithingOptimizer
                 string templateKey = template.TemplateName?.ToString() ?? template.GetHashCode().ToString();
                 string partFingerprint = GetUnlockedPartFingerprint(template, behavior);
                 CraftingDesignCandidate? best;
-                if (SellValueCache.TryGetValue(templateKey, out var cached) &&
-                    cached.PartFingerprint == partFingerprint && cached.ContextFingerprint == contextFingerprint)
+                bool hasEligibleCacheEntry = SellValueCache.TryGetValue(templateKey, out var cached) &&
+                    cached.PartFingerprint == partFingerprint &&
+                    cached.ContextFingerprint == contextFingerprint &&
+                    OptimizerEngine.IsCandidateEligible(cached.Best, template, behavior);
+                if (hasEligibleCacheEntry)
                 {
                     best = cached.Best;
                 }
                 else
                 {
+                    SellValueCache.Remove(templateKey);
                     var templateResult = OptimizerEngine.Optimize(
                         context.Crafting, context.Crafter, template, context.Settings.LimitToInventory,
                         context.Settings.Goal, context.Settings.Efficiency,
@@ -346,11 +453,19 @@ namespace SmithingOptimizer
 
             string count = alternative.AvailableCount > 1 ? $" ({alternative.AvailableCount} available)" : string.Empty;
             string research = alternative.PartResearchGain > 0 ? $", {alternative.PartResearchGain} part research" : string.Empty;
-            float alternativeScore = SmithingTrainingAdvisor.GetScore(alternative, context.Settings.Efficiency);
-            string basis = GetXpBasisText(context.Settings.Efficiency);
-            string versus = bestCraft == null ? string.Empty : $" vs crafting ({craftScore:F2} {basis})";
+            string logVersus = bestCraft == null
+                ? string.Empty
+                : $"; current craft: {bestCraft.SmithingXp} XP / {bestCraft.StaminaCost} stamina " +
+                  $"= {bestCraft.SmithingXp / (float)Math.Max(1, bestCraft.StaminaCost):F2} XP/stamina";
+            string displayVersus = bestCraft == null
+                ? string.Empty
+                : $"; current craft: {bestCraft.SmithingXp / (float)Math.Max(1, bestCraft.StaminaCost):F2} XP/stamina";
+            OptimizerEngine.WriteLog(
+                $"Training recommendation: {alternative.Description}; XP={alternative.RawXp}, " +
+                $"Stamina={alternative.StaminaCost}, XP/Stamina={alternative.XpPerStamina:F2}{logVersus}.");
             InformationManager.DisplayMessage(new InformationMessage(
-                $"Smithing Optimizer: A better {basis} option: {alternative.Description}{count} ({alternativeScore:F2} {basis}{research}){versus}."));
+                $"Smithing Optimizer: Better training: {alternative.Description}{count} " +
+                $"({alternative.XpPerStamina:F2} XP/stamina{research}){displayVersus}."));
         }
 
         private static float GetCraftingXpScore(CraftingDesignCandidate candidate, OptimizationEfficiency efficiency) => efficiency switch
@@ -409,13 +524,19 @@ namespace SmithingOptimizer
                 Color.FromUint(0x40FF40FF)));
         }
 
-        private static string FormatGoal(CraftingDesignCandidate candidate, OptimizationGoal goal)
+        private static string FormatGoal(CraftingDesignCandidate candidate, OptimizationGoal goal, OptimizationEfficiency efficiency, MinimumCraftQuality damageMinimumQuality)
         {
+            string efficiencySuffix = efficiency switch
+            {
+                OptimizationEfficiency.PerStamina => $" ({candidate.Score:F2} per stamina)",
+                OptimizationEfficiency.PerMaterialValue => $" ({candidate.Score:F2} per material value)",
+                _ => string.Empty
+            };
             return goal switch
             {
-                OptimizationGoal.Damage => $"Damage: {candidate.MaxDamage} ({candidate.Score:F2} score)",
-                OptimizationGoal.SmithingXp => $"Smithing XP: {candidate.SmithingXp} ({candidate.Score:F2} score)",
-                _ => candidate.UsesExpectedQualityScore ? $"Expected value: {candidate.Value}d ({candidate.Score:F2} score)" : $"Value: {candidate.Value}d ({candidate.Score:F2} score)"
+                OptimizationGoal.Damage => $"Damage: {candidate.MaxDamage} ({damageMinimumQuality}+ chance: {candidate.QualityChance:P0})",
+                OptimizationGoal.SmithingXp => $"Smithing XP: {candidate.SmithingXp}{efficiencySuffix}",
+                _ => candidate.UsesExpectedQualityScore ? $"Expected value: {candidate.Value}d{efficiencySuffix}" : $"Value: {candidate.Value}d{efficiencySuffix}"
             };
         }
 
@@ -425,14 +546,12 @@ namespace SmithingOptimizer
             // SetDesignManually(CraftingTemplate craftingTemplate, ValueTuple<CraftingPiece, int>[] pieces, bool forceChangeTemplate)
             if (SetDesignManuallyMethod == null) return;
 
-            var emptyPiece = WeaponDesignElement.GetInvalidPieceForType(CraftingPiece.PieceTypes.Blade).CraftingPiece;
-
             // We must use ValueTuple<CraftingPiece, int>
             var pieces = new ValueTuple<CraftingPiece, int>[4];
-            pieces[0] = new ValueTuple<CraftingPiece, int>(candidate.Blade ?? emptyPiece, candidate.BladeScale);
-            pieces[1] = new ValueTuple<CraftingPiece, int>(candidate.Guard ?? emptyPiece, candidate.GuardScale);
-            pieces[2] = new ValueTuple<CraftingPiece, int>(candidate.Grip ?? emptyPiece, candidate.GripScale);
-            pieces[3] = new ValueTuple<CraftingPiece, int>(candidate.Pommel ?? emptyPiece, candidate.PommelScale);
+            pieces[0] = new ValueTuple<CraftingPiece, int>(candidate.Blade ?? WeaponDesignElement.GetInvalidPieceForType(CraftingPiece.PieceTypes.Blade).CraftingPiece, candidate.BladeScale);
+            pieces[1] = new ValueTuple<CraftingPiece, int>(candidate.Guard ?? WeaponDesignElement.GetInvalidPieceForType(CraftingPiece.PieceTypes.Guard).CraftingPiece, candidate.GuardScale);
+            pieces[2] = new ValueTuple<CraftingPiece, int>(candidate.Grip ?? WeaponDesignElement.GetInvalidPieceForType(CraftingPiece.PieceTypes.Handle).CraftingPiece, candidate.GripScale);
+            pieces[3] = new ValueTuple<CraftingPiece, int>(candidate.Pommel ?? WeaponDesignElement.GetInvalidPieceForType(CraftingPiece.PieceTypes.Pommel).CraftingPiece, candidate.PommelScale);
 
             SetDesignManuallyMethod.Invoke(vm, new object[] { template, pieces, false });
         }

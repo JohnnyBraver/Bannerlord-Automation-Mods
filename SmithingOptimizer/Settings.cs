@@ -106,7 +106,7 @@ namespace SmithingOptimizer
             new Dropdown<GoalOption>(GoalOptions, 0);
 
         [SettingPropertyDropdown("Efficiency Basis", RequireRestart = false,
-            HintText = "Optimize the selected target directly, per stamina spent, or per base-value of materials consumed.", Order = 5)]
+            HintText = "For Sell Value and Smithing XP, optimize directly, per stamina spent, or per base-value of materials consumed. Damage always uses raw damage.", Order = 5)]
         [SettingPropertyGroup("General", GroupOrder = 0)]
         public Dropdown<EfficiencyOption> EfficiencyDropdown { get; set; } =
             new Dropdown<EfficiencyOption>(EfficiencyOptions, 0);

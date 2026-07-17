@@ -1,5 +1,6 @@
 <Prefab>
   <ButtonWidget Id="SmithingOptimizeButton"
+                DataSource="{WeaponDesign}"
                 WidthSizePolicy="Fixed"
                 HeightSizePolicy="Fixed"
                 SuggestedWidth="58"

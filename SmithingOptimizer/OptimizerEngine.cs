@@ -61,10 +61,8 @@ namespace SmithingOptimizer
         // This is the MVID of the CampaignSystem assembly supported by this release.
         // The quality helper is private, so do not silently use it after a game update.
         private static readonly Guid SupportedCampaignSystemMvid = new Guid("99bbf418-c6b6-48b0-9a72-623c629df3fb");
-        private static readonly PropertyInfo? CurrentWeaponDesignProperty = typeof(Crafting).GetProperty(
-            "CurrentWeaponDesign", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         private static readonly MethodInfo? ModifierQualityProbabilitiesMethod = typeof(DefaultSmithingModel).GetMethod(
-            "GetModifierQualityProbabilities", BindingFlags.Static | BindingFlags.NonPublic,
+            "GetModifierQualityProbabilities", BindingFlags.Instance | BindingFlags.NonPublic,
             null, new[] { typeof(WeaponDesign), typeof(Hero) }, null);
         private static readonly PropertyInfo? EquipmentElementItemValueProperty = typeof(EquipmentElement).GetProperty(
             "ItemValue", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -72,6 +70,8 @@ namespace SmithingOptimizer
             "_currentItemModifier", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly MethodInfo? GetOrderResultMethod = typeof(CraftingCampaignBehavior).GetMethod(
             "GetOrderResult", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        private static readonly MethodInfo? InitializePreCraftedWeaponMethod = typeof(Crafting).GetMethod(
+            "InitializePreCraftedWeaponOnLoad", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
         private static readonly bool ExpectedQualityScoringAvailable = IsExpectedQualityScoringAvailable();
         private static bool _expectedQualityCompatibilityLogged;
 
@@ -86,8 +86,8 @@ namespace SmithingOptimizer
             int damageMinimumQualityChance)
         {
             damageMinimumQualityChance = Math.Max(0, Math.Min(100, damageMinimumQualityChance));
-            bool usesDamageQualityGate = goal == OptimizationGoal.Damage && damageMinimumQualityChance > 0;
-            bool expectedQualityScoringDisabled = (goal == OptimizationGoal.SellValue || usesDamageQualityGate) && !ExpectedQualityScoringAvailable;
+            bool usesDamageQualityModel = goal == OptimizationGoal.Damage;
+            bool expectedQualityScoringDisabled = (goal == OptimizationGoal.SellValue || usesDamageQualityModel) && !ExpectedQualityScoringAvailable;
             var behavior = Campaign.Current.GetCampaignBehavior<CraftingCampaignBehavior>();
             if (behavior == null || craftingLogic == null || crafter == null || template == null)
                 return new OptimizationRunResult(null, null, expectedQualityScoringDisabled);
@@ -107,30 +107,31 @@ namespace SmithingOptimizer
             }
 
             // Identify usable pieces in the selected template only.
-            var emptyPiece = WeaponDesignElement.GetInvalidPieceForType(CraftingPiece.PieceTypes.Blade).CraftingPiece;
-
             List<CraftingPiece> blades = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Blade)
                 ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Blade, behavior)
-                : new List<CraftingPiece> { emptyPiece };
+                : new List<CraftingPiece> { GetInvalidPiece(CraftingPiece.PieceTypes.Blade) };
 
             List<CraftingPiece> guards = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Guard)
                 ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Guard, behavior)
-                : new List<CraftingPiece> { emptyPiece };
+                : new List<CraftingPiece> { GetInvalidPiece(CraftingPiece.PieceTypes.Guard) };
 
             List<CraftingPiece> grips = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Handle)
                 ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Handle, behavior)
-                : new List<CraftingPiece> { emptyPiece };
+                : new List<CraftingPiece> { GetInvalidPiece(CraftingPiece.PieceTypes.Handle) };
 
             List<CraftingPiece> pommels = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Pommel)
                 ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Pommel, behavior)
-                : new List<CraftingPiece> { emptyPiece };
+                : new List<CraftingPiece> { GetInvalidPiece(CraftingPiece.PieceTypes.Pommel) };
 
             var originalDesign = craftingLogic.CurrentWeaponDesign;
-            try
             {
-                var current = CreateCandidateFromDesign(originalDesign, emptyPiece);
+            {
+                var current = ReferenceEquals(originalDesign?.Template, template)
+                    ? CreateCandidateFromDesign(originalDesign)
+                    : null;
                 CraftingDesignCandidate? scoredCurrent = null;
-                if (current != null && IsValid(current, limitToInventory, availableMaterials) &&
+                if (current != null && IsCandidateEligible(current, template, behavior) &&
+                    IsValid(current, limitToInventory, availableMaterials) &&
                     EvaluateCandidate(current, craftingLogic, crafter, template, goal, efficiency, damageMinimumQuality, damageMinimumQualityChance))
                     scoredCurrent = current;
 
@@ -180,19 +181,20 @@ namespace SmithingOptimizer
 
                 OptimizeSliders(ref best, craftingLogic, crafter, template, goal, efficiency, damageMinimumQuality, damageMinimumQualityChance, limitToInventory, availableMaterials);
 
+                string scoreDetail = efficiency == OptimizationEfficiency.Raw || goal == OptimizationGoal.Damage ? string.Empty : $", Score={best.Score:F2}";
+                string qualityDetail = goal == OptimizationGoal.Damage
+                    ? $", {damageMinimumQuality}+Chance={best.QualityChance:P0}"
+                    : string.Empty;
                 string message = $"Optimized template '{template?.TemplateName?.ToString() ?? "Unknown"}' (Goal: {goal}). Best design: " +
                     $"Blade={best.Blade?.Name?.ToString() ?? "None"}, Guard={best.Guard?.Name?.ToString() ?? "None"}, " +
                     $"Grip={best.Grip?.Name?.ToString() ?? "None"}, Pommel={best.Pommel?.Name?.ToString() ?? "None"}. " +
-                    $"Score={best.Score:F1}, Value={best.Value}, XP={best.SmithingXp}, Damage={best.MaxDamage}, " +
-                    $"Stamina={best.StaminaCost}, MaterialValue={best.MaterialReferenceValue}, QualityChance={best.QualityChance:P0}, " +
+                    $"Value={best.Value}, XP={best.SmithingXp}, Damage={best.MaxDamage}{scoreDetail}{qualityDetail}, " +
+                    $"Stamina={best.StaminaCost}, MaterialValue={best.MaterialReferenceValue}, " +
                     $"Difficulty={best.Difficulty}, Smithing={crafter.GetSkillValue(DefaultSkills.Crafting)}, Slider Scales: " +
                     $"[{best.BladeScale}%, {best.GuardScale}%, {best.GripScale}%, {best.PommelScale}%]";
                 WriteLog(message);
                 return new OptimizationRunResult(scoredCurrent, best, expectedQualityScoringDisabled);
             }
-            finally
-            {
-                SetCurrentWeaponDesign(craftingLogic, originalDesign);
             }
         }
 
@@ -212,17 +214,19 @@ namespace SmithingOptimizer
                 return new OptimizationRunResult(null, null, false, true);
 
             int[] availableMaterials = GetAvailableMaterials(limitToInventory);
-            var emptyPiece = WeaponDesignElement.GetInvalidPieceForType(CraftingPiece.PieceTypes.Blade).CraftingPiece;
-            List<CraftingPiece> blades = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Blade) ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Blade, behavior) : new List<CraftingPiece> { emptyPiece };
-            List<CraftingPiece> guards = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Guard) ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Guard, behavior) : new List<CraftingPiece> { emptyPiece };
-            List<CraftingPiece> grips = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Handle) ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Handle, behavior) : new List<CraftingPiece> { emptyPiece };
-            List<CraftingPiece> pommels = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Pommel) ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Pommel, behavior) : new List<CraftingPiece> { emptyPiece };
+            List<CraftingPiece> blades = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Blade) ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Blade, behavior) : new List<CraftingPiece> { GetInvalidPiece(CraftingPiece.PieceTypes.Blade) };
+            List<CraftingPiece> guards = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Guard) ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Guard, behavior) : new List<CraftingPiece> { GetInvalidPiece(CraftingPiece.PieceTypes.Guard) };
+            List<CraftingPiece> grips = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Handle) ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Handle, behavior) : new List<CraftingPiece> { GetInvalidPiece(CraftingPiece.PieceTypes.Handle) };
+            List<CraftingPiece> pommels = template.IsPieceTypeUsable(CraftingPiece.PieceTypes.Pommel) ? GetOpenedPieces(template, CraftingPiece.PieceTypes.Pommel, behavior) : new List<CraftingPiece> { GetInvalidPiece(CraftingPiece.PieceTypes.Pommel) };
             var originalDesign = craftingLogic.CurrentWeaponDesign;
-            try
             {
-                var current = CreateCandidateFromDesign(originalDesign, emptyPiece);
+            {
+                var current = ReferenceEquals(originalDesign?.Template, template)
+                    ? CreateCandidateFromDesign(originalDesign)
+                    : null;
                 CraftingDesignCandidate? scoredCurrent = null;
-                if (current != null && IsValid(current, limitToInventory, availableMaterials) &&
+                if (current != null && IsCandidateEligible(current, template, behavior) &&
+                    IsValid(current, limitToInventory, availableMaterials) &&
                     EvaluateOrderCandidate(current, craftingLogic, crafter, template, behavior, order))
                     scoredCurrent = current;
 
@@ -264,9 +268,6 @@ namespace SmithingOptimizer
                 WriteLog($"Optimized crafting order for {crafter.Name}: completion chance={best.OrderCompletionChance:P0}, material value={best.MaterialReferenceValue}.");
                 return new OptimizationRunResult(scoredCurrent, best);
             }
-            finally
-            {
-                SetCurrentWeaponDesign(craftingLogic, originalDesign);
             }
         }
 
@@ -277,8 +278,7 @@ namespace SmithingOptimizer
             var design = CreateDesign(candidate, template);
             candidate.MaterialCosts = Campaign.Current.Models.SmithingModel.GetSmithingCostsForWeaponDesign(design);
             candidate.Difficulty = Campaign.Current.Models.SmithingModel.CalculateWeaponDesignDifficulty(design);
-            SetCurrentWeaponDesign(craftingLogic, design);
-            ItemObject item = craftingLogic.GetCurrentCraftedItemObject(true, "optimizer-order");
+            ItemObject? item = GenerateEvaluationItem(design, crafter);
             if (item == null || !TryGetModifierQualityProbabilities(design, crafter, out var probabilities)) return false;
 
             candidate.OrderCompletionChance = 0f;
@@ -394,6 +394,27 @@ namespace SmithingOptimizer
             return pieces;
         }
 
+        // The current UI design can be stale after switching weapon classes. Never let it seed
+        // a search unless every slot is valid for the template and unlocked for this campaign.
+        internal static bool IsCandidateEligible(CraftingDesignCandidate candidate, CraftingTemplate template, CraftingCampaignBehavior behavior)
+        {
+            if (candidate == null || template == null || behavior == null) return false;
+            return IsEligiblePiece(candidate.Blade, CraftingPiece.PieceTypes.Blade, template, behavior) &&
+                   IsEligiblePiece(candidate.Guard, CraftingPiece.PieceTypes.Guard, template, behavior) &&
+                   IsEligiblePiece(candidate.Grip, CraftingPiece.PieceTypes.Handle, template, behavior) &&
+                   IsEligiblePiece(candidate.Pommel, CraftingPiece.PieceTypes.Pommel, template, behavior);
+        }
+
+        private static bool IsEligiblePiece(CraftingPiece piece, CraftingPiece.PieceTypes expectedType, CraftingTemplate template, CraftingCampaignBehavior behavior)
+        {
+            if (piece == null) return false;
+            if (piece.IsEmptyPiece) return ReferenceEquals(piece, GetInvalidPiece(expectedType));
+            if (piece.PieceType != expectedType || !behavior.IsOpened(piece, template)) return false;
+            foreach (var templatePiece in template.Pieces)
+                if (ReferenceEquals(templatePiece, piece)) return true;
+            return false;
+        }
+
         private static void AccumulateCosts(CraftingPiece piece, int[] costs)
         {
             if (piece == null || piece.IsEmptyPiece) return;
@@ -431,8 +452,7 @@ namespace SmithingOptimizer
             candidate.MaterialCosts = Campaign.Current.Models.SmithingModel.GetSmithingCostsForWeaponDesign(design);
             candidate.Difficulty = Campaign.Current.Models.SmithingModel.CalculateWeaponDesignDifficulty(design);
 
-            SetCurrentWeaponDesign(craftingLogic, design);
-            ItemObject item = craftingLogic.GetCurrentCraftedItemObject(true, "optimizer");
+            ItemObject? item = GenerateEvaluationItem(design, crafter);
 
             if (item == null)
             {
@@ -440,7 +460,7 @@ namespace SmithingOptimizer
             }
 
             candidate.QualityChance = 1f;
-            if (goal == OptimizationGoal.Damage && damageMinimumQualityChance > 0)
+            if (goal == OptimizationGoal.Damage)
             {
                 if (!TryGetModifierQualityProbabilities(design, crafter, out var probabilities)) return false;
                 candidate.QualityChance = 0f;
@@ -449,7 +469,7 @@ namespace SmithingOptimizer
                     if ((int)probability.Item1 >= (int)damageMinimumQuality)
                         candidate.QualityChance += probability.Item2;
                 }
-                if (candidate.QualityChance < damageMinimumQualityChance / 100f) return false;
+                if (damageMinimumQualityChance > 0 && candidate.QualityChance < damageMinimumQualityChance / 100f) return false;
             }
 
             int value = item.Value;
@@ -487,15 +507,40 @@ namespace SmithingOptimizer
                     rawScore = value;
                     break;
             }
-            candidate.Score = ApplyEfficiency(rawScore, candidate, efficiency);
+            candidate.Score = goal == OptimizationGoal.Damage
+                ? rawScore
+                : ApplyEfficiency(rawScore, candidate, efficiency);
             return true;
         }
 
-        private static WeaponDesignElement CreatePieceElement(CraftingPiece piece, int scale)
+        // Candidate evaluation must not call the campaign crafting APIs: those perform the real
+        // craft and can award XP. This game load helper constructs a complete transient item only.
+        private static ItemObject? GenerateEvaluationItem(WeaponDesign design, Hero crafter)
+        {
+            if (InitializePreCraftedWeaponMethod == null) return null;
+            try
+            {
+                return InitializePreCraftedWeaponMethod.Invoke(null, new object[]
+                {
+                    new ItemObject("smithing_optimizer_evaluation"), design,
+                    new TextObject("Smithing Optimizer Evaluation"), crafter.Culture
+                }) as ItemObject;
+            }
+            catch (Exception ex)
+            {
+                WriteLog($"Unable to create an evaluation-only candidate item: {ex.GetBaseException().Message}");
+                return null;
+            }
+        }
+
+        private static CraftingPiece GetInvalidPiece(CraftingPiece.PieceTypes type) =>
+            WeaponDesignElement.GetInvalidPieceForType(type).CraftingPiece;
+
+        private static WeaponDesignElement CreatePieceElement(CraftingPiece piece, int scale, CraftingPiece.PieceTypes type)
         {
             if (piece == null || piece.IsEmptyPiece)
             {
-                return WeaponDesignElement.GetInvalidPieceForType(CraftingPiece.PieceTypes.Blade);
+                return WeaponDesignElement.GetInvalidPieceForType(type);
             }
             return WeaponDesignElement.CreateUsablePiece(piece, scale);
         }
@@ -560,15 +605,15 @@ namespace SmithingOptimizer
             return cost;
         }
 
-        private static CraftingDesignCandidate? CreateCandidateFromDesign(WeaponDesign design, CraftingPiece emptyPiece)
+        private static CraftingDesignCandidate? CreateCandidateFromDesign(WeaponDesign design)
         {
             if (design == null || design.UsedPieces == null || design.UsedPieces.Length < 4) return null;
             return new CraftingDesignCandidate
             {
-                Blade = design.UsedPieces[0]?.CraftingPiece ?? emptyPiece,
-                Guard = design.UsedPieces[1]?.CraftingPiece ?? emptyPiece,
-                Grip = design.UsedPieces[2]?.CraftingPiece ?? emptyPiece,
-                Pommel = design.UsedPieces[3]?.CraftingPiece ?? emptyPiece,
+                Blade = design.UsedPieces[0]?.CraftingPiece ?? GetInvalidPiece(CraftingPiece.PieceTypes.Blade),
+                Guard = design.UsedPieces[1]?.CraftingPiece ?? GetInvalidPiece(CraftingPiece.PieceTypes.Guard),
+                Grip = design.UsedPieces[2]?.CraftingPiece ?? GetInvalidPiece(CraftingPiece.PieceTypes.Handle),
+                Pommel = design.UsedPieces[3]?.CraftingPiece ?? GetInvalidPiece(CraftingPiece.PieceTypes.Pommel),
                 BladeScale = design.UsedPieces[0]?.ScalePercentage ?? 100,
                 GuardScale = design.UsedPieces[1]?.ScalePercentage ?? 100,
                 GripScale = design.UsedPieces[2]?.ScalePercentage ?? 100,
@@ -658,7 +703,7 @@ namespace SmithingOptimizer
 
             try
             {
-                probabilities = ModifierQualityProbabilitiesMethod!.Invoke(null, new object[] { design, crafter })
+                probabilities = ModifierQualityProbabilitiesMethod!.Invoke(Campaign.Current.Models.SmithingModel, new object[] { design, crafter })
                     as List<ValueTuple<ItemQuality, float>> ?? null!;
                 if (probabilities != null && probabilities.Count > 0) return true;
             }
@@ -705,10 +750,10 @@ namespace SmithingOptimizer
         {
             return new WeaponDesign(template, new TextObject("Optimized Weapon"), new[]
             {
-                CreatePieceElement(candidate.Blade, candidate.BladeScale),
-                CreatePieceElement(candidate.Guard, candidate.GuardScale),
-                CreatePieceElement(candidate.Grip, candidate.GripScale),
-                CreatePieceElement(candidate.Pommel, candidate.PommelScale)
+                CreatePieceElement(candidate.Blade, candidate.BladeScale, CraftingPiece.PieceTypes.Blade),
+                CreatePieceElement(candidate.Guard, candidate.GuardScale, CraftingPiece.PieceTypes.Guard),
+                CreatePieceElement(candidate.Grip, candidate.GripScale, CraftingPiece.PieceTypes.Handle),
+                CreatePieceElement(candidate.Pommel, candidate.PommelScale, CraftingPiece.PieceTypes.Pommel)
             }, "optimizer");
         }
 
@@ -743,23 +788,7 @@ namespace SmithingOptimizer
             switch (slot) { case 0: candidate.BladeScale = scale; break; case 1: candidate.GuardScale = scale; break; case 2: candidate.GripScale = scale; break; default: candidate.PommelScale = scale; break; }
         }
 
-        private static void SetCurrentWeaponDesign(Crafting craftingLogic, WeaponDesign design)
-        {
-            if (craftingLogic == null) return;
-            try
-            {
-                if (CurrentWeaponDesignProperty != null)
-                {
-                    CurrentWeaponDesignProperty.SetValue(craftingLogic, design);
-                }
-            }
-            catch (Exception)
-            {
-                // Ignore errors
-            }
-        }
-
-        private static void WriteLog(string message)
+        internal static void WriteLog(string message)
         {
             try
             {

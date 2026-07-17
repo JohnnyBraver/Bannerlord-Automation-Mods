@@ -36,13 +36,16 @@ namespace SmithingOptimizer
             if (crafter == null || Campaign.Current?.Models?.SmithingModel == null || MobileParty.MainParty?.ItemRoster == null)
                 return null;
 
-            // Recommendations are advisory. Stop at the first real improvement instead of
-            // evaluating every item in a large player inventory to prove it is the absolute best.
+            SmithingTrainingRecommendation? best = null;
             foreach (var candidate in EnumerateSmelting(crafter))
-                if (GetScore(candidate, efficiency) > minimumScore + 0.001f) return candidate;
+                if (GetScore(candidate, efficiency) > minimumScore + 0.001f &&
+                    (best == null || GetScore(candidate, efficiency) > GetScore(best, efficiency)))
+                    best = candidate;
             foreach (var candidate in EnumerateRefining(crafter))
-                if (GetScore(candidate, efficiency) > minimumScore + 0.001f) return candidate;
-            return null;
+                if (GetScore(candidate, efficiency) > minimumScore + 0.001f &&
+                    (best == null || GetScore(candidate, efficiency) > GetScore(best, efficiency)))
+                    best = candidate;
+            return best;
         }
 
         public static float GetScore(SmithingTrainingRecommendation candidate, OptimizationEfficiency efficiency) => efficiency switch

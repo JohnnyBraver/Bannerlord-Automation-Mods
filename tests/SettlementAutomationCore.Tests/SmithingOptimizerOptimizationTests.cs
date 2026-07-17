@@ -24,6 +24,9 @@ namespace SettlementAutomationCore.Tests
             string source = ReadSource("SmithingOptimizer", "CraftingPatches.cs");
 
             Assert.Contains("RequestOptimization(OptimizationTrigger.AutoUnlock)", source);
+            Assert.Contains("RequestOptimization(OptimizationTrigger.AutoHeroChanged)", source);
+            Assert.Contains("RequestOptimization(OptimizationTrigger.AutoWeaponCategoryChanged)", source);
+            Assert.Contains("RequestOptimization(OptimizationTrigger.AutoOrderModeEntered)", source);
             Assert.Contains("RequestOptimization(OptimizationTrigger.Manual)", source);
             Assert.Contains("RunOptimization(context)", source);
             Assert.Contains("Interlocked.Exchange(ref _isOptimizing, 1)", source);
@@ -61,7 +64,9 @@ namespace SettlementAutomationCore.Tests
             Assert.Contains("GetSkillXpForSmelting", advisor);
             Assert.Contains("GetRefiningFormulas", advisor);
             Assert.Contains("GetEnergyCostForRefining", advisor);
-            Assert.Contains("return candidate", advisor);
+            Assert.Contains("XpPerStamina => RawXp / (float)Math.Max(1, StaminaCost)", advisor);
+            Assert.Contains("SmithingTrainingRecommendation? best", advisor);
+            Assert.Contains("return best", advisor);
             Assert.Contains("OptimizationEfficiency.PerMaterialValue", advisor);
             Assert.Contains("GetCraftingXpScore", patches);
             Assert.Contains("GetXpBasisText", patches);
@@ -71,6 +76,7 @@ namespace SettlementAutomationCore.Tests
         public void SellValue_ConsidersOtherTemplatesAndCachesUnchangedPartSets()
         {
             string patches = ReadSource("SmithingOptimizer", "CraftingPatches.cs");
+            string engine = ReadSource("SmithingOptimizer", "OptimizerEngine.cs");
             Assert.Contains("_primaryUsages", patches);
             Assert.Contains("SellValueCache", patches);
             Assert.Contains("GetUnlockedPartFingerprint", patches);
@@ -81,6 +87,12 @@ namespace SettlementAutomationCore.Tests
             Assert.Contains("Kept the current weapon type", patches);
             Assert.Contains("OptimizationGoal.SmithingXp", patches);
             Assert.Contains("UpdateCraftingHero", patches);
+            Assert.Contains("GenerateEvaluationItem", engine);
+            Assert.Contains("InitializePreCraftedWeaponOnLoad", engine);
+            Assert.DoesNotContain("GetCurrentCraftedItemObject", engine);
+            Assert.DoesNotContain("CreateCraftedWeaponInFreeBuildMode", engine);
+            Assert.Contains("hasEligibleCacheEntry", patches);
+            Assert.Contains("OptimizerEngine.IsCandidateEligible(cached.Best, template, behavior)", patches);
         }
 
         [Fact]
@@ -94,11 +106,16 @@ namespace SettlementAutomationCore.Tests
             Assert.Contains("CalculateWeaponDesignDifficulty(design)", engine);
             Assert.Contains("GetSkillXpForSmithingInFreeBuildMode(item)", engine);
             Assert.Contains("GetModifierQualityProbabilities", engine);
+            Assert.Contains("BindingFlags.Instance | BindingFlags.NonPublic", engine);
+            Assert.Contains("Invoke(Campaign.Current.Models.SmithingModel", engine);
             Assert.Contains("SupportedCampaignSystemMvid", engine);
             Assert.Contains("GetEnergyCostForSmithing(item, crafter)", engine);
             Assert.Contains("GetMaterialReferenceValue", engine);
             Assert.Contains("ApplyEfficiency", engine);
             Assert.Contains("damageMinimumQualityChance > 0", engine);
+            Assert.Contains("goal == OptimizationGoal.Damage", engine);
+            Assert.Contains("? rawScore", engine);
+            Assert.Contains("Chance={best.QualityChance:P0}", engine);
         }
 
         [Fact]
@@ -111,6 +128,18 @@ namespace SettlementAutomationCore.Tests
             Assert.DoesNotContain("foreach (var blade in blades)", source);
             Assert.DoesNotContain("OrderByDescending", source);
             Assert.Contains("finally", source);
+        }
+
+        [Fact]
+        public void Optimizer_RejectsLockedOrCrossTemplateCurrentDesigns()
+        {
+            string engine = ReadSource("SmithingOptimizer", "OptimizerEngine.cs");
+
+            Assert.Contains("ReferenceEquals(originalDesign?.Template, template)", engine);
+            Assert.Contains("IsCandidateEligible(current, template, behavior)", engine);
+            Assert.Contains("behavior.IsOpened(piece, template)", engine);
+            Assert.Contains("ReferenceEquals(piece, GetInvalidPiece(expectedType))", engine);
+            Assert.Contains("foreach (var templatePiece in template.Pieces)", engine);
         }
 
         private static string ReadSource(params string[] parts)
