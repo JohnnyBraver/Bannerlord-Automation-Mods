@@ -31,7 +31,7 @@ namespace TradeOptimizer
             }
 
             var reportMode = settings?.TradeReportDetail ?? TradeReportDetailMode.TopTradeGoods;
-            return BuildAutomationReportLines(
+            var reportLines = BuildAutomationReportLines(
                 context.Stage,
                 context.BoughtItems,
                 context.SoldItems,
@@ -41,6 +41,12 @@ namespace TradeOptimizer
                 settings?.TradeReportSort ?? TradeReportSortMode.PaidPrice,
                 settings?.ApplyTradeReportLimitPerSide ?? true,
                 GetSettlementName(context));
+            foreach (var line in reportLines)
+            {
+                TradingEngine.WriteLog($"[Execution Report] {line}");
+            }
+
+            return reportLines;
         }
 
         internal static IReadOnlyList<string> BuildAutomationReportLines(
@@ -71,17 +77,17 @@ namespace TradeOptimizer
                 return lines;
             }
 
-            string topTradeGoodsSummary = BuildTopTradeGoodsSummary(boughtItems, soldItems, topTradeGoodsLimit, sortMode, limitPerSide);
-            if (string.IsNullOrWhiteSpace(topTradeGoodsSummary))
+            string topItemsSummary = BuildTopItemsSummary(boughtItems, soldItems, topTradeGoodsLimit, sortMode, limitPerSide);
+            if (string.IsNullOrWhiteSpace(topItemsSummary))
             {
                 return lines;
             }
 
-            lines.Add($"[Trade] Free trade @ {settlementName}: {topTradeGoodsSummary}");
+            lines.Add($"[Trade] Free trade @ {settlementName}: {topItemsSummary}");
             return lines;
         }
 
-        private static string BuildTopTradeGoodsSummary(
+        private static string BuildTopItemsSummary(
             IReadOnlyList<AutomationReportItem> boughtItems,
             IReadOnlyList<AutomationReportItem> soldItems,
             int topTradeGoodsLimit,
@@ -91,11 +97,11 @@ namespace TradeOptimizer
             int limit = Math.Max(1, topTradeGoodsLimit);
             var parts = new List<string>();
             var sold = soldItems
-                .Where(item => item.Category == InventoryItemCategory.TradeGood)
+                .Where(item => item.Quantity > 0)
                 .Select(item => new ReportItemWithDirection(item, isSale: true))
                 .ToList();
             var bought = boughtItems
-                .Where(item => item.Category == InventoryItemCategory.TradeGood)
+                .Where(item => item.Quantity > 0)
                 .Select(item => new ReportItemWithDirection(item, isSale: false))
                 .ToList();
 
@@ -222,124 +228,25 @@ namespace TradeOptimizer
             Func<TaleWorlds.Core.WeaponComponentData, TaleWorlds.Core.ItemObject.ItemUsageSetFlags> dummyFunc = w => (TaleWorlds.Core.ItemObject.ItemUsageSetFlags)0;
             var vm = new SPInventoryVM(tempLogic, false, dummyFunc);
 
-            // Capture initial counts on both sides to determine net transfers later.
-                var initialPlayerCounts = new Dictionary<string, int>();
-                var playerElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-                for (int i = 0; i < playerElements.Count; i++)
-                {
-                    var el = playerElements[i];
-                    if (el.EquipmentElement.Item != null)
-                    {
-                        string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.PlayerInventory, el.EquipmentElement);
-                        initialPlayerCounts[key] = initialPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
-                    }
-                }
-
-            // Map exact snapshot IDs to EquipmentElement values to construct TradeOrder later.
-                var eqElementMap = new Dictionary<string, EquipmentElement>();
-                for (int i = 0; i < playerElements.Count; i++)
-                {
-                    var el = playerElements[i];
-                    if (el.EquipmentElement.Item != null)
-                    {
-                        string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.PlayerInventory, el.EquipmentElement);
-                        eqElementMap[key] = el.EquipmentElement;
-                    }
-                }
-                var lockKeys = InventoryLockHelper.GetCurrentLockKeys();
-                var sellableItems = playerElements
-                    .Where(el => el.EquipmentElement.Item != null)
-                    .Select(el => new SellableItem(
-                        el.EquipmentElement,
-                        InventoryLockHelper.IsLocked(el.EquipmentElement, lockKeys) ? 0 : el.Amount))
-                    .ToList();
-                var tradeContext = TradeContextFactory.Create(party, settlement, tempLogic, sellableItems);
-                var otherElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
-                for (int i = 0; i < otherElements.Count; i++)
-                {
-                    var el = otherElements[i];
-                    if (el.EquipmentElement.Item != null)
-                    {
-                        string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.OtherInventory, el.EquipmentElement);
-                        eqElementMap[key] = el.EquipmentElement;
-                    }
-                }
+            var playerElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
+            var lockKeys = InventoryLockHelper.GetCurrentLockKeys();
+            var sellableItems = playerElements
+                .Where(el => el.EquipmentElement.Item != null)
+                .GroupBy(el => TradingEngine.GetTradeIdentityKey(el.EquipmentElement))
+                .Select(g => new SellableItem(
+                    g.First().EquipmentElement,
+                    g.Sum(el => InventoryLockHelper.IsLocked(el.EquipmentElement, lockKeys) ? 0 : el.Amount)))
+                .ToList();
+            var tradeContext = TradeContextFactory.Create(party, settlement, tempLogic, sellableItems);
 
             // Run optimization on cloned trade rosters so demand-sensitive prices shift safely.
-                var report = TradingEngine.RunOptimization(vm, runSell, runBuy, tradeContext, excludedItems);
+            var plan = TradingEngine.PlanOptimization(vm, runSell, runBuy, tradeContext, excludedItems, applyTransfers: true);
+            if (settings.SimulationMode)
+            {
+                return orders;
+            }
 
-            // Compute net difference to determine what actually got traded in the simulation.
-                var finalPlayerCounts = new Dictionary<string, int>();
-                var finalPlayerElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-                for (int i = 0; i < finalPlayerElements.Count; i++)
-                {
-                    var el = finalPlayerElements[i];
-                    if (el.EquipmentElement.Item != null)
-                    {
-                        string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.PlayerInventory, el.EquipmentElement);
-                        finalPlayerCounts[key] = finalPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
-                        if (!eqElementMap.ContainsKey(key))
-                        {
-                            eqElementMap[key] = el.EquipmentElement;
-                        }
-                    }
-                }
-
-            // Adjust final counts to subtract yields of slaughter arbitrage.
-                foreach (var slaughter in report.ArbitrageSlaughters)
-                {
-                    var item = slaughter.EqElement.Item;
-                    if (item != null && item.HorseComponent != null)
-                    {
-                        int meatYield = item.HorseComponent.MeatCount * slaughter.Amount;
-                        int hidesYield = item.HorseComponent.HideCount * slaughter.Amount;
-
-                        string meatId = InventoryItemView.CreateSnapshotId(
-                            InventoryLogic.InventorySide.PlayerInventory,
-                            new EquipmentElement(DefaultItems.Meat, null, null!, false));
-                        string hidesId = InventoryItemView.CreateSnapshotId(
-                            InventoryLogic.InventorySide.PlayerInventory,
-                            new EquipmentElement(DefaultItems.Hides, null, null!, false));
-
-                        if (meatYield > 0 && finalPlayerCounts.ContainsKey(meatId))
-                        {
-                            finalPlayerCounts[meatId] = Math.Max(0, finalPlayerCounts[meatId] - meatYield);
-                        }
-                        if (hidesYield > 0 && finalPlayerCounts.ContainsKey(hidesId))
-                        {
-                            finalPlayerCounts[hidesId] = Math.Max(0, finalPlayerCounts[hidesId] - hidesYield);
-                        }
-                    }
-                }
-
-            // All unique items across initial and final player inventory.
-                var allKeys = initialPlayerCounts.Keys.Union(finalPlayerCounts.Keys).Distinct();
-
-                foreach (var key in allKeys)
-                {
-                    int initialCount = initialPlayerCounts.TryGetValue(key, out int c1) ? c1 : 0;
-                    int finalCount = finalPlayerCounts.TryGetValue(key, out int c2) ? c2 : 0;
-                    int diff = finalCount - initialCount; // positive means we bought, negative means we sold
-
-                    if (diff > 0)
-                    {
-                        if (!eqElementMap.ContainsKey(key)) continue;
-                        orders.Add(new TradeOrder(eqElementMap[key], diff, true));
-                    }
-                    else if (diff < 0)
-                    {
-                        if (!eqElementMap.ContainsKey(key)) continue;
-                        orders.Add(new TradeOrder(eqElementMap[key], -diff, false));
-                    }
-                }
-
-            // Manually append the buy and slaughter orders for arbitrage slaughters.
-                foreach (var slaughter in report.ArbitrageSlaughters)
-                {
-                    orders.Add(new TradeOrder(slaughter.EqElement, slaughter.Amount, true, false));
-                    orders.Add(new TradeOrder(slaughter.EqElement, slaughter.Amount, false, true));
-                }
-
+            orders.AddRange(plan.ToTradeOrders());
             return orders;
         }
 
@@ -382,103 +289,26 @@ namespace TradeOptimizer
             Func<TaleWorlds.Core.WeaponComponentData, TaleWorlds.Core.ItemObject.ItemUsageSetFlags> dummyFunc = w => (TaleWorlds.Core.ItemObject.ItemUsageSetFlags)0;
             var vm = new SPInventoryVM(tempLogic, false, dummyFunc);
 
-            // Capture initial counts.
-                var initialPlayerCounts = new Dictionary<string, int>();
-                var eqElementMap = new Dictionary<string, EquipmentElement>();
-                var playerElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-                for (int i = 0; i < playerElements.Count; i++)
-                {
-                    var el = playerElements[i];
-                    if (el.EquipmentElement.Item != null)
-                    {
-                        string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.PlayerInventory, el.EquipmentElement);
-                        initialPlayerCounts[key] = initialPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
-                        eqElementMap[key] = el.EquipmentElement;
-                    }
-                }
-                var otherElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory);
-                for (int i = 0; i < otherElements.Count; i++)
-                {
-                    var el = otherElements[i];
-                    if (el.EquipmentElement.Item != null)
-                    {
-                        string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.OtherInventory, el.EquipmentElement);
-                        eqElementMap[key] = el.EquipmentElement;
-                    }
-                }
+            bool runSell = !settings.ShouldSplitTransactions;
+            bool runBuy = true;
+            var planningContext = new TradeContext(
+                context.Settlement,
+                context.Party,
+                tempLogic,
+                context.AvailableGold,
+                context.CargoCapacityBalance,
+                context.EnforceCargoLimit,
+                context.FreeAnimalSlots,
+                context.MaxPackAnimalPurchases,
+                context.SellableItems);
 
-                // If split transactions, for free trade we only run buy phase (sell was handled in pre-sell)
-                bool runSell = !settings.ShouldSplitTransactions;
-                bool runBuy = true;
+            var plan = TradingEngine.PlanOptimization(vm, runSell, runBuy, planningContext, applyTransfers: true);
+            if (settings.SimulationMode)
+            {
+                return new TradeProposal(actions);
+            }
 
-                var report = TradingEngine.RunOptimization(vm, runSell, runBuy, context);
-
-                // Compute net changes
-                var finalPlayerCounts = new Dictionary<string, int>();
-                var finalPlayerElements = tempLogic.GetElementsInRoster(InventoryLogic.InventorySide.PlayerInventory);
-                for (int i = 0; i < finalPlayerElements.Count; i++)
-                {
-                    var el = finalPlayerElements[i];
-                    if (el.EquipmentElement.Item != null)
-                    {
-                        string key = InventoryItemView.CreateSnapshotId(InventoryLogic.InventorySide.PlayerInventory, el.EquipmentElement);
-                        finalPlayerCounts[key] = finalPlayerCounts.TryGetValue(key, out int count) ? count + el.Amount : el.Amount;
-                        if (!eqElementMap.ContainsKey(key))
-                            eqElementMap[key] = el.EquipmentElement;
-                    }
-                }
-
-                // Adjust for slaughter yields
-                foreach (var slaughter in report.ArbitrageSlaughters)
-                {
-                    var item = slaughter.EqElement.Item;
-                    if (item?.HorseComponent != null)
-                    {
-                        int meatYield = item.HorseComponent.MeatCount * slaughter.Amount;
-                        int hidesYield = item.HorseComponent.HideCount * slaughter.Amount;
-                        string meatId = InventoryItemView.CreateSnapshotId(
-                            InventoryLogic.InventorySide.PlayerInventory,
-                            new EquipmentElement(DefaultItems.Meat, null, null!, false));
-                        string hidesId = InventoryItemView.CreateSnapshotId(
-                            InventoryLogic.InventorySide.PlayerInventory,
-                            new EquipmentElement(DefaultItems.Hides, null, null!, false));
-                        if (meatYield > 0 && finalPlayerCounts.ContainsKey(meatId))
-                            finalPlayerCounts[meatId] = Math.Max(0, finalPlayerCounts[meatId] - meatYield);
-                        if (hidesYield > 0 && finalPlayerCounts.ContainsKey(hidesId))
-                            finalPlayerCounts[hidesId] = Math.Max(0, finalPlayerCounts[hidesId] - hidesYield);
-                    }
-                }
-
-                var allKeys = initialPlayerCounts.Keys.Union(finalPlayerCounts.Keys).Distinct();
-                foreach (var key in allKeys)
-                {
-                    if (!eqElementMap.ContainsKey(key)) continue;
-                    int initialCount = initialPlayerCounts.TryGetValue(key, out int c1) ? c1 : 0;
-                    int finalCount = finalPlayerCounts.TryGetValue(key, out int c2) ? c2 : 0;
-                    int diff = finalCount - initialCount;
-
-                    if (diff > 0)
-                    {
-                        actions.Add(new TradeAction(eqElementMap[key], diff, TradeActionType.Buy));
-                    }
-                    else if (diff < 0)
-                    {
-                        // Only propose sell if item is in context's sellable list
-                        var sellable = context.SellableItems.FirstOrDefault(s => s.Matches(eqElementMap[key]));
-                        int sellQty = Math.Min(-diff, sellable?.AvailableQuantity ?? 0);
-                        if (sellQty > 0)
-                            actions.Add(new TradeAction(eqElementMap[key], sellQty, TradeActionType.Sell));
-                    }
-                }
-
-                // Append slaughter actions
-                foreach (var slaughter in report.ArbitrageSlaughters)
-                {
-                    actions.Add(new TradeAction(slaughter.EqElement, slaughter.Amount, TradeActionType.Buy));
-                    actions.Add(new TradeAction(slaughter.EqElement, slaughter.Amount, TradeActionType.Slaughter));
-                }
-
-            return new TradeProposal(actions);
+            return plan.ToTradeProposal();
         }
     }
 }

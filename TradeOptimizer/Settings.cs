@@ -81,6 +81,36 @@ namespace TradeOptimizer
         public override string ToString() => _name;
     }
 
+
+    public enum BuyCapPolicy
+    {
+        None,
+        Count,
+        Value,
+        Both
+    }
+
+    public class BuyCapPolicyOption
+    {
+        private readonly string _name;
+        public BuyCapPolicy Value { get; }
+        public BuyCapPolicyOption(string name, BuyCapPolicy value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
+
+    public enum BuyCapMode
+    {
+        PerVisit,
+        Inventory
+    }
+
+    public class BuyCapModeOption
+    {
+        private readonly string _name;
+        public BuyCapMode Value { get; }
+        public BuyCapModeOption(string name, BuyCapMode value) { _name = name; Value = value; }
+        public override string ToString() => _name;
+    }
     public enum TradeReportDetailMode
     {
         TopTradeGoods,
@@ -152,9 +182,23 @@ namespace TradeOptimizer
             new TradingModeOption("Buy & Sell", TradingMode.BuyAndSell)
         };
 
+
+        private static readonly IReadOnlyList<BuyCapPolicyOption> BuyCapPolicyOptions = new List<BuyCapPolicyOption>
+        {
+            new BuyCapPolicyOption("None", BuyCapPolicy.None),
+            new BuyCapPolicyOption("Count", BuyCapPolicy.Count),
+            new BuyCapPolicyOption("Value", BuyCapPolicy.Value),
+            new BuyCapPolicyOption("Both", BuyCapPolicy.Both)
+        };
+
+        private static readonly IReadOnlyList<BuyCapModeOption> BuyCapModeOptions = new List<BuyCapModeOption>
+        {
+            new BuyCapModeOption("Per Visit", BuyCapMode.PerVisit),
+            new BuyCapModeOption("Inventory", BuyCapMode.Inventory)
+        };
         private static readonly IReadOnlyList<TradeReportDetailModeOption> TradeReportDetailModeOptions = new List<TradeReportDetailModeOption>
         {
-            new TradeReportDetailModeOption("Top Trade Goods", TradeReportDetailMode.TopTradeGoods),
+            new TradeReportDetailModeOption("Top Items", TradeReportDetailMode.TopTradeGoods),
             new TradeReportDetailModeOption("Full Item List", TradeReportDetailMode.Full)
         };
 
@@ -198,7 +242,7 @@ namespace TradeOptimizer
             new Dropdown<CostBasisModeOption>(CostBasisModeOptions, 0);
 
         [SettingPropertyDropdown("Trading Stance", RequireRestart = false,
-            HintText = "Balanced: sells at margin, holds cheap items unless cargo is >= 80%. Max Profit: always holds cheap items.", Order = 3)]
+            HintText = "Balanced: sells at margin, holds cheap items unless usable cargo is at or above Cargo Limit Threshold. Max Profit: always holds cheap items.", Order = 3)]
         [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
         public Dropdown<TradingStanceOption> TradingStanceDropdown { get; set; } =
             new Dropdown<TradingStanceOption>(TradingStanceOptions, 0);
@@ -259,6 +303,11 @@ namespace TradeOptimizer
             set => _cargoLimitThreshold = (float)System.Math.Round(value / 0.05f) * 0.05f;
         }
 
+        [SettingPropertyBool("Enable Margin Swapping", RequireRestart = false,
+            HintText = "Allow selling lower-margin owned items to free up cargo space when buying higher-margin items. Experimental. Default: False.", Order = 10)]
+        [SettingPropertyGroup("Price Margins", GroupOrder = 1)]
+        public bool EnableMarginSwapping { get; set; } = false;
+
         [SettingPropertyDropdown("Food Trading Policy", RequireRestart = false,
             HintText = "Control how food items are auto-traded.", Order = 1)]
         [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
@@ -283,40 +332,57 @@ namespace TradeOptimizer
         public Dropdown<TradingModeOption> CraftingMaterialsTradingModeDropdown { get; set; } =
             new Dropdown<TradingModeOption>(TradingModeOptions, 0); // Default: None (index 0)
 
+        [SettingPropertyDropdown("Buy Cap Policy", RequireRestart = false,
+            HintText = "Choose which optional buy caps apply. Caps only stop new purchases; they never force selling existing inventory. None lets TradeOptimizer buy every profitable stack allowed by price, cargo, budget, and merchant stock. Default: None.", Order = 5)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
+        public Dropdown<BuyCapPolicyOption> BuyCapPolicyDropdown { get; set; } =
+            new Dropdown<BuyCapPolicyOption>(BuyCapPolicyOptions, 0);
+
+        [SettingPropertyDropdown("Buy Count Cap Mode", RequireRestart = false,
+            HintText = "Per Visit limits units bought during this town stop. Inventory limits total owned units after simulated buys. Used when Buy Cap Policy includes Count. Never forces selling.", Order = 6)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
+        public Dropdown<BuyCapModeOption> BuyCountCapModeDropdown { get; set; } =
+            new Dropdown<BuyCapModeOption>(BuyCapModeOptions, 0);
+
         [SettingPropertyInteger("Max Stack Size to Buy", 1, 500, RequireRestart = false,
-            HintText = "Maximum number of any single item type to buy per trade stop.", Order = 5)]
+            HintText = "Optional count cap for any single item type. Meaning is controlled by Buy Count Cap Mode. Default: 100.", Order = 7)]
         [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
         public int MaxStackSizeToBuy { get; set; } = 100;
+
+        [SettingPropertyDropdown("Buy Value Cap Mode", RequireRestart = false,
+            HintText = "Per Visit limits denars spent on this item during this town stop. Inventory limits total owned stack value at current local buy price. Used when Buy Cap Policy includes Value. Never forces selling.", Order = 8)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
+        public Dropdown<BuyCapModeOption> BuyValueCapModeDropdown { get; set; } =
+            new Dropdown<BuyCapModeOption>(BuyCapModeOptions, 0);
 
         private int _maxStackValueToBuy = 2000;
 
         [SettingPropertyInteger("Max Stack Total Value", 500, 50000, RequireRestart = false,
-            HintText = "Stop buying an item type once its total stack value exceeds this in denars. Default: 2000 denars. Snapping step: 500.", Order = 6)]
+            HintText = "Optional value cap for any single item type in denars. Meaning is controlled by Buy Value Cap Mode. Default: 2000 denars. Snapping step: 500.", Order = 9)]
         [SettingPropertyGroup("Trading Policies", GroupOrder = 2)]
         public int MaxStackValueToBuy
         {
             get => _maxStackValueToBuy;
             set => _maxStackValueToBuy = ((value + 250) / 500) * 500;
         }
-
         [SettingPropertyDropdown("Level of Detail", RequireRestart = false,
-            HintText = "Top Trade Goods reports only the most important trade goods. Full Item List reports every traded item.", Order = 1)]
+            HintText = "Top Items reports only the most important item types. Full Item List reports every traded item.", Order = 1)]
         [SettingPropertyGroup("Trade Reporting", GroupOrder = 3)]
         public Dropdown<TradeReportDetailModeOption> TradeReportDetailDropdown { get; set; } =
             new Dropdown<TradeReportDetailModeOption>(TradeReportDetailModeOptions, 0);
 
         [SettingPropertyInteger("Max Items to Print Details For", 1, 20, RequireRestart = false,
-            HintText = "Maximum trade-good item types shown for buys and for sells in the concise in-game TradeOptimizer report.", Order = 2)]
+            HintText = "Maximum item types shown for buys and for sells in the concise in-game TradeOptimizer report.", Order = 2)]
         [SettingPropertyGroup("Trade Reporting", GroupOrder = 3)]
         public int TopTradeGoodsToReport { get; set; } = 4;
 
         [SettingPropertyBool("Apply Max Items Per Side", RequireRestart = false,
-            HintText = "If enabled, the max item count applies separately to sold and bought trade goods. If disabled, the max applies to the combined report.", Order = 3)]
+            HintText = "If enabled, the max item count applies separately to sold and bought items. If disabled, the max applies to the combined report.", Order = 3)]
         [SettingPropertyGroup("Trade Reporting", GroupOrder = 3)]
         public bool ApplyTradeReportLimitPerSide { get; set; } = true;
 
         [SettingPropertyDropdown("Sorting Mode", RequireRestart = false,
-            HintText = "Choose how the concise in-game TradeOptimizer report selects top trade goods.", Order = 4)]
+            HintText = "Choose how the concise in-game TradeOptimizer report selects top items.", Order = 4)]
         [SettingPropertyGroup("Trade Reporting", GroupOrder = 3)]
         public Dropdown<TradeReportSortModeOption> TradeReportSortDropdown { get; set; } =
             new Dropdown<TradeReportSortModeOption>(TradeReportSortModeOptions, 2);
@@ -329,6 +395,9 @@ namespace TradeOptimizer
         public bool ShouldSplitTransactions => LootHandling == LootHandlingMode.XPFarm;
 
         public TradingMode FoodTradingMode => FoodTradingModeDropdown.SelectedValue.Value;
+        public BuyCapPolicy BuyCapPolicy => BuyCapPolicyDropdown.SelectedValue.Value;
+        public BuyCapMode BuyCountCapMode => BuyCountCapModeDropdown.SelectedValue.Value;
+        public BuyCapMode BuyValueCapMode => BuyValueCapModeDropdown.SelectedValue.Value;
         public TradingMode LivestockTradingMode => LivestockTradingModeDropdown.SelectedValue.Value;
         public TradingMode MountsTradingMode => MountsTradingModeDropdown.SelectedValue.Value;
         public TradingMode CraftingMaterialsTradingMode => CraftingMaterialsTradingModeDropdown.SelectedValue.Value;

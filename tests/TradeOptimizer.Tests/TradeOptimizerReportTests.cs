@@ -16,10 +16,14 @@ namespace TradeOptimizer.Tests
             Assert.Equal(4, settings.TopTradeGoodsToReport);
             Assert.True(settings.ApplyTradeReportLimitPerSide);
             Assert.Equal(TradeReportSortMode.PaidPrice, settings.TradeReportSort);
+            Assert.False(settings.EnableMarginSwapping);
+            Assert.Equal(BuyCapPolicy.None, settings.BuyCapPolicy);
+            Assert.Equal(BuyCapMode.PerVisit, settings.BuyCountCapMode);
+            Assert.Equal(BuyCapMode.PerVisit, settings.BuyValueCapMode);
         }
 
         [Fact]
-        public void BuildAutomationReportLines_DefaultsToTopTradeGoodsByPaidPrice()
+        public void BuildAutomationReportLines_DefaultsToTopItemsByPaidPrice()
         {
             var bought = new[]
                 {
@@ -48,7 +52,32 @@ namespace TradeOptimizer.Tests
         }
 
         [Fact]
-        public void BuildAutomationReportLines_CanSortTopTradeGoodsByAmountOrMarketValue()
+        public void BuildAutomationReportLines_ConciseModeIncludesFoodTrades()
+        {
+            var sold = new[]
+                {
+                    Item("Hides", InventoryItemCategory.TradeGood, 5, 481, 545),
+                    Item("Date Fruit", InventoryItemCategory.Food, 5, 437, 565),
+                    Item("Wool", InventoryItemCategory.TradeGood, 8, 297, 336),
+                    Item("Salt", InventoryItemCategory.TradeGood, 3, 277, 291)
+                };
+
+            var lines = TradeOptimizerProvider.BuildAutomationReportLines(
+                AutomationTransactionStage.FreeTrade,
+                new List<AutomationReportItem>(),
+                sold,
+                new List<AutomationReportItem>(),
+                TradeReportDetailMode.TopTradeGoods,
+                topTradeGoodsLimit: 4,
+                TradeReportSortMode.PaidPrice,
+                limitPerSide: true,
+                settlementName: "Seonon");
+
+            Assert.Equal("[Trade] Free trade @ Seonon: sold 5x Hides (+481d), 5x Date Fruit (+437d), 8x Wool (+297d), 3x Salt (+277d)", Assert.Single(lines));
+        }
+
+        [Fact]
+        public void BuildAutomationReportLines_CanSortTopItemsByAmountOrMarketValue()
         {
             var bought = new[]
                 {

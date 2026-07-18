@@ -22,11 +22,20 @@ namespace TradeOptimizer
         public static Harmony? HarmonyInstance { get; private set; }
         private static UIExtender? _uiExtender;
         private static bool _uiExtenderInitialized = false;
+        public static string Version { get; private set; } = "vUnknown";
 
 
         protected override void OnSubModuleLoad()
         {
             base.OnSubModuleLoad();
+
+            var assemblyVersion = typeof(SubModule).Assembly.GetName().Version;
+            Version = $"v{assemblyVersion.Major}.{assemblyVersion.Minor}.{assemblyVersion.Build}";
+            try
+            {
+                TradingEngine.WriteLog($"[SubModule] Loaded Trade Optimizer {Version}");
+            }
+            catch { }
 
             try
             {

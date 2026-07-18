@@ -25,6 +25,7 @@ namespace SettlementAutomationCore.Tests
 
             Assert.True(coreSettings.LimitToInventoryCapacity);
             Assert.Equal(10, coreSettings.ReserveCarryCapacityPercent);
+            Assert.Equal(SettlementAutomationCore.IgnoreWeightLimitTier.AllRequests, coreSettings.IgnoreWeightLimitSetting);
         }
 
         [Fact]

@@ -18,7 +18,7 @@ namespace TradeOptimizer.Tests
         [Fact]
         public void TradingEngine_BoundsBuyLoopAndDiagnosticSpam()
         {
-            string source = ReadSource("TradeOptimizer", "TradingEngine.cs");
+            string source = ReadSource("TradeOptimizer", "TradePlanner.cs");
 
             Assert.Contains("MaxBuyLoopIterations", source);
             Assert.Contains("MaxBuySkipDiagnostics", source);
@@ -26,14 +26,42 @@ namespace TradeOptimizer.Tests
             Assert.Contains("Additional buy-skip diagnostics suppressed", source);
         }
 
+
+        [Fact]
+        public void TradingEngine_KeepsMarginSwappingBehindExplicitSetting()
+        {
+            string source = ReadSource("TradeOptimizer", "TradePlanner.cs");
+            string evaluator = ReadSource("TradeOptimizer", "TradeBuyCandidateEvaluator.cs");
+
+            Assert.Contains("bool marginSwappingEnabled = settings.EnableMarginSwapping;", source);
+            Assert.Contains("marginSwappingEnabled", source);
+            Assert.Contains("SwapCandidatePair.Empty", source);
+            Assert.Contains("FindWorstOwnedSwapCandidates", source);
+            Assert.Contains("TradeBlockReason.Overburdened", evaluator);
+        }
+
+
+        [Fact]
+        public void TradingEngine_GatesBuyCapsByPolicyAndMode()
+        {
+            string source = ReadSource("TradeOptimizer", "TradeBuyCandidateEvaluator.cs");
+
+            Assert.Contains("input.BuyCapPolicy == BuyCapPolicy.Count || input.BuyCapPolicy == BuyCapPolicy.Both", source);
+            Assert.Contains("input.BuyCapPolicy == BuyCapPolicy.Value || input.BuyCapPolicy == BuyCapPolicy.Both", source);
+            Assert.Contains("input.BuyCountCapMode == BuyCapMode.PerVisit ? input.BoughtSoFar : input.CurrentlyOwned", source);
+            Assert.Contains("input.VisitSpentSoFar + input.CurrentPrice", source);
+            Assert.Contains("(input.CurrentlyOwned + 1) * input.CurrentPrice", source);
+        }
+
         [Fact]
         public void TradingEngine_DoesNotUseDisplayNameForSameStopExclusion()
         {
-            string source = ReadSource("TradeOptimizer", "TradingEngine.cs");
+            string source = ReadSource("TradeOptimizer", "TradePlanner.cs");
 
             Assert.DoesNotContain("localExcludedItems.Add(itemObj.Name.ToString())", source);
             Assert.DoesNotContain("localExcludedItems.Contains(itemObj.Name.ToString())", source);
-            Assert.Contains("GetTradeIdentityKey", source);
+            Assert.Contains("localExcludedItems.Add(stack.IdentityKey)", source);
+            Assert.Contains("SoldInSameStop = localExcludedItems.Contains(stack.IdentityKey)", source);
         }
 
         [Fact]
@@ -48,13 +76,63 @@ namespace TradeOptimizer.Tests
         }
 
         [Fact]
-        public void Provider_MapsNewPlayerSideStacksWhenReconstructingSimulatedBuys()
+        public void Provider_UsesPlannerRecordedActionsInsteadOfInventoryDiff()
         {
             string source = ReadSource("TradeOptimizer", "TradeOptimizerProvider.cs");
             string collectOrders = SliceMethod(source, "private List<TradeOrder> SimulateAndCollectOrders");
+            string analyzeMarket = SliceMethod(source, "public TradeProposal AnalyzeMarket");
 
-            Assert.Contains("if (!eqElementMap.ContainsKey(key))", collectOrders);
-            Assert.Contains("eqElementMap[key] = el.EquipmentElement;", collectOrders);
+            Assert.Contains("TradingEngine.PlanOptimization", collectOrders);
+            Assert.Contains("plan.ToTradeOrders()", collectOrders);
+            Assert.Contains("TradingEngine.PlanOptimization", analyzeMarket);
+            Assert.Contains("plan.ToTradeProposal()", analyzeMarket);
+            Assert.DoesNotContain("finalPlayerCounts", collectOrders);
+            Assert.DoesNotContain("finalPlayerCounts", analyzeMarket);
+            Assert.DoesNotContain("eqElementMap", collectOrders);
+            Assert.DoesNotContain("eqElementMap", analyzeMarket);
+        }
+
+        [Fact]
+        public void Provider_HonorsSimulationModeBeforeReturningExecutableTrades()
+        {
+            string source = ReadSource("TradeOptimizer", "TradeOptimizerProvider.cs");
+            string collectOrders = SliceMethod(source, "private List<TradeOrder> SimulateAndCollectOrders");
+            string analyzeMarket = SliceMethod(source, "public TradeProposal AnalyzeMarket");
+
+            Assert.Contains("if (settings.SimulationMode)", collectOrders);
+            Assert.Contains("return orders;", collectOrders);
+            Assert.Contains("if (settings.SimulationMode)", analyzeMarket);
+            Assert.Contains("return new TradeProposal(actions);", analyzeMarket);
+        }
+
+        [Fact]
+        public void TradePlanner_AppliesLootHandlingModes()
+        {
+            string source = ReadSource("TradeOptimizer", "TradePlanner.cs");
+
+            Assert.Contains("settings.LootHandling == LootHandlingMode.Liquidate || settings.LootHandling == LootHandlingMode.XPFarm", source);
+            Assert.Contains("settings.LootHandling != LootHandlingMode.Profit", source);
+            Assert.Contains("LootHandlingMode.XPFarm) && sold > 0", source);
+        }
+
+        [Fact]
+        public void TradePlanner_AppliesCategoryPolicyToXpFarmActivation()
+        {
+            string source = ReadSource("TradeOptimizer", "TradePlanner.cs");
+            string activation = SliceMethod(source, "private static void PlanXpFarmActivation");
+
+            Assert.Contains("TradeCandidatePolicy.CanTradeByMode", activation);
+            Assert.Contains("isBuy: true", activation);
+        }
+
+        [Fact]
+        public void TradePlanner_UsesTradeContextForAnimalHeadroom()
+        {
+            string source = ReadSource("TradeOptimizer", "TradePlanner.cs");
+
+            Assert.Contains("RemainingAnimalSlots = request.TradeContext.FreeAnimalSlots", source);
+            Assert.Contains("request.TradeContext.FreeAnimalSlots - state.TotalAnimalsBoughtInSim", source);
+            Assert.DoesNotContain("HerdingCalculator.GetRemainingAnimalSlots", source);
         }
 
         private static string ReadSource(params string[] parts)
@@ -93,7 +171,7 @@ namespace TradeOptimizer.Tests
         [Fact]
         public void TradingEngine_ImplementsCargoLimitThresholdAndGoodSellThreshold()
         {
-            string source = ReadSource("TradeOptimizer", "TradingEngine.cs");
+            string source = ReadSource("TradeOptimizer", "TradePlanner.cs");
 
             Assert.Contains("CargoLimitThreshold", source);
             Assert.Contains("GoodSellThreshold", source);

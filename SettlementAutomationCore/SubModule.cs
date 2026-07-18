@@ -2003,7 +2003,9 @@ namespace SettlementAutomationCore
             }
 
             bool isCargo = !item.IsAnimal && !item.IsMountable;
-            if (isCargo && (state.Settings?.LimitToInventoryCapacity ?? true))
+            bool ignoreWeight = state.Settings != null && ShouldIgnoreWeight(request.Profile, state.Settings.IgnoreWeightLimitSetting);
+
+            if (isCargo && !ignoreWeight && (state.Settings?.LimitToInventoryCapacity ?? true))
             {
                 float remainingCargoSpace = TradeContextFactory.CalculateFreeCargoCapacity(
                     MobileParty.MainParty.InventoryCapacity,
@@ -2664,6 +2666,25 @@ namespace SettlementAutomationCore
                 freeAnimalSlots,
                 context.MaxPackAnimalPurchases,
                 sellableItems);
+        }
+
+        private static bool ShouldIgnoreWeight(RequestProfile profile, IgnoreWeightLimitTier setting)
+        {
+            switch (setting)
+            {
+                case IgnoreWeightLimitTier.None:
+                    return false;
+                case IgnoreWeightLimitTier.CriticalOnly:
+                    return profile == RequestProfile.Critical;
+                case IgnoreWeightLimitTier.EssentialOrHigher:
+                    return profile == RequestProfile.Critical || profile == RequestProfile.Essential;
+                case IgnoreWeightLimitTier.RoutineOrHigher:
+                    return profile == RequestProfile.Critical || profile == RequestProfile.Essential || profile == RequestProfile.Routine;
+                case IgnoreWeightLimitTier.AllRequests:
+                    return true;
+                default:
+                    return false;
+            }
         }
     }
 

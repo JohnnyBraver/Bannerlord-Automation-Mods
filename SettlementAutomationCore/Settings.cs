@@ -47,6 +47,29 @@ namespace SettlementAutomationCore
         public override string ToString() => _name;
     }
 
+    public enum IgnoreWeightLimitTier
+    {
+        None,
+        CriticalOnly,
+        EssentialOrHigher,
+        RoutineOrHigher,
+        AllRequests
+    }
+
+    public class IgnoreWeightLimitTierOption
+    {
+        private readonly string _name;
+        public IgnoreWeightLimitTier Value { get; }
+
+        public IgnoreWeightLimitTierOption(string name, IgnoreWeightLimitTier value)
+        {
+            _name = name;
+            Value = value;
+        }
+
+        public override string ToString() => _name;
+    }
+
     public class Settings : AttributeGlobalSettings<Settings>
     {
         public override string Id => "SettlementAutomationCore_v0_5";
@@ -59,6 +82,15 @@ namespace SettlementAutomationCore
             new CoreReportingModeOption("Off", CoreReportingMode.Off),
             new CoreReportingModeOption("Silent Mods", CoreReportingMode.SilentMods),
             new CoreReportingModeOption("Full", CoreReportingMode.Full)
+        };
+
+        private static readonly IReadOnlyList<IgnoreWeightLimitTierOption> IgnoreWeightLimitTierOptions = new List<IgnoreWeightLimitTierOption>
+        {
+            new IgnoreWeightLimitTierOption("None (Respect weight)", IgnoreWeightLimitTier.None),
+            new IgnoreWeightLimitTierOption("Critical only", IgnoreWeightLimitTier.CriticalOnly),
+            new IgnoreWeightLimitTierOption("Essential or higher", IgnoreWeightLimitTier.EssentialOrHigher),
+            new IgnoreWeightLimitTierOption("Routine or higher", IgnoreWeightLimitTier.RoutineOrHigher),
+            new IgnoreWeightLimitTierOption("All requests", IgnoreWeightLimitTier.AllRequests)
         };
 
 
@@ -122,6 +154,14 @@ namespace SettlementAutomationCore
             get => _opportunisticPriceLimitMultiplier;
             set => _opportunisticPriceLimitMultiplier = (float)System.Math.Round(value / 0.05f) * 0.05f;
         }
+
+        [SettingPropertyDropdown("Ignore Weight Limit for", RequireRestart = false,
+            HintText = "Allow buying vital items even when party is overburdened. None respects cargo capacity limits. All Requests ignores weight for all prioritized orders. Default: All Requests.", Order = 6)]
+        [SettingPropertyGroup("Trading Policies", GroupOrder = 1)]
+        public Dropdown<IgnoreWeightLimitTierOption> IgnoreWeightLimitDropdown { get; set; } =
+            new Dropdown<IgnoreWeightLimitTierOption>(IgnoreWeightLimitTierOptions, 4); // Default: All Requests
+
+        public IgnoreWeightLimitTier IgnoreWeightLimitSetting => IgnoreWeightLimitDropdown.SelectedValue.Value;
 
         [SettingPropertyDropdown("Market Report Detail", RequireRestart = false,
             HintText = "Choose Core's in-game market reporting behavior. Off writes no in-game automation report lines. Silent Mods writes module reports plus Core fallback for modules that do not report. Full also writes Core's complete transaction summary.", Order = 1)]
