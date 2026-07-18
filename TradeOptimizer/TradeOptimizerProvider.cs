@@ -296,6 +296,8 @@ namespace TradeOptimizer
                 context.Party,
                 tempLogic,
                 context.AvailableGold,
+                context.AvailableMerchantGold,
+                context.SellPricesAreStatic,
                 context.CargoCapacityBalance,
                 context.EnforceCargoLimit,
                 context.FreeAnimalSlots,

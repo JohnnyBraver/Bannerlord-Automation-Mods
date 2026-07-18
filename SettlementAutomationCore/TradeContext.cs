@@ -33,6 +33,10 @@ namespace SettlementAutomationCore
 
         // Budget
         public int AvailableGold { get; }        // Gold minus expense reserve
+        public int AvailableMerchantGold { get; } // Settlement-side gold available to pay for player sells
+
+        // Pricing
+        public bool SellPricesAreStatic { get; }
 
         // Cargo
         public float CargoCapacityBalance { get; } // usableCargoLimit - currentWeight (can go negative)
@@ -52,6 +56,8 @@ namespace SettlementAutomationCore
             MobileParty party,
             InventoryLogic logic,
             int availableGold,
+            int availableMerchantGold,
+            bool sellPricesAreStatic,
             float cargoCapacityBalance,
             bool enforceCargoLimit,
             int freeAnimalSlots,
@@ -62,6 +68,8 @@ namespace SettlementAutomationCore
             Party = party;
             Logic = logic;
             AvailableGold = availableGold;
+            AvailableMerchantGold = availableMerchantGold;
+            SellPricesAreStatic = sellPricesAreStatic;
             CargoCapacityBalance = cargoCapacityBalance;
             EnforceCargoLimit = enforceCargoLimit;
             FreeAnimalSlots = freeAnimalSlots;

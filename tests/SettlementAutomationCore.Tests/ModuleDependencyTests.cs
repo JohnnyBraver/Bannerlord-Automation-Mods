@@ -71,10 +71,7 @@ namespace SettlementAutomationCore.Tests
         {
             string root = FindRepoRoot();
             string outputPath = Path.Combine(root, moduleName, "bin", "Release");
-            if (!Directory.Exists(outputPath))
-            {
-                return;
-            }
+            Assert.True(Directory.Exists(outputPath), $"Expected build output at {outputPath}.");
 
             var forbidden = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {

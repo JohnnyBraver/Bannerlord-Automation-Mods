@@ -1,5 +1,12 @@
 # Changelog - Settlement Automation Core
 
+## [v0.5.4] - 2026-07-04
+
+### Fixed
+- **Settlement Gold Sell Cap**: Free-trade execution now caps sell quantities by the settlement's available trade gold before transferring items, preventing villages from accepting more goods than they can pay for.
+- **Chained Trade Budget Tracking**: Core now carries settlement-side trade gold through the automation context, reducing it after sells and replenishing it after buys so later providers see the correct remaining merchant cash.
+- **Trade Pricing Context**: Core now exposes whether settlement sell prices are static through `TradeContext`, allowing trade providers to follow settlement pricing rules without hardcoding settlement-type checks.
+
 ## [v0.5.3] - 2026-07-03
 
 ### Added

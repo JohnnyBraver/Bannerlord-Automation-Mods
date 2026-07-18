@@ -59,9 +59,22 @@ dotnet test tests\EquipmentManager.Tests\EquipmentManager.Tests.csproj -c Releas
 
 Test projects inherit dependency paths from `tests/Directory.Build.props`:
 
+- `BannerlordGameRoot`
 - `BannerlordGameBin`
+- `BannerlordModulesRoot`
 - `BannerlordWorkshopRoot`
 - `UIExtenderExPath`
 - `MCMv5Path`
 
-Override those properties on the command line if the local Steam or workshop install is somewhere else.
+Override those properties on the command line if the local Steam or workshop install is somewhere else. The root repo build uses the same property names through `Directory.Build.props`, so the same override works for build and test commands:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\test.ps1 -TestProject SettlementAutomationCore -Configuration Release
+dotnet build SettlementAutomationCore\SettlementAutomationCore.csproj -c Release -p:BannerlordGameRoot="D:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord"
+```
+
+`scripts\publish.ps1` accepts matching path parameters and passes them through to MSBuild before packaging deployed module files:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\publish.ps1 -Mods SettlementAutomationCore -BannerlordGameRoot "D:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord"
+```

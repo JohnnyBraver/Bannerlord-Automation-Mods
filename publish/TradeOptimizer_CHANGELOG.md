@@ -1,5 +1,13 @@
 # Changelog - Trade Optimizer
 
+## [v0.6.1] - 2026-07-04
+
+### Fixed
+- **Village Cash-Aware Sell Planning**: Sell planning now respects the settlement's remaining trade gold, so Trade Optimizer does not propose profitable sells that a village cannot afford.
+- **Village Sell Price Stability**: Sell planning now uses Core's static-price context flag to keep the first per-stack sell price for villages because village prices do not decay during the transaction. Town sell planning still rechecks demand-sensitive prices unit by unit.
+- **Merchant-Gold Diagnostics**: Planner diagnostics now distinguish `MerchantGoldDepleted` and include a compact plan block summary in the runtime log when remaining candidates are blocked.
+- **Merchant-Gold Simulation State**: Buy and sell simulation now keeps settlement-side gold in sync with planned transfers, including the experimental swap path.
+
 ## [v0.6.0] - 2026-07-03
 
 ### Fixed
