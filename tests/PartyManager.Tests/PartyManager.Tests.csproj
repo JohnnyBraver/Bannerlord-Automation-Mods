@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\SettlementAutomationCore\SettlementAutomationCore.csproj" AdditionalProperties="SkipBannerlordModuleCopy=true" />
     <ProjectReference Include="..\..\PartyManager\PartyManager.csproj" AdditionalProperties="SkipBannerlordModuleCopy=true" />
+    <ProjectReference Include="..\..\..\Bannerlord-Troop-Classifier\TroopClassifier\TroopClassifier.csproj" AdditionalProperties="SkipBannerlordModuleCopy=true" />
   </ItemGroup>
 </Project>
 

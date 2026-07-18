@@ -27,6 +27,9 @@
     <ProjectReference Include="..\SettlementAutomationCore\SettlementAutomationCore.csproj">
       <Private>False</Private>
     </ProjectReference>
+    <ProjectReference Include="..\..\Bannerlord-Troop-Classifier\TroopClassifier\TroopClassifier.csproj">
+      <Private>False</Private>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>

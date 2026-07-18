@@ -12,14 +12,17 @@ namespace PartyManager.Filters
         internal enum RecruitmentRole
         {
             None = 0,
-            FrontlineInfantry = 1 << 0,
-            ShockInfantry = 1 << 1,
-            Skirmisher = 1 << 2,
-            FootArcher = 1 << 3,
-            Crossbowman = 1 << 4,
-            MeleeCavalry = 1 << 5,
-            HorseArcher = 1 << 6,
-            PikeInfantry = 1 << 7
+            LightInfantry = 1 << 0,
+            ShieldInfantry = 1 << 1,
+            ShockInfantry = 1 << 2,
+            Skirmisher = 1 << 3,
+            FootArcher = 1 << 4,
+            Crossbowman = 1 << 5,
+            MeleeCavalry = 1 << 6,
+            HorseArcher = 1 << 7,
+            PikeInfantry = 1 << 8,
+            SpearInfantry = 1 << 9,
+            MountedSkirmisher = 1 << 10
         }
 
         private enum UnifiedPolicy
@@ -184,259 +187,46 @@ namespace PartyManager.Filters
             }
         }
 
-        private static IEnumerable<Equipment> GetBattleEquipments(CharacterObject troop)
-        {
-            bool yieldedAny = false;
-            if (troop.BattleEquipments != null)
-            {
-                foreach (var equipment in troop.BattleEquipments)
-                {
-                    if (equipment != null)
-                    {
-                        yieldedAny = true;
-                        yield return equipment;
-                    }
-                }
-            }
-
-            if (!yieldedAny && troop.Equipment != null)
-            {
-                yield return troop.Equipment;
-            }
-        }
-
-        private static bool AppearsInMostLoadouts(CharacterObject troop, System.Func<Equipment, bool> predicate)
-        {
-            int loadoutCount = 0;
-            int matchedCount = 0;
-
-            foreach (var equipment in GetBattleEquipments(troop))
-            {
-                loadoutCount++;
-                if (predicate(equipment))
-                {
-                    matchedCount++;
-                }
-            }
-
-            return loadoutCount > 0 && matchedCount > loadoutCount / 2;
-        }
-
-        private static bool HasWeaponOfClass(Equipment equipment, params WeaponClass[] classes)
-        {
-            for (int i = 0; i < 4; i++)
-            {
-                var element = equipment[i];
-                if (element.Item != null && element.Item.PrimaryWeapon != null)
-                {
-                    if (classes.Contains(element.Item.PrimaryWeapon.WeaponClass))
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        private static bool HasWeaponOfClassInMostLoadouts(CharacterObject troop, params WeaponClass[] classes)
-        {
-            return AppearsInMostLoadouts(troop, equipment => HasWeaponOfClass(equipment, classes));
-        }
-
-        private static bool HasJavelin(Equipment equipment)
-        {
-            for (int i = 0; i < 4; i++)
-            {
-                var item = equipment[i].Item;
-                if (item == null)
-                {
-                    continue;
-                }
-
-                var weapon = item.PrimaryWeapon;
-                if (weapon == null)
-                {
-                    continue;
-                }
-
-                string itemId = item.StringId?.ToLowerInvariant() ?? string.Empty;
-                if (weapon.WeaponClass == WeaponClass.Javelin ||
-                    itemId.Contains("javelin"))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static bool HasJavelinInMostLoadouts(CharacterObject troop)
-        {
-            return AppearsInMostLoadouts(troop, HasJavelin);
-        }
-
-        private static bool HasPike(CharacterObject troop)
-        {
-            return AppearsInMostLoadouts(troop, HasPike);
-        }
-
-        private static bool HasPike(Equipment equipment)
-        {
-            for (int i = 0; i < 4; i++)
-            {
-                var item = equipment[i].Item;
-                if (item == null)
-                {
-                    continue;
-                }
-
-                string itemId = item.StringId?.ToLowerInvariant() ?? string.Empty;
-                string itemName = item.Name?.ToString().ToLowerInvariant() ?? string.Empty;
-                string weaponClass = item.PrimaryWeapon?.WeaponClass.ToString() ?? string.Empty;
-
-                if (weaponClass == "Pike" ||
-                    itemId.Contains("pike") ||
-                    itemName.Contains("pike"))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static bool HasLargeSwingable(CharacterObject troop)
-        {
-            return AppearsInMostLoadouts(troop, HasLargeSwingable);
-        }
-
-        private static bool HasLargeSwingable(Equipment equipment)
-        {
-            for (int i = 0; i < 4; i++)
-            {
-                var item = equipment[i].Item;
-                if (item == null)
-                {
-                    continue;
-                }
-
-                var weapon = item.PrimaryWeapon;
-                if (weapon == null)
-                {
-                    continue;
-                }
-
-                switch (weapon.WeaponClass)
-                {
-                    case WeaponClass.TwoHandedSword:
-                    case WeaponClass.TwoHandedAxe:
-                    case WeaponClass.TwoHandedMace:
-                        return true;
-                    case WeaponClass.TwoHandedPolearm:
-                    case WeaponClass.LowGripPolearm:
-                        if (weapon.SwingDamage > 0)
-                        {
-                            return true;
-                        }
-                        break;
-                }
-            }
-
-            return false;
-        }
-
-        private static bool HasShield(Equipment equipment)
-        {
-            for (int i = 0; i < 4; i++)
-            {
-                var element = equipment[i];
-                if (element.Item != null && element.Item.PrimaryWeapon != null && element.Item.PrimaryWeapon.IsShield)
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private static bool HasShieldInMostLoadouts(CharacterObject troop)
-        {
-            return AppearsInMostLoadouts(troop, HasShield);
-        }
-
         private static bool IsRoleEnabled(CharacterObject troop, Settings settings)
         {
-            RecruitmentRole role = ClassifyRole(
-                troop.IsMounted,
-                HasWeaponOfClassInMostLoadouts(troop, WeaponClass.Bow),
-                HasWeaponOfClassInMostLoadouts(troop, WeaponClass.Crossbow),
-                HasJavelinInMostLoadouts(troop),
-                HasShieldInMostLoadouts(troop),
-                HasPike(troop),
-                HasLargeSwingable(troop));
-
+            var troopRole = TroopClassifier.TroopRoleClassifier.Classify(troop);
+            RecruitmentRole role = MapTroopRole(troopRole);
             return IsAnyRoleEnabled(role, settings);
         }
 
-        internal static RecruitmentRole ClassifyRole(
-            bool isMounted,
-            bool hasBow,
-            bool hasCrossbow,
-            bool hasJavelin,
-            bool hasShield,
-            bool hasPike,
-            bool hasLargeSwingable)
+        internal static RecruitmentRole MapTroopRole(TroopClassifier.TroopRole troopRole)
         {
-            if (isMounted)
+            switch (troopRole)
             {
-                return hasBow || hasCrossbow
-                    ? RecruitmentRole.HorseArcher
-                    : RecruitmentRole.MeleeCavalry;
+                case TroopClassifier.TroopRole.LightInfantry: return RecruitmentRole.LightInfantry;
+                case TroopClassifier.TroopRole.ShieldInfantry: return RecruitmentRole.ShieldInfantry;
+                case TroopClassifier.TroopRole.ShockInfantry: return RecruitmentRole.ShockInfantry;
+                case TroopClassifier.TroopRole.Skirmisher: return RecruitmentRole.Skirmisher;
+                case TroopClassifier.TroopRole.FootArcher: return RecruitmentRole.FootArcher;
+                case TroopClassifier.TroopRole.Crossbowman: return RecruitmentRole.Crossbowman;
+                case TroopClassifier.TroopRole.MeleeCavalry: return RecruitmentRole.MeleeCavalry;
+                case TroopClassifier.TroopRole.HorseArcher: return RecruitmentRole.HorseArcher;
+                case TroopClassifier.TroopRole.PikeInfantry: return RecruitmentRole.PikeInfantry;
+                case TroopClassifier.TroopRole.SpearInfantry: return RecruitmentRole.SpearInfantry;
+                case TroopClassifier.TroopRole.MountedSkirmisher: return RecruitmentRole.MountedSkirmisher;
+                default: return RecruitmentRole.None;
             }
-
-            if (hasBow)
-            {
-                return RecruitmentRole.FootArcher;
-            }
-
-            if (hasCrossbow)
-            {
-                return RecruitmentRole.Crossbowman;
-            }
-
-            if (hasPike)
-            {
-                return RecruitmentRole.PikeInfantry;
-            }
-
-            if (hasShield)
-            {
-                return RecruitmentRole.FrontlineInfantry;
-            }
-
-            if (hasLargeSwingable)
-            {
-                return RecruitmentRole.ShockInfantry;
-            }
-
-            if (hasJavelin)
-            {
-                return RecruitmentRole.Skirmisher;
-            }
-
-            return RecruitmentRole.FrontlineInfantry;
         }
 
         internal static bool IsAnyRoleEnabled(RecruitmentRole roles, Settings settings)
         {
             return
-                roles.HasFlag(RecruitmentRole.FrontlineInfantry) && settings.RecruitShieldInfantry ||
+                roles.HasFlag(RecruitmentRole.LightInfantry) && settings.RecruitLightInfantry ||
+                roles.HasFlag(RecruitmentRole.ShieldInfantry) && settings.RecruitShieldInfantry ||
                 roles.HasFlag(RecruitmentRole.ShockInfantry) && settings.RecruitShockInfantry ||
                 roles.HasFlag(RecruitmentRole.Skirmisher) && settings.RecruitSkirmishers ||
                 roles.HasFlag(RecruitmentRole.FootArcher) && settings.RecruitFootArchers ||
                 roles.HasFlag(RecruitmentRole.Crossbowman) && settings.RecruitCrossbowmen ||
                 roles.HasFlag(RecruitmentRole.MeleeCavalry) && settings.RecruitMeleeCavalry ||
                 roles.HasFlag(RecruitmentRole.HorseArcher) && settings.RecruitHorseArchers ||
-                roles.HasFlag(RecruitmentRole.PikeInfantry) && settings.RecruitPikeInfantry;
+                roles.HasFlag(RecruitmentRole.PikeInfantry) && settings.RecruitPikeInfantry ||
+                roles.HasFlag(RecruitmentRole.SpearInfantry) && settings.RecruitSpearInfantry ||
+                roles.HasFlag(RecruitmentRole.MountedSkirmisher) && settings.RecruitMountedSkirmisher;
         }
 
         private static void WriteLog(string prefix, bool result, List<string> lines)

@@ -24,7 +24,7 @@ namespace SettlementAutomationCore.Tests
             yield return new object[]
             {
                 "PartyManager",
-                new[] { "Native", "SandBoxCore", "SettlementAutomationCore", "Bannerlord.MBOptionScreen" }
+                new[] { "Native", "SandBoxCore", "SettlementAutomationCore", "Bannerlord.MBOptionScreen", "TroopClassifier" }
             };
             yield return new object[]
             {

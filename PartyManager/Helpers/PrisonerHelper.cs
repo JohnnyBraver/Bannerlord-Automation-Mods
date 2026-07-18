@@ -157,8 +157,12 @@ namespace PartyManager.Helpers
                     // Lower tiers are discarded first
                     int baseScore = c.Character.Tier * 100;
                     
-                    // Mounted units have higher value, so we add score to protect them
-                    if (c.Character.IsMounted)
+                    // Use classifier to check if the troop has a mounted role
+                    var role = TroopClassifier.TroopRoleClassifier.Classify(c.Character);
+                    bool isMountedRole = role == TroopClassifier.TroopRole.MeleeCavalry ||
+                                         role == TroopClassifier.TroopRole.HorseArcher ||
+                                         role == TroopClassifier.TroopRole.MountedSkirmisher;
+                    if (isMountedRole)
                     {
                         baseScore += 50;
                     }

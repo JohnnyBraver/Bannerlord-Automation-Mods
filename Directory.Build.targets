@@ -9,6 +9,7 @@
       <CopiedModuleDependencyDlls Include="$(TargetDir)Newtonsoft.Json.dll" />
       <CopiedModuleDependencyDlls Include="$(TargetDir)SettlementAutomationCore.dll" Condition="'$(MSBuildProjectName)' != 'SettlementAutomationCore'" />
       <CopiedModuleDependencyDlls Include="$(TargetDir)TradeOptimizer.dll" Condition="'$(MSBuildProjectName)' != 'TradeOptimizer'" />
+      <CopiedModuleDependencyDlls Include="$(TargetDir)TroopClassifier.dll" />
     </ItemGroup>
     <Delete Files="@(CopiedModuleDependencyDlls)" />
   </Target>
@@ -28,6 +29,7 @@
       <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\Newtonsoft.Json.dll" />
       <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\SettlementAutomationCore.dll" Condition="'$(MSBuildProjectName)' != 'SettlementAutomationCore'" />
       <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\TradeOptimizer.dll" Condition="'$(MSBuildProjectName)' != 'TradeOptimizer'" />
+      <InstalledModuleDependencyDlls Include="$(InstalledModuleBin)\TroopClassifier.dll" />
     </ItemGroup>
     <Delete Files="@(InstalledModuleDependencyDlls)" />
   </Target>
