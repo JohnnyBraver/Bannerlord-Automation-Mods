@@ -525,30 +525,30 @@ namespace PartyManager
 
         // --- Mount & Herding settings ---
 
-        [SettingPropertyBool("Herding Penalty Protection", RequireRestart = false, HintText = "Automatically sell excess animals to avoid herding speed penalty.", Order = 7)]
+        [SettingPropertyBool("Herding Penalty Protection", RequireRestart = false, HintText = "Automatically sell excess animals to avoid herding speed penalty.", Order = 1)]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 5)]
         public bool PreventHerdingPenalty { get; set; } = true;
 
-        [SettingPropertyDropdown("Sell Riding Mounts", RequireRestart = false, HintText = "Control when to sell excess riding mounts to reduce herding or cargo weight.", Order = 8)]
+        [SettingPropertyDropdown("Sell Riding Mounts", RequireRestart = false, HintText = "Control when to sell excess riding mounts to reduce herding or cargo weight.", Order = 2)]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 5)]
         public Dropdown<SellRidingMountsOption> SellRidingMountsDropdown { get; set; } = new Dropdown<SellRidingMountsOption>(SellRidingMountsOptions, 1);
 
         [SettingPropertyBool("Preserve Riding Mounts for Foot Reserve", RequireRestart = false,
-            HintText = "Protect riding mounts up to current foot troops plus empty party slots before selling mounts.", Order = 9)]
+            HintText = "Protect riding mounts up to current foot troops plus empty party slots before selling mounts.", Order = 3)]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 5)]
         public bool PreserveRidingMountsForFootReserve { get; set; } = true;
 
-        [SettingPropertyDropdown("Post-Battle Auto-Slaughter", RequireRestart = false, HintText = "Automatically slaughter animals after a battle to instantly clear herding penalties.", Order = 10)]
+        [SettingPropertyDropdown("Post-Battle Auto-Slaughter", RequireRestart = false, HintText = "Automatically slaughter animals after a battle to instantly clear herding penalties.", Order = 4)]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 5)]
         public Dropdown<PostBattleSlaughterOption> PostBattleSlaughterDropdown { get; set; } = new Dropdown<PostBattleSlaughterOption>(PostBattleSlaughterOptions, 2);
 
         [SettingPropertyInteger("Herding Warning Threshold (%)", 0, 80, RequireRestart = false,
-            HintText = "Warn after post-battle cleanup if herding still slows the party by at least this much. Default: 5%.", Order = 11)]
+            HintText = "Warn after post-battle cleanup if herding still slows the party by at least this much. Default: 5%.", Order = 5)]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 5)]
         public int HerdingWarningThresholdPercent { get; set; } = 5;
 
         [SettingPropertyInteger("Cargo Warning Threshold (%)", 0, 100, RequireRestart = false,
-            HintText = "Warn after post-battle cleanup if overburdened cargo slows the party by at least this much. Default: 5%.", Order = 12)]
+            HintText = "Warn after post-battle cleanup if overburdened cargo slows the party by at least this much. Default: 5%.", Order = 6)]
         [SettingPropertyGroup("Mounts & Herding", GroupOrder = 5)]
         public int CargoWarningThresholdPercent { get; set; } = 5;
 
@@ -575,31 +575,31 @@ namespace PartyManager
         [SettingPropertyGroup("Prisoners", GroupOrder = 6)]
         public Dropdown<PrisonerKeepPolicyOption> OtherPrisonerKeepPolicyDropdown { get; set; } = new Dropdown<PrisonerKeepPolicyOption>(PrisonerKeepPolicyOptions, 2); // Keep Selected
 
-        [SettingPropertyBool("Bypass Noble Prisoner Tier Limit", RequireRestart = false, HintText = "If enabled, noble prisoners will bypass the min tier keep limit.", Order = 6)]
+        [SettingPropertyBool("Bypass Noble Prisoner Tier Limit", RequireRestart = false, HintText = "If enabled, noble prisoners will bypass the min tier keep limit.", Order = 1)]
         [SettingPropertyGroup("Prisoners/Keep Policies", GroupOrder = 7)]
         public bool BypassNoblePrisonerTierLimit { get; set; } = true;
 
-        [SettingPropertyBool("Bypass Minor Faction/Other Tier Limit", RequireRestart = false, HintText = "If enabled, minor faction/other culture prisoners will bypass the min tier keep limit.", Order = 7)]
+        [SettingPropertyBool("Bypass Minor Faction/Other Tier Limit", RequireRestart = false, HintText = "If enabled, minor faction/other culture prisoners will bypass the min tier keep limit.", Order = 2)]
         [SettingPropertyGroup("Prisoners/Keep Policies", GroupOrder = 7)]
         public bool BypassOtherPrisonerTierLimit { get; set; } = true;
 
-        [SettingPropertyInteger("Min Prisoner Tier to Keep", 1, 6, RequireRestart = false, HintText = "Minimum tier of regular/bandit prisoner to keep for recruitment.", Order = 8)]
+        [SettingPropertyInteger("Min Prisoner Tier to Keep", 1, 6, RequireRestart = false, HintText = "Minimum tier of regular/bandit prisoner to keep for recruitment.", Order = 3)]
         [SettingPropertyGroup("Prisoners/Keep Policies", GroupOrder = 7)]
         public int MinPrisonerTierToKeep { get; set; } = 4;
 
-        [SettingPropertyBool("Perk-Based Prisoner Keep", RequireRestart = false, HintText = "Automatically override keep tier filters based on active Level 50 Leadership perks.", Order = 9)]
+        [SettingPropertyBool("Perk-Based Prisoner Keep", RequireRestart = false, HintText = "Automatically override keep tier filters based on active Level 50 Leadership perks.", Order = 4)]
         [SettingPropertyGroup("Prisoners/Keep Policies", GroupOrder = 7)]
         public bool UsePerkBasedPrisonerKeep { get; set; } = true;
 
-        [SettingPropertyBool("Bypass Noble Recruit Policy when Keeping", RequireRestart = false, HintText = "If enabled, keep selected noble prisoners matching role/culture filters even if noble recruitment from notables is disabled.", Order = 10)]
+        [SettingPropertyBool("Bypass Noble Recruit Policy when Keeping", RequireRestart = false, HintText = "If enabled, keep selected noble prisoners matching role/culture filters even if noble recruitment from notables is disabled.", Order = 5)]
         [SettingPropertyGroup("Prisoners/Keep Policies", GroupOrder = 7)]
         public bool BypassNobleRecruitPolicy { get; set; } = false;
 
-        [SettingPropertyBool("Bypass Regular Recruit Policy when Keeping", RequireRestart = false, HintText = "If enabled, keep selected regular prisoners matching role/culture filters even if regular recruitment from notables is disabled.", Order = 11)]
+        [SettingPropertyBool("Bypass Regular Recruit Policy when Keeping", RequireRestart = false, HintText = "If enabled, keep selected regular prisoners matching role/culture filters even if regular recruitment from notables is disabled.", Order = 6)]
         [SettingPropertyGroup("Prisoners/Keep Policies", GroupOrder = 7)]
         public bool BypassRegularRecruitPolicy { get; set; } = false;
 
-        [SettingPropertyBool("Bypass Mercenary Recruit Policy when Keeping", RequireRestart = false, HintText = "If enabled, keep selected mercenary prisoners matching role/culture filters even if tavern recruitment is disabled.", Order = 12)]
+        [SettingPropertyBool("Bypass Mercenary Recruit Policy when Keeping", RequireRestart = false, HintText = "If enabled, keep selected mercenary prisoners matching role/culture filters even if tavern recruitment is disabled.", Order = 7)]
         [SettingPropertyGroup("Prisoners/Keep Policies", GroupOrder = 7)]
         public bool BypassMercenaryRecruitPolicy { get; set; } = false;
 
@@ -607,27 +607,6 @@ namespace PartyManager
         [SettingPropertyBool("Auto-Ransom Prisoners", RequireRestart = false, HintText = "Automatically ransom standard prisoners for gold in taverns.", Order = 1)]
         [SettingPropertyGroup("Prisoners/Actions & Alerts", GroupOrder = 8)]
         public bool AutoRansomPrisoners { get; set; } = true;
-
-        // --- Prisoner Capacity Alerts ---
-        [SettingPropertyInteger("Prisoner Capacity Alert Threshold (%)", 0, 100, RequireRestart = false, HintText = "Trigger alert if total prisoners exceed this percentage of capacity after automation. Set to 0 to disable.", Order = 8)]
-        [SettingPropertyGroup("Prisoners/Actions & Alerts", GroupOrder = 8)]
-        public int PrisonerCapacityAlertPercent { get; set; } = 33;
-
-        [SettingPropertyInteger("Prisoner Stack Alert Capacity Limit (%)", 0, 100, RequireRestart = false, HintText = "Trigger alert if any single prisoner stack exceeds this percentage of total prisoner capacity. Set to 0 to disable.", Order = 9)]
-        [SettingPropertyGroup("Prisoners/Actions & Alerts", GroupOrder = 8)]
-        public int PrisonerStackAlertPercentLimit { get; set; } = 10;
-
-        [SettingPropertyDropdown("Prisoner Report Detail", RequireRestart = false, HintText = "Detailed log format: Category Counts (simple summary) or Full Troop List (detailed troop breakdown).", Order = 10)]
-        [SettingPropertyGroup("Prisoners/Actions & Alerts", GroupOrder = 8)]
-        public Dropdown<PrisonerReportDetailModeOption> PrisonerReportDetailDropdown { get; set; } = new Dropdown<PrisonerReportDetailModeOption>(PrisonerReportDetailModeOptions, 1);
-
-        [SettingPropertyInteger("Max Prisoners To Print", 1, 20, RequireRestart = false, HintText = "Maximum number of distinct prisoner types to log in detailed report before truncating with '+X more'.", Order = 11)]
-        [SettingPropertyGroup("Prisoners/Actions & Alerts", GroupOrder = 8)]
-        public int MaxPrisonersToPrint { get; set; } = 4;
-
-        [SettingPropertyDropdown("Prisoner Report Sort", RequireRestart = false, HintText = "Sort order for detailed prisoner logs.", Order = 12)]
-        [SettingPropertyGroup("Prisoners/Actions & Alerts", GroupOrder = 8)]
-        public Dropdown<PrisonerReportSortModeOption> PrisonerReportSortDropdown { get; set; } = new Dropdown<PrisonerReportSortModeOption>(PrisonerReportSortModeOptions, 2);
 
         // --- Prisoner Donation Settings ---
         [SettingPropertyBool("Auto-Donate Prisoners to Dungeon", RequireRestart = false, HintText = "Automatically donate eligible prisoners to friendly town/castle dungeons to farm influence/XP.", Order = 2)]
@@ -654,6 +633,27 @@ namespace PartyManager
         [SettingPropertyBool("Perk-Based Prisoner Discard", RequireRestart = false, HintText = "If enabled, automatically overrides discard filters based on active Level 50 Leadership perks (Stout Defender protects T4-6, Fervent Attacker protects T1-3).", Order = 7)]
         [SettingPropertyGroup("Prisoners/Actions & Alerts", GroupOrder = 8)]
         public bool UsePerkBasedPrisonerDiscard { get; set; } = false;
+
+        // --- Prisoner Capacity Alerts ---
+        [SettingPropertyInteger("Prisoner Capacity Alert Threshold (%)", 0, 100, RequireRestart = false, HintText = "Trigger alert if total prisoners exceed this percentage of capacity after automation. Set to 0 to disable.", Order = 8)]
+        [SettingPropertyGroup("Prisoners/Actions & Alerts", GroupOrder = 8)]
+        public int PrisonerCapacityAlertPercent { get; set; } = 33;
+
+        [SettingPropertyInteger("Prisoner Stack Alert Capacity Limit (%)", 0, 100, RequireRestart = false, HintText = "Trigger alert if any single prisoner stack exceeds this percentage of total prisoner capacity. Set to 0 to disable.", Order = 9)]
+        [SettingPropertyGroup("Prisoners/Actions & Alerts", GroupOrder = 8)]
+        public int PrisonerStackAlertPercentLimit { get; set; } = 10;
+
+        [SettingPropertyDropdown("Prisoner Report Detail", RequireRestart = false, HintText = "Detailed log format: Category Counts (simple summary) or Full Troop List (detailed troop breakdown).", Order = 10)]
+        [SettingPropertyGroup("Prisoners/Actions & Alerts", GroupOrder = 8)]
+        public Dropdown<PrisonerReportDetailModeOption> PrisonerReportDetailDropdown { get; set; } = new Dropdown<PrisonerReportDetailModeOption>(PrisonerReportDetailModeOptions, 1);
+
+        [SettingPropertyInteger("Max Prisoners To Print", 1, 20, RequireRestart = false, HintText = "Maximum number of distinct prisoner types to log in detailed report before truncating with '+X more'.", Order = 11)]
+        [SettingPropertyGroup("Prisoners/Actions & Alerts", GroupOrder = 8)]
+        public int MaxPrisonersToPrint { get; set; } = 4;
+
+        [SettingPropertyDropdown("Prisoner Report Sort", RequireRestart = false, HintText = "Sort order for detailed prisoner logs.", Order = 12)]
+        [SettingPropertyGroup("Prisoners/Actions & Alerts", GroupOrder = 8)]
+        public Dropdown<PrisonerReportSortModeOption> PrisonerReportSortDropdown { get; set; } = new Dropdown<PrisonerReportSortModeOption>(PrisonerReportSortModeOptions, 2);
 
 
 
